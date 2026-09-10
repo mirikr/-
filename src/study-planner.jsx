@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { get as storageGet, set as storageSet, remove as storageRemove, onAuthChange } from "./storage.js";
+import { get as storageGet, set as storageSet, onAuthChange } from "./storage.js";
 import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
+import { buildIcs, saveIcs } from "./calendar.js";
+import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -160,6 +162,29 @@ function levelInfo(value) {
 function levelRank(value) {
   const idx = LESSON_LEVELS.findIndex((l) => l.value === value);
   return idx === -1 ? 0 : idx;
+}
+
+const EVENT_ALARM_DAYS = { 1: 1, 2: 3, 3: 7 };
+
+function eventIcsItem(event) {
+  const info = priorityInfo(event.priority);
+  return {
+    uid: event.id,
+    title: `${info.mark} ${event.name}`,
+    date: event.date,
+    alarmDaysBefore: EVENT_ALARM_DAYS[Number(event.priority)] || 1,
+  };
+}
+
+function homeworkIcsItem(hw) {
+  const days = hw.reminderDays === "always" ? 3 : Number(hw.reminderDays) || 1;
+  return {
+    uid: hw.id,
+    title: (hw.subjectName ? hw.subjectName + ": " : "") + hw.text,
+    date: hw.date,
+    description: hw.minutes ? `Примерно ${hw.minutes} мин` : "",
+    alarmDaysBefore: days,
+  };
 }
 
 function priorityInfo(value) {
@@ -682,6 +707,11 @@ export default function StudyPlanner() {
     }
   }
 
+  function exportEventsToCalendar(list, name) {
+    if (!list.length) return;
+    saveIcs(name, buildIcs(list.map(eventIcsItem)));
+  }
+
   function setNotebook(ownerKey, blocks) {
     setNotebooks((prev) => ({ ...prev, [ownerKey]: blocks }));
   }
@@ -774,7 +804,7 @@ export default function StudyPlanner() {
   function removeHomework(id) {
     const hw = homework.find((h) => h.id === id);
     (hw?.attachments || []).forEach((a) => {
-      storageRemove(a.key).catch(() => {});
+      deleteAttachment(a).catch(() => {});
     });
     setHomework((prev) => prev.filter((h) => h.id !== id));
   }
@@ -784,57 +814,36 @@ export default function StudyPlanner() {
   }
 
   async function attachFileToHomework(id, file) {
-    if (!file) return;
-    // Attachments are stored as base64, which inflates them by a third and shares the
-    // browser's ~5 MB local quota with everything else in the planner.
-    if (file.size > 2 * 1024 * 1024) {
-      alert("Файл больше 2 МБ — такое вложение не поместится. Сожмите его или сфотографируйте страницу в меньшем разрешении.");
+    const res = await attachFile(file, "hw-" + id);
+    if (!res.ok) {
+      alert("Не удалось прикрепить файл: " + res.error);
       return;
     }
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("read failed"));
-        reader.readAsDataURL(file);
-      });
-      const key = "hwfile-" + id + "-" + Date.now();
-      const res = await storageSet(key, dataUrl);
-      if (!res.ok) {
-        alert("Не удалось прикрепить файл: " + (res.error || "возможно, он слишком большой."));
-        return;
-      }
-      setHomework((prev) =>
-        prev.map((h) => (h.id === id ? { ...h, attachments: [...(h.attachments || []), { name: file.name, key }] } : h))
-      );
-    } catch (e) {
-      alert("Не удалось прикрепить файл.");
-    }
+    setHomework((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, attachments: [...(h.attachments || []), res.attachment] } : h))
+    );
   }
 
   async function openAttachment(att) {
-    try {
-      const res = await storageGet(att.key);
-      if (!res || !res.value) {
-        alert("Файл не найден.");
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = res.value;
-      a.download = att.name;
-      a.target = "_blank";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e) {
-      alert("Не удалось открыть файл.");
+    const res = await attachmentUrl(att);
+    if (!res.ok) {
+      alert("Не удалось открыть файл: " + res.error);
+      return;
     }
+    const a = document.createElement("a");
+    a.href = res.url;
+    a.download = att.name;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
-  function removeAttachment(hwId, key) {
-    storageRemove(key).catch(() => {});
+  function removeAttachment(hwId, att) {
+    deleteAttachment(att).catch(() => {});
     setHomework((prev) =>
-      prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => a.key !== key) } : h))
+      prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => a !== att) } : h))
     );
   }
 
@@ -1050,9 +1059,19 @@ export default function StudyPlanner() {
             </div>
           );
         })}
-        <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
-          {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
-        </button>
+        <div style={styles.eventsActions}>
+          <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
+            {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
+          </button>
+          {upcomingEvents.length > 0 && (
+            <button
+              onClick={() => exportEventsToCalendar(upcomingEvents, "События подготовки")}
+              style={styles.eventsToggle}
+            >
+              Все в календарь
+            </button>
+          )}
+        </div>
         {openSections.events && (
           <EventsEditor
             upcoming={upcomingEvents}
@@ -1061,6 +1080,7 @@ export default function StudyPlanner() {
             onAdd={addEvent}
             onUpdate={updateEvent}
             onRemove={removeEvent}
+            onExport={(e) => exportEventsToCalendar([e], e.name)}
           />
         )}
       </section>
@@ -1522,8 +1542,9 @@ export default function StudyPlanner() {
                         onRemove={() => removeHomework(h.id)}
                         onAttach={(file) => attachFileToHomework(h.id, file)}
                         onOpenAttachment={openAttachment}
-                        onRemoveAttachment={(key) => removeAttachment(h.id, key)}
+                        onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                         onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
+                        onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
                       />
                     ))}
                     <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
@@ -1542,8 +1563,9 @@ export default function StudyPlanner() {
                   onRemove={() => removeHomework(h.id)}
                   onAttach={(file) => attachFileToHomework(h.id, file)}
                   onOpenAttachment={openAttachment}
-                  onRemoveAttachment={(key) => removeAttachment(h.id, key)}
+                  onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                   onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
+                  onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
                 />
               ))}
               <HomeworkAddForm
@@ -1693,7 +1715,7 @@ function PriorityPicker({ value, onChange }) {
   );
 }
 
-function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }) {
+function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, onExport }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState(todayStr());
   const [priority, setPriority] = useState(2);
@@ -1713,6 +1735,11 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
         {e.id === mainEventId && <span style={styles.mainBadge}>по нему считается план</span>}
         {isPast && <span style={styles.mutedSmall}>прошло</span>}
+        {!isPast && (
+          <button onClick={() => onExport(e)} style={styles.calendarBtn} title="Добавить в календарь телефона">
+            📅
+          </button>
+        )}
         <button onClick={() => onRemove(e.id)} style={styles.removeBtn} title="Удалить событие">
           ×
         </button>
@@ -1722,6 +1749,11 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
 
   return (
     <div style={styles.eventsEditor}>
+      <p style={styles.muted}>
+        Кнопка 📅 отдаёт событие календарю телефона — напоминание придёт даже при закрытом приложении: за неделю до
+        «{EVENT_PRIORITIES[2].mark}», за три дня до «{EVENT_PRIORITIES[1].mark}», за день до «
+        {EVENT_PRIORITIES[0].mark}».
+      </p>
       <p style={styles.muted}>
         Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
         план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
@@ -2133,7 +2165,7 @@ function HomeworkAddForm({ onAdd, placeholder }) {
   );
 }
 
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onExport }) {
   const fileInputRef = useRef(null);
   const reminderMode = hw.reminderDays === "always" ? "always" : !hw.reminderDays || hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -2144,6 +2176,9 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
         <input type="checkbox" checked={!!hw.done} onChange={onToggleDone} />
         <span style={hw.done ? { ...styles.homeworkText, ...styles.topicDone } : styles.homeworkText}>{hw.text}</span>
         {hw.minutes > 0 && <span style={styles.mutedSmall}>{hw.minutes} мин</span>}
+        <button onClick={onExport} style={styles.attachBtn} title="Добавить срок в календарь телефона">
+          📅
+        </button>
         <button onClick={() => fileInputRef.current?.click()} style={styles.attachBtn} title="Прикрепить файл">
           📎
         </button>
@@ -2163,12 +2198,12 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
       </div>
       {(hw.attachments || []).length > 0 && (
         <div style={styles.attachmentsRow}>
-          {hw.attachments.map((a) => (
-            <span key={a.key} style={styles.attachmentChip}>
+          {hw.attachments.map((a, i) => (
+            <span key={a.path || a.key || i} style={styles.attachmentChip}>
               <button onClick={() => onOpenAttachment(a)} style={styles.attachmentLink}>
                 {a.name}
               </button>
-              <button onClick={() => onRemoveAttachment(a.key)} style={styles.removeBtn}>
+              <button onClick={() => onRemoveAttachment(a)} style={styles.removeBtn}>
                 ×
               </button>
             </span>
@@ -2248,6 +2283,8 @@ const styles = {
   eventName: { fontWeight: 600 },
   eventDate: { color: "#6B6656", fontSize: 12.5 },
   eventLeft: { color: "#8A8370", fontSize: 12.5, marginLeft: "auto" },
+  eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
+  calendarBtn: { background: "none", border: "none", padding: "0 2px", fontSize: 14, lineHeight: 1 },
   eventsToggle: {
     alignSelf: "flex-start",
     background: "none",
