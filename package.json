@@ -1,0 +1,22 @@
+{
+  "name": "study-planner",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Ежедневник обществоведа — планировщик подготовки к экзамену и олимпиаде",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.2.2",
+    "vite-plugin-pwa": "^1.3.0"
+  }
+}
