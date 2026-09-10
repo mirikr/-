@@ -22,13 +22,22 @@ function isHandheld() {
   return (window.matchMedia && window.matchMedia("(max-width: 820px)").matches) || navigator.maxTouchPoints > 0;
 }
 
-// Кнопка «Установить на телефон» и окно с инструкцией. Приложение, добавленное на
-// экран «Домой», открывается без адресной строки и работает офлайн — но браузеры
-// сами об этом не сообщают, а на iOS установка возможна только вручную.
+// Safari на маке ставит приложение в Dock, но про beforeinstallprompt не знает.
+function isDesktopSafari() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /safari/i.test(ua) && !/chrome|chromium|edg\//i.test(ua);
+}
+
+// Кнопка установки и окно с инструкцией — своей для каждого случая: телефон или
+// компьютер, Safari, Chrome или встроенное окно установки. Приложение с иконки
+// открывается без адресной строки и работает офлайн, но браузеры сами об этом не
+// сообщают, а на iOS и в Safari установка возможна только вручную.
 export default function InstallHint() {
   const [hidden, setHidden] = useState(true);
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState(null);
+  const [handheld, setHandheld] = useState(true);
 
   useEffect(() => {
     let dismissed = false;
@@ -37,7 +46,8 @@ export default function InstallHint() {
     } catch (e) {
       /* приватный режим — просто покажем кнопку */
     }
-    setHidden(dismissed || isStandalone() || !isHandheld());
+    setHandheld(isHandheld());
+    setHidden(dismissed || isStandalone());
 
     // Chrome на Android умеет ставить приложение сам, но только по этому событию.
     function capture(e) {
@@ -71,13 +81,15 @@ export default function InstallHint() {
   return (
     <div style={styles.bar}>
       <button onClick={() => setOpen(true)} style={styles.button}>
-        Установить на телефон
+        {handheld ? "Установить на телефон" : "Установить на рабочий стол"}
       </button>
 
       {open && (
         <div style={styles.overlay} onClick={() => setOpen(false)}>
           <div style={styles.card} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Установка приложения">
-            <div style={styles.title}>Ежедневник на экране «Домой»</div>
+            <div style={styles.title}>
+              {handheld ? "Ежедневник на экране «Домой»" : "Ежедневник на рабочем столе"}
+            </div>
             <p style={styles.text}>
               Установленный ежедневник открывается с иконки, без адресной строки браузера, и работает без интернета —
               записи сохраняются на устройстве и уходят в облако, когда связь появится.
@@ -100,7 +112,16 @@ export default function InstallHint() {
                   Выберите <b>«На экран „Домой“»</b> и подтвердите.
                 </li>
               </ol>
-            ) : (
+            ) : isDesktopSafari() ? (
+              <ol style={styles.list}>
+                <li>
+                  Нажмите <b>«Поделиться»</b> в панели Safari — квадрат со стрелкой вверх.
+                </li>
+                <li>
+                  Выберите <b>«Добавить в Dock»</b> и подтвердите. Нужен Safari 17 или новее.
+                </li>
+              </ol>
+            ) : handheld ? (
               <ol style={styles.list}>
                 <li>Откройте меню браузера — три точки или три полоски.</li>
                 <li>
@@ -108,6 +129,20 @@ export default function InstallHint() {
                 </li>
                 <li>Подтвердите добавление.</li>
               </ol>
+            ) : (
+              <>
+                <ol style={styles.list}>
+                  <li>
+                    В Chrome или Edge нажмите значок установки в адресной строке — или меню браузера →{" "}
+                    <b>«Установить приложение»</b>.
+                  </li>
+                  <li>Подтвердите: на рабочем столе появится иконка.</li>
+                </ol>
+                <p style={styles.note}>
+                  Firefox устанавливать веб-приложения не умеет — там ежедневник остаётся обычной вкладкой,
+                  которую можно добавить в закладки.
+                </p>
+              </>
             )}
 
             <div style={styles.actions}>
@@ -171,6 +206,7 @@ const styles = {
     marginBottom: 12,
     cursor: "pointer",
   },
+  note: { fontSize: 12, lineHeight: 1.5, color: "#8A8370", margin: "0 0 10px" },
   actions: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 6 },
   secondary: {
     border: "1px solid #C9C1AC",
