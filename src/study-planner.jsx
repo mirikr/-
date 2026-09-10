@@ -740,7 +740,43 @@ export default function StudyPlanner() {
   }
 
   function removeJournalEntry(id) {
+    const index = journal.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const entry = journal[index];
+
+    // Запись о пройденном уроке и галочка в списке — один и тот же факт: удалили
+    // запись из дневника, значит урок снова не пройден.
+    const unchecks =
+      entry.auto && entry.lessonId && !entry.noteId && entry.subjectId && data[entry.subjectId]
+        ? ["topics", "custom"].some((key) =>
+            (data[entry.subjectId][key] || []).some((t) => t.id === entry.lessonId && t.done)
+          )
+        : false;
+
     setJournal((prev) => prev.filter((e) => e.id !== id));
+    if (unchecks) setTopicDone(entry.subjectId, entry.lessonId, false);
+
+    showUndo(`Вы удалили запись «${entry.note || "без описания"}»`, () => {
+      setJournal((prev) => {
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, entry);
+        return next;
+      });
+      if (unchecks) setTopicDone(entry.subjectId, entry.lessonId, true);
+    });
+  }
+
+  // Ставит или снимает отметку «пройдено», не трогая дневник: им управляет вызывающий.
+  function setTopicDone(subjectId, topicId, done) {
+    setData((prev) => {
+      const subject = prev[subjectId];
+      if (!subject) return prev;
+      const next = { ...subject };
+      ["topics", "custom"].forEach((key) => {
+        next[key] = (subject[key] || []).map((t) => (t.id === topicId ? { ...t, done } : t));
+      });
+      return { ...prev, [subjectId]: next };
+    });
   }
 
   function setAlloc(id, val) {
