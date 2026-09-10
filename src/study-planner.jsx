@@ -1,5 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { get as storageGet, set as storageSet, remove as storageRemove, onAuthChange } from "./storage.js";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { get as storageGet, set as storageSet, onAuthChange } from "./storage.js";
+import Notebook, { Attachments } from "./notebook.jsx";
+import RichText from "./rich-text.jsx";
+import Collapsible from "./collapsible.jsx";
+import HoursChart from "./hours-chart.jsx";
+import { buildIcs, saveIcs } from "./calendar.js";
+import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -10,6 +16,26 @@ const WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const LYCEUM_DAYS = WEEKDAY_KEYS.filter((k) => k !== "sun");
 const WEEKDAY_LABELS = { mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс" };
 const DOW_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]; // Date.getDay(): 0 = Sunday
+// Priority of an exam or olympiad stage. The mark is what the person actually sees;
+// the number is what the schedule maths sorts by.
+const EVENT_PRIORITIES = [
+  // strong и tint — для карточек расписания: тонкая полоска сбоку читалась плохо.
+  { value: 1, mark: "!", label: "не особо важно", color: "#8A8370", onDark: "#B9B2A0", strong: "#6E6857", tint: "#F1EEE4" },
+  { value: 2, mark: "⚡", label: "важно", color: "#8C7326", onDark: "#D9BE6A", strong: "#C08A1E", tint: "#FBF0D2" },
+  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "#8B4A4A", onDark: "#D98A8A", strong: "#B23A3A", tint: "#F9E2DF" },
+];
+
+// Weight of a lyceum lesson. Order matters: later entries outrank earlier ones when the same
+// subject appears twice in a day.
+// Тип урока — это про программу, а не про важность: важность ученик ставит сам,
+// значками рядом с названием предмета.
+const LESSON_LEVELS = [
+  { value: "base", short: "база", label: "база", color: "#8A8370" },
+  { value: "prof", short: "проф", label: "проф", color: "#2F4E70" },
+  { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс", color: "#8B4A4A" },
+  { value: "outside", short: "вне лицея", label: "урок вне лицея", color: "#5C4A80" },
+];
+
 const SUBJECT_COLOR_PALETTE = ["#4A6B6B", "#7A5233", "#5C4A80", "#8C7326", "#2F4E70", "#8B4A4A", "#3F6E52", "#6B4A6B"];
 
 const SUBJECT_DEFS = [
@@ -135,10 +161,68 @@ const SUBJECT_DEFS = [
 // already saved. New fields are added defensively in the load effect below instead.
 const STORAGE_KEY = "planner-state-v5";
 
-function defaultDeadline() {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 4);
-  return d.toISOString().slice(0, 10);
+function levelInfo(value) {
+  return LESSON_LEVELS.find((l) => l.value === value) || LESSON_LEVELS[0];
+}
+
+const UNDO_SECONDS = 20;
+
+// Запись откладывается на SAVE_DEBOUNCE_MS после последней правки, но не дольше
+// SAVE_MAX_WAIT_MS с момента первой несохранённой: иначе длинный конспект, который
+// печатают без пауз, не сохранялся бы вовсе — каждая буква сдвигала бы таймер.
+const SAVE_DEBOUNCE_MS = 700;
+const SAVE_MAX_WAIT_MS = 15000;
+
+const EVENT_ALARM_DAYS = { 1: 1, 2: 3, 3: 7 };
+
+function eventIcsItem(event) {
+  const info = priorityInfo(event.priority);
+  return {
+    uid: event.id,
+    title: `${info.mark} ${event.name}`,
+    date: event.date,
+    alarmDaysBefore: EVENT_ALARM_DAYS[Number(event.priority)] || 1,
+  };
+}
+
+function homeworkIcsItem(hw) {
+  const days = hw.reminderDays === "always" ? 3 : Number(hw.reminderDays) || 1;
+  return {
+    uid: hw.id,
+    title: (hw.subjectName ? hw.subjectName + ": " : "") + hw.text,
+    date: hw.date,
+    description: hw.minutes ? `Примерно ${hw.minutes} мин` : "",
+    alarmDaysBefore: days,
+  };
+}
+
+function priorityInfo(value) {
+  return EVENT_PRIORITIES.find((p) => p.value === Number(value)) || EVENT_PRIORITIES[1];
+}
+
+// Whole days from today to the given date: 0 today, negative once it has passed.
+function daysUntilDate(dateStr) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + "T00:00:00");
+  return Math.round((target - today) / 86400000);
+}
+
+function formatEventDate(dateStr) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function daysWord(n) {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return "дней";
+  if (last === 1) return "день";
+  if (last >= 2 && last <= 4) return "дня";
+  return "дней";
 }
 
 function buildDefaultData() {
@@ -226,7 +310,11 @@ export default function StudyPlanner() {
   const [data, setData] = useState(buildDefaultData());
   const [journal, setJournal] = useState([]);
   const [budget, setBudget] = useState(defaultBudget());
-  const [deadline, setDeadline] = useState(defaultDeadline());
+  const [events, setEvents] = useState([]);
+  // Тетради: ключ владельца ("subj:<id>" или "lyceum:<название>") → массив блоков.
+  const [notebooks, setNotebooks] = useState({});
+  const [subjectTab, setSubjectTab] = useState({});
+  const [openLyceumNotebook, setOpenLyceumNotebook] = useState(null);
   const [openSubject, setOpenSubject] = useState(null);
   const [openNotes, setOpenNotes] = useState({});
   const [openLinks, setOpenLinks] = useState({});
@@ -238,18 +326,45 @@ export default function StudyPlanner() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [openSections, setOpenSections] = useState({ kpv: false, subjects: false, lyceum: false, journal: false, backup: false });
+  const [openSections, setOpenSections] = useState({ events: false, chart: false, kpv: false, subjects: false, lyceum: false, journal: false, backup: false });
   const [importText, setImportText] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
   const [customSubjects, setCustomSubjects] = useState([]);
+  // Встроенный предмет нельзя вычеркнуть из кода, поэтому удалённые помним по id.
+  const [hiddenSubjects, setHiddenSubjects] = useState([]);
+  // Свой цвет предмета: ключ — id предмета или "lyceum:<название>". Пусто = цвет по умолчанию.
+  const [subjectColors, setSubjectColors] = useState({});
+  // Воскресенье прячется, но его уроки остаются в расписании — вдруг понадобится вернуть.
+  const [showSunday, setShowSunday] = useState(false);
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
   const [homework, setHomework] = useState([]);
+  // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
+  const [undoQueue, setUndoQueue] = useState([]);
+  const undoTimers = useRef({});
   const firstLoad = useRef(true);
   const loadingRef = useRef(false);
 
-  const ALL_SUBJECTS = useMemo(() => [...SUBJECT_DEFS, ...customSubjects], [customSubjects]);
+  const ALL_SUBJECTS = useMemo(
+    () =>
+      [...SUBJECT_DEFS.filter((s) => !hiddenSubjects.includes(s.id)), ...customSubjects].map((s) => ({
+        ...s,
+        color: subjectColors[s.id] || s.color,
+      })),
+    [customSubjects, hiddenSubjects, subjectColors]
+  );
+
+  // Предметы лицея живут не списком, а названиями в расписании, поэтому цвет ищем по имени.
+  const lyceumColorOf = useCallback(
+    (name) => subjectColors["lyceum:" + name] || subjectColor(name),
+    [subjectColors]
+  );
+
+  function setSubjectColor(key, color) {
+    setSubjectColors((prev) => ({ ...prev, [key]: color }));
+  }
   const saveTimer = useRef(null);
+  const pendingSince = useRef(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -269,8 +384,12 @@ export default function StudyPlanner() {
           if (parsed.data) setData(parsed.data);
           if (parsed.journal) setJournal(parsed.journal);
           if (parsed.budget) setBudget(parsed.budget);
-          if (parsed.deadline) setDeadline(parsed.deadline);
+          if (parsed.events) setEvents(parsed.events);
+          if (parsed.notebooks) setNotebooks(parsed.notebooks);
           if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
+          if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
+          if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
+          if (parsed.showSunday) setShowSunday(parsed.showSunday);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
@@ -329,14 +448,22 @@ export default function StudyPlanner() {
     // every single change hammers the storage API and is the most likely reason writes were
     // failing — debounce so a burst of edits becomes one write shortly after typing pauses.
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (pendingSince.current === null) pendingSince.current = Date.now();
+    const waited = Date.now() - pendingSince.current;
+    const delay = Math.max(0, Math.min(SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS - waited));
     saveTimer.current = setTimeout(() => {
+      pendingSince.current = null;
       (async () => {
         const payload = JSON.stringify({
           data,
           journal,
           budget,
-          deadline,
+          events,
+          notebooks,
           customSubjects,
+          hiddenSubjects,
+          subjectColors,
+          showSunday,
           lyceumSchedule,
           openSections,
           homework,
@@ -358,11 +485,15 @@ export default function StudyPlanner() {
           setSyncDebug(saved.cloud === false ? saved.error : "");
         }
       })();
-    }, 700);
+    }, delay);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, deadline, customSubjects, lyceumSchedule, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework, loaded]);
+
+  // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
+  // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
+  const goalForDate = useCallback((date) => goalHoursForDate(budget, date), [budget]);
 
   const stats = useMemo(() => {
     let doneAll = 0;
@@ -378,25 +509,41 @@ export default function StudyPlanner() {
     return { perSubject, doneAll, totalAll, overallPct: totalAll ? Math.round((doneAll / totalAll) * 100) : 0 };
   }, [data]);
 
-  const daysLeft = useMemo(() => {
-    const now = new Date();
-    const end = new Date(deadline + "T23:59:59");
-    return Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
-  }, [deadline]);
+  const upcomingEvents = useMemo(
+    () => events.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
+    [events]
+  );
+
+  const pastEvents = useMemo(
+    () => events.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
+    [events]
+  );
+
+  const nextEvent = upcomingEvents[0] || null;
+
+  // Planning is measured against the event that matters most, not the closest one: a minor
+  // olympiad next week must not redefine how much time is left for the exam that counts.
+  // Equal priorities fall back to the nearest date, since the list is already sorted by it.
+  const mainEvent = useMemo(() => {
+    if (!upcomingEvents.length) return null;
+    return upcomingEvents.reduce((best, e) => (Number(e.priority) > Number(best.priority) ? e : best));
+  }, [upcomingEvents]);
 
   const capacity = useMemo(() => {
     const weeklyTotal = ALL_SUBJECTS.reduce((sum, s) => sum + (Number(budget.alloc[s.id]) || 0), 0);
     const weeklyBudget = weeklyBudgetHours(budget);
 
     let totalCapacityHours = 0;
-    const cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
-    const end = new Date(deadline + "T00:00:00");
-    let guard = 0;
-    while (cursor <= end && guard < 3650) {
-      totalCapacityHours += goalHoursForDate(budget, cursor);
-      cursor.setDate(cursor.getDate() + 1);
-      guard += 1;
+    const end = mainEvent ? new Date(mainEvent.date + "T00:00:00") : null;
+    if (end) {
+      const cursor = new Date();
+      cursor.setHours(0, 0, 0, 0);
+      let guard = 0;
+      while (cursor <= end && guard < 3650) {
+        totalCapacityHours += goalHoursForDate(budget, cursor);
+        cursor.setDate(cursor.getDate() + 1);
+        guard += 1;
+      }
     }
 
     let remainingMinutes = 0;
@@ -431,10 +578,11 @@ export default function StudyPlanner() {
       neededHours: Math.round(neededHours * 10) / 10,
       remainingTopics,
       overBudget: weeklyTotal > weeklyBudget,
-      feasible: totalCapacityHours >= neededHours,
+      // null means there is nothing to measure against yet — no event has been added.
+      feasible: mainEvent ? totalCapacityHours >= neededHours : null,
       skew,
     };
-  }, [budget, deadline, data, ALL_SUBJECTS]);
+  }, [budget, mainEvent, data, ALL_SUBJECTS]);
 
   function getTopic(subjectId, topicId, custom) {
     const key = custom ? "custom" : "topics";
@@ -492,12 +640,67 @@ export default function StudyPlanner() {
     });
   }
 
-  function removeCustomTopic(subjectId, topicId) {
+  const showUndo = useCallback((message, restore, finalize) => {
+    const id = "undo-" + Date.now() + "-" + Math.round(Math.random() * 10000);
+    setUndoQueue((prev) => [...prev, { id, message, restore, finalize }]);
+    undoTimers.current[id] = setTimeout(() => {
+      setUndoQueue((prev) => {
+        const item = prev.find((u) => u.id === id);
+        if (item && item.finalize) item.finalize();
+        return prev.filter((u) => u.id !== id);
+      });
+      delete undoTimers.current[id];
+    }, UNDO_SECONDS * 1000);
+  }, []);
+
+  function closeUndo(id, apply) {
+    if (undoTimers.current[id]) {
+      clearTimeout(undoTimers.current[id]);
+      delete undoTimers.current[id];
+    }
+    setUndoQueue((prev) => {
+      const item = prev.find((u) => u.id === id);
+      if (item) apply(item);
+      return prev.filter((u) => u.id !== id);
+    });
+  }
+
+  const confirmUndo = (id) => closeUndo(id, (item) => item.finalize && item.finalize());
+  const cancelUndo = (id) => closeUndo(id, (item) => item.restore && item.restore());
+
+  // Вкладку могут закрыть с висящими уведомлениями — таймеры за собой убираем.
+  useEffect(() => () => Object.values(undoTimers.current).forEach(clearTimeout), []);
+
+  function removeTopic(subjectId, topicId, custom) {
+    const key = custom ? "custom" : "topics";
+    const list = data[subjectId][key];
+    const index = list.findIndex((t) => t.id === topicId);
+    if (index === -1) return;
+    const topic = list[index];
+    const relatedEntries = journal.filter((e) => e.lessonId === topicId);
+
     setData((prev) => ({
       ...prev,
-      [subjectId]: { ...prev[subjectId], custom: prev[subjectId].custom.filter((t) => t.id !== topicId) },
+      [subjectId]: { ...prev[subjectId], [key]: prev[subjectId][key].filter((t) => t.id !== topicId) },
     }));
     setJournal((prev) => prev.filter((e) => e.lessonId !== topicId));
+
+    showUndo(
+      `Вы удалили урок «${topic.name}»`,
+      () => {
+        // Урок возвращается на своё место в списке, вместе с записями в дневнике.
+        setData((prev) => {
+          const next = [...prev[subjectId][key]];
+          next.splice(Math.min(index, next.length), 0, topic);
+          return { ...prev, [subjectId]: { ...prev[subjectId], [key]: next } };
+        });
+        setJournal((prev) => [...relatedEntries, ...prev]);
+      },
+      () => {
+        // Подтверждено — только теперь можно убрать файлы из заметок урока.
+        (topic.notes || []).forEach((n) => (n.files || []).forEach((f) => deleteAttachment(f).catch(() => {})));
+      }
+    );
   }
 
   function addNote(subjectId, topicId, custom, text, minutes) {
@@ -526,12 +729,39 @@ export default function StudyPlanner() {
     }
   }
 
+  function updateNote(subjectId, topicId, custom, noteId, patch) {
+    updateTopic(subjectId, topicId, custom, (t) => ({
+      ...t,
+      notes: (t.notes || []).map((n) => (n.id === noteId ? { ...n, ...patch } : n)),
+    }));
+  }
+
   function removeNote(subjectId, topicId, custom, noteId) {
+    const topic = getTopic(subjectId, topicId, custom);
+    const notes = (topic && topic.notes) || [];
+    const index = notes.findIndex((n) => n.id === noteId);
+    const note = index === -1 ? null : notes[index];
+    const relatedEntries = journal.filter((e) => e.noteId === noteId);
+
     updateTopic(subjectId, topicId, custom, (t) => ({
       ...t,
       notes: (t.notes || []).filter((n) => n.id !== noteId),
     }));
     setJournal((prev) => prev.filter((e) => e.noteId !== noteId));
+
+    if (!note) return;
+    showUndo(
+      `Вы удалили заметку «${note.text}»`,
+      () => {
+        updateTopic(subjectId, topicId, custom, (t) => {
+          const next = [...(t.notes || [])];
+          next.splice(Math.min(index, next.length), 0, note);
+          return { ...t, notes: next };
+        });
+        setJournal((prev) => [...relatedEntries, ...prev]);
+      },
+      () => (note.files || []).forEach((f) => deleteAttachment(f).catch(() => {}))
+    );
   }
 
   function addJournalEntry() {
@@ -542,7 +772,43 @@ export default function StudyPlanner() {
   }
 
   function removeJournalEntry(id) {
+    const index = journal.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const entry = journal[index];
+
+    // Запись о пройденном уроке и галочка в списке — один и тот же факт: удалили
+    // запись из дневника, значит урок снова не пройден.
+    const unchecks =
+      entry.auto && entry.lessonId && !entry.noteId && entry.subjectId && data[entry.subjectId]
+        ? ["topics", "custom"].some((key) =>
+            (data[entry.subjectId][key] || []).some((t) => t.id === entry.lessonId && t.done)
+          )
+        : false;
+
     setJournal((prev) => prev.filter((e) => e.id !== id));
+    if (unchecks) setTopicDone(entry.subjectId, entry.lessonId, false);
+
+    showUndo(`Вы удалили запись «${entry.note || "без описания"}»`, () => {
+      setJournal((prev) => {
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, entry);
+        return next;
+      });
+      if (unchecks) setTopicDone(entry.subjectId, entry.lessonId, true);
+    });
+  }
+
+  // Ставит или снимает отметку «пройдено», не трогая дневник: им управляет вызывающий.
+  function setTopicDone(subjectId, topicId, done) {
+    setData((prev) => {
+      const subject = prev[subjectId];
+      if (!subject) return prev;
+      const next = { ...subject };
+      ["topics", "custom"].forEach((key) => {
+        next[key] = (subject[key] || []).map((t) => (t.id === topicId ? { ...t, done } : t));
+      });
+      return { ...prev, [subjectId]: next };
+    });
   }
 
   function setAlloc(id, val) {
@@ -567,7 +833,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, deadline, customSubjects, lyceumSchedule, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework },
       null,
       2
     );
@@ -589,8 +855,12 @@ export default function StudyPlanner() {
       if (parsed.data) setData(parsed.data);
       if (parsed.journal) setJournal(parsed.journal);
       if (parsed.budget) setBudget(parsed.budget);
-      if (parsed.deadline) setDeadline(parsed.deadline);
+      if (parsed.events) setEvents(parsed.events);
+      if (parsed.notebooks) setNotebooks(parsed.notebooks);
       if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
+      if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
+      if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
+      if (parsed.showSunday) setShowSunday(parsed.showSunday);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
@@ -599,6 +869,50 @@ export default function StudyPlanner() {
     } catch (e) {
       setImportMsg("Не удалось прочитать текст — проверьте, что скопировали его полностью, и попробуйте снова.");
     }
+  }
+
+  function exportEventsToCalendar(list, name) {
+    if (!list.length) return;
+    saveIcs(name, buildIcs(list.map(eventIcsItem)));
+  }
+
+  function setNotebook(ownerKey, blocks) {
+    setNotebooks((prev) => ({ ...prev, [ownerKey]: blocks }));
+  }
+
+  // Пока воскресенье скрыто, его уроки не участвуют в дневнике и домашних заданиях,
+  // но остаются в данных: вернули день — вернулись и уроки.
+  const activeSchedule = useMemo(
+    () => (showSunday ? lyceumSchedule : lyceumSchedule.filter((e) => e.day !== "sun")),
+    [lyceumSchedule, showSunday]
+  );
+
+  const scheduleDays = useMemo(() => (showSunday ? [...LYCEUM_DAYS, "sun"] : LYCEUM_DAYS), [showSunday]);
+
+  const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
+
+  const lyceumSubjectNames = useMemo(() => {
+    const names = [];
+    lyceumSchedule.forEach((e) => {
+      if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
+    });
+    return names.sort((a, b) => a.localeCompare(b, "ru"));
+  }, [lyceumSchedule]);
+
+  function addEvent(name, date, priority) {
+    if (!name.trim() || !date) return;
+    setEvents((prev) => [
+      ...prev,
+      { id: "ev-" + Date.now() + "-" + Math.round(Math.random() * 1000), name: name.trim(), date, priority: Number(priority) || 2 },
+    ]);
+  }
+
+  function updateEvent(id, patch) {
+    setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+
+  function removeEvent(id) {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
   }
 
   function addSubject(name) {
@@ -611,20 +925,77 @@ export default function StudyPlanner() {
   }
 
   function removeSubject(id) {
-    setCustomSubjects((prev) => prev.filter((s) => s.id !== id));
-    setData((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
+    const subject = ALL_SUBJECTS.find((s) => s.id === id);
+    if (!subject) return;
+    const customIndex = customSubjects.findIndex((s) => s.id === id);
+    const isCustom = customIndex !== -1;
+    const subjectData = data[id];
+    const savedAlloc = budget.alloc[id];
+    const savedEntries = journal.filter((e) => e.subjectId === id);
+    const notebookKey = "subj:" + id;
+    const savedNotebook = notebooks[notebookKey];
+
+    if (isCustom) {
+      setCustomSubjects((prev) => prev.filter((s) => s.id !== id));
+      setData((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else {
+      // Уроки встроенного предмета остаются в данных: так отмена возвращает всё разом.
+      setHiddenSubjects((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    }
     setBudget((prev) => {
       const alloc = { ...prev.alloc };
       delete alloc[id];
       return { ...prev, alloc };
     });
     setJournal((prev) => prev.filter((e) => e.subjectId !== id));
-    if (pair[0] === id || pair[1] === id) setPair(["law", "econ"]);
+    setNotebooks((prev) => {
+      const next = { ...prev };
+      delete next[notebookKey];
+      return next;
+    });
     if (openSubject === id) setOpenSubject(null);
+    if (pair[0] === id || pair[1] === id) {
+      const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
+      setPair([rest[0] ? rest[0].id : null, rest[1] ? rest[1].id : rest[0] ? rest[0].id : null]);
+    }
+    if (jForm.subjectId === id) {
+      const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
+      setJForm((prev) => ({ ...prev, subjectId: rest[0] ? rest[0].id : "" }));
+    }
+
+    showUndo(
+      `Вы удалили предмет «${subject.name}»`,
+      () => {
+        if (isCustom) {
+          setCustomSubjects((prev) => {
+            const next = [...prev];
+            next.splice(Math.min(customIndex, next.length), 0, subject);
+            return next;
+          });
+          setData((prev) => ({ ...prev, [id]: subjectData }));
+        } else {
+          setHiddenSubjects((prev) => prev.filter((x) => x !== id));
+        }
+        setBudget((prev) => ({ ...prev, alloc: { ...prev.alloc, [id]: savedAlloc } }));
+        setJournal((prev) => [...savedEntries, ...prev]);
+        if (savedNotebook) setNotebooks((prev) => ({ ...prev, [notebookKey]: savedNotebook }));
+      },
+      () => {
+        // Подтверждено — сносим файлы: и из заметок к урокам, и из тетради предмета.
+        const lessonFiles = [
+          ...((subjectData && subjectData.topics) || []),
+          ...((subjectData && subjectData.custom) || []),
+        ].flatMap((t) => (t.notes || []).flatMap((n) => n.files || []));
+        const notebookFiles = (savedNotebook || []).flatMap((b) =>
+          (b.branches || []).flatMap((r) => r.files || [])
+        );
+        [...lessonFiles, ...notebookFiles].forEach((f) => deleteAttachment(f).catch(() => {}));
+      }
+    );
   }
 
   function addScheduleEntry(day, entry) {
@@ -636,6 +1007,8 @@ export default function StudyPlanner() {
         id,
         day,
         subjectName: entry.subjectName.trim(),
+        level: entry.level || "base",
+        priority: Number(entry.priority) || 1,
         start: entry.start || "08:30",
         end: entry.end || "09:15",
         room: entry.room || "",
@@ -649,7 +1022,17 @@ export default function StudyPlanner() {
   }
 
   function removeScheduleEntry(id) {
+    const index = lyceumSchedule.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const entry = lyceumSchedule[index];
     setLyceumSchedule((prev) => prev.filter((e) => e.id !== id));
+    showUndo(`Вы удалили урок «${entry.subjectName || "без названия"}» из расписания`, () => {
+      setLyceumSchedule((prev) => {
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, entry);
+        return next;
+      });
+    });
   }
 
   function addHomework(date, subjectName, text, minutes) {
@@ -662,11 +1045,21 @@ export default function StudyPlanner() {
   }
 
   function removeHomework(id) {
-    const hw = homework.find((h) => h.id === id);
-    (hw?.attachments || []).forEach((a) => {
-      storageRemove(a.key).catch(() => {});
-    });
+    const index = homework.findIndex((h) => h.id === id);
+    if (index === -1) return;
+    const hw = homework[index];
     setHomework((prev) => prev.filter((h) => h.id !== id));
+    showUndo(
+      `Вы удалили «${hw.text}»`,
+      () => {
+        setHomework((prev) => {
+          const next = [...prev];
+          next.splice(Math.min(index, next.length), 0, hw);
+          return next;
+        });
+      },
+      () => (hw.attachments || []).forEach((a) => deleteAttachment(a).catch(() => {}))
+    );
   }
 
   function updateHomework(id, patch) {
@@ -674,57 +1067,36 @@ export default function StudyPlanner() {
   }
 
   async function attachFileToHomework(id, file) {
-    if (!file) return;
-    // Attachments are stored as base64, which inflates them by a third and shares the
-    // browser's ~5 MB local quota with everything else in the planner.
-    if (file.size > 2 * 1024 * 1024) {
-      alert("Файл больше 2 МБ — такое вложение не поместится. Сожмите его или сфотографируйте страницу в меньшем разрешении.");
+    const res = await attachFile(file, "hw-" + id);
+    if (!res.ok) {
+      alert("Не удалось прикрепить файл: " + res.error);
       return;
     }
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error("read failed"));
-        reader.readAsDataURL(file);
-      });
-      const key = "hwfile-" + id + "-" + Date.now();
-      const res = await storageSet(key, dataUrl);
-      if (!res.ok) {
-        alert("Не удалось прикрепить файл: " + (res.error || "возможно, он слишком большой."));
-        return;
-      }
-      setHomework((prev) =>
-        prev.map((h) => (h.id === id ? { ...h, attachments: [...(h.attachments || []), { name: file.name, key }] } : h))
-      );
-    } catch (e) {
-      alert("Не удалось прикрепить файл.");
-    }
+    setHomework((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, attachments: [...(h.attachments || []), res.attachment] } : h))
+    );
   }
 
   async function openAttachment(att) {
-    try {
-      const res = await storageGet(att.key);
-      if (!res || !res.value) {
-        alert("Файл не найден.");
-        return;
-      }
-      const a = document.createElement("a");
-      a.href = res.value;
-      a.download = att.name;
-      a.target = "_blank";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e) {
-      alert("Не удалось открыть файл.");
+    const res = await attachmentUrl(att);
+    if (!res.ok) {
+      alert("Не удалось открыть файл: " + res.error);
+      return;
     }
+    const a = document.createElement("a");
+    a.href = res.url;
+    a.download = att.name;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
-  function removeAttachment(hwId, key) {
-    storageRemove(key).catch(() => {});
+  function removeAttachment(hwId, att) {
+    deleteAttachment(att).catch(() => {});
     setHomework((prev) =>
-      prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => a.key !== key) } : h))
+      prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => a !== att) } : h))
     );
   }
 
@@ -803,19 +1175,59 @@ export default function StudyPlanner() {
 
   const hwDates = useMemo(() => new Set(homework.map((h) => h.date)), [homework]);
 
+  // Точки над числом — пройденные в этот день уроки, каждая в цвете своего предмета.
+  // Берём только записи об отметке урока: заметки со временем сюда не считаются.
+  const lessonDotsByDate = useMemo(() => {
+    const map = {};
+    journal.forEach((e) => {
+      if (!e.auto || !e.lessonId || e.noteId) return;
+      const subject = ALL_SUBJECTS.find((x) => x.id === e.subjectId);
+      if (!subject) return;
+      if (!map[e.date]) map[e.date] = [];
+      if (!map[e.date].includes(subject.color)) map[e.date].push(subject.color);
+    });
+    return map;
+  }, [journal, ALL_SUBJECTS]);
+
   const selectedDaySubjects = useMemo(() => {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const names = [];
-    lyceumSchedule
+    activeSchedule
       .filter((e) => e.day === dow)
       .sort((a, b) => a.start.localeCompare(b.start))
       .forEach((e) => {
         if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
       });
+    // Homework outlives the timetable: moving a lesson to another day must not hide what was
+    // already set on it, so subjects that still carry homework for this date stay listed.
+    homework.forEach((h) => {
+      if (h.date === selectedDate && h.subjectName && !names.includes(h.subjectName)) names.push(h.subjectName);
+    });
     return names;
-  }, [lyceumSchedule, selectedDate]);
+  }, [activeSchedule, selectedDate, homework]);
+
+  // Highest level among that weekday's lessons, per subject.
+  const selectedDayLevels = useMemo(() => {
+    const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
+    const map = {};
+    activeSchedule
+      .filter((e) => e.day === dow && e.subjectName)
+      .forEach((e) => {
+        const current = map[e.subjectName];
+        const priority = Number(e.priority) || 1;
+        if (!current || priority > current.priority) {
+          map[e.subjectName] = { level: e.level || "base", priority };
+        }
+      });
+    return map;
+  }, [activeSchedule, selectedDate]);
 
   const homeworkForSelectedDate = useMemo(() => homework.filter((h) => h.date === selectedDate), [homework, selectedDate]);
+
+  const freeHomework = useMemo(
+    () => homeworkForSelectedDate.filter((h) => !h.subjectName),
+    [homeworkForSelectedDate]
+  );
 
   const homeworkReminders = useMemo(() => {
     return homework
@@ -836,8 +1248,9 @@ export default function StudyPlanner() {
         * { box-sizing: border-box; }
         .topic-row:hover { background: #EFEAE0; }
         .subj-card:hover { transform: translateY(-2px); }
-        button { cursor: pointer; font-family: inherit; }
-        input, select, textarea { font-family: inherit; }
+        button, input, select, textarea { color: inherit; font-family: inherit; }
+        button { cursor: pointer; background-color: transparent; }
+        h1, h2, h3 { color: inherit; }
         a.lesson-link { color: inherit; text-decoration: underline; text-decoration-color: #C9C1AC; text-underline-offset: 2px; }
         a.lesson-link:hover { text-decoration-color: currentColor; }
         /* Chrome reserves room for spinner arrows inside number inputs, which clipped "150" to "15"
@@ -847,45 +1260,135 @@ export default function StudyPlanner() {
         input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         /* On a phone the lesson name alone fills the row, so let the controls drop to a second line
            instead of being pushed off the right edge. */
+        .undo-bar { animation: undo-countdown ${UNDO_SECONDS}s linear forwards; }
+        .undo-toast { animation: undo-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1); }
+        @keyframes undo-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
+        @keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
+        @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
+        /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
+           min-width: 0 применяется, а flex — нет, и название вылезает поверх полей. */
+        .topic-row > label { flex: 1 1 auto; min-width: 0; }
         @media (max-width: 560px) {
           .topic-row { flex-wrap: wrap; }
-          .topic-row > label { flex: 1 1 100%; min-width: 0; }
+          .topic-row > label { flex-basis: 100%; }
         }
       `}</style>
 
       {homeworkReminders.length > 0 && (
         <div style={styles.hwBanner}>
-          <div style={styles.hwBannerTitle}>Напоминания о домашних заданиях</div>
+          <div style={styles.hwBannerBody}>
+          <div style={styles.hwBannerTitle}>Скоро сдавать</div>
           {homeworkReminders.map((h) => (
             <div key={h.id} style={styles.hwBannerRow}>
-              <span style={{ ...styles.hwBannerSubject, color: subjectColor(h.subjectName) }}>{h.subjectName}:</span>{" "}
+              {h.subjectName && (
+                <>
+                  <span style={{ ...styles.hwBannerSubject, color: lyceumColorOf(h.subjectName) }}>{h.subjectName}:</span>{" "}
+                </>
+              )}
               <span>{h.text}</span>
               {h.minutes > 0 && <span style={styles.hwBannerMinutes}> · {h.minutes} мин</span>}
-              <span style={styles.hwBannerMinutes}> · {relativeDayLabel(h.daysUntil)}</span>
+              <span style={styles.hwBannerDue}> · {relativeDayLabel(h.daysUntil)}</span>
             </div>
           ))}
+          </div>
+          <div style={styles.hwBannerMark} aria-hidden="true">
+            !
+          </div>
         </div>
       )}
 
       <header style={styles.header}>
         <div>
-          <div style={styles.eyebrow}>Ежедневник обществоведа</div>
-          <h1 style={styles.h1}>План подготовки к экзамену и олимпиаде</h1>
+          <h1 style={styles.h1}>Ежедневник ученика Лицея КЭО</h1>
         </div>
         <div style={styles.countdownBox}>
-          <div style={styles.countdownNum}>{daysLeft}</div>
-          <div style={styles.countdownLabel}>дней осталось</div>
-          <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} style={styles.dateInput} />
+          {nextEvent ? (
+            <>
+              <div style={styles.countdownNum}>{daysUntilDate(nextEvent.date)}</div>
+              <div style={styles.countdownLabel}>
+                {daysWord(daysUntilDate(nextEvent.date))} до события
+              </div>
+              <div style={styles.countdownEvent}>
+                <span style={{ color: priorityInfo(nextEvent.priority).onDark }}>
+                  {priorityInfo(nextEvent.priority).mark}
+                </span>{" "}
+                {nextEvent.name}
+              </div>
+              <div style={styles.countdownDate}>
+                {formatEventDate(nextEvent.date)}
+                {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
+              </div>
+
+              {upcomingEvents.length > 1 && (
+                <div style={styles.countdownRest}>
+                  {upcomingEvents.slice(1).map((e) => {
+                    const left = daysUntilDate(e.date);
+                    const info = priorityInfo(e.priority);
+                    return (
+                      <div key={e.id} style={styles.countdownRestRow}>
+                        <span style={{ color: info.onDark }}>{info.mark}</span>
+                        <span style={styles.countdownRestName}>{e.name}</span>
+                        {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
+                        <span style={styles.countdownRestLeft}>
+                          {left} {daysWord(left)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={styles.countdownEmpty}>
+              Событий пока нет.
+              <br />
+              Добавьте экзамен или олимпиаду ниже.
+            </div>
+          )}
         </div>
       </header>
 
+      <section style={styles.eventsStrip}>
+        <div style={styles.eventsActions}>
+          <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
+            {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
+          </button>
+          {upcomingEvents.length > 0 && (
+            <button
+              onClick={() => exportEventsToCalendar(upcomingEvents, "События подготовки")}
+              style={styles.eventsToggle}
+            >
+              Все в календарь
+            </button>
+          )}
+        </div>
+        <Collapsible open={openSections.events}>
+          <EventsEditor
+            upcoming={upcomingEvents}
+            past={pastEvents}
+            mainEventId={mainEvent ? mainEvent.id : null}
+            onAdd={addEvent}
+            onUpdate={updateEvent}
+            onRemove={removeEvent}
+            onExport={(e) => exportEventsToCalendar([e], e.name)}
+          />
+        </Collapsible>
+      </section>
+
       <section style={styles.overallBar}>
-        <div style={styles.overallTrack}>
-          <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
-        </div>
-        <div style={styles.overallText}>
-          Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
-        </div>
+        <button onClick={() => toggleSection("chart")} style={styles.overallBtn}>
+          <div style={styles.overallTrack}>
+            <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
+          </div>
+          <div style={styles.overallText}>
+            Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
+            <span style={styles.overallHint}>{openSections.chart ? "▾ свернуть график" : "▸ график часов"}</span>
+          </div>
+        </button>
+        <Collapsible open={openSections.chart}>
+          <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
+        </Collapsible>
       </section>
 
       {/* КПВ block */}
@@ -894,12 +1397,14 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.kpv ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Распределение времени (КПВ)</h2>
         </button>
-        {openSections.kpv && (
-          <>
+        <Collapsible open={openSections.kpv}>
         <p style={styles.muted}>
           Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут в день вы
           реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам и проверка, хватит
-          ли этого ресурса на оставшиеся уроки до выбранной даты.
+          ли этого ресурса на оставшиеся уроки.
+          {mainEvent
+            ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».`
+            : ""}
         </p>
 
         <div style={styles.dailyGoalsBlock}>
@@ -957,12 +1462,23 @@ export default function StudyPlanner() {
             Осталось непройденных уроков: <b>{capacity.remainingTopics}</b> · суммарно по их длительности:{" "}
             <b>{capacity.neededHours} ч</b>
           </div>
-          <div>
-            Доступно времени до {new Date(deadline).toLocaleDateString("ru-RU")} с учётом расписания по дням недели:{" "}
-            <b>{capacity.totalCapacityHours} ч</b>
-          </div>
-          <div style={{ fontWeight: 600, color: capacity.feasible ? "#3F6E52" : "#8B4A4A" }}>
-            {capacity.feasible
+          {mainEvent ? (
+            <div>
+              Доступно времени до «{mainEvent.name}» ({formatEventDate(mainEvent.date)}) с учётом расписания по дням
+              недели: <b>{capacity.totalCapacityHours} ч</b>
+            </div>
+          ) : (
+            <div>Событие не выбрано — считать не от чего.</div>
+          )}
+          <div
+            style={{
+              fontWeight: 600,
+              color: capacity.feasible === null ? "#6B6656" : capacity.feasible ? "#3F6E52" : "#8B4A4A",
+            }}
+          >
+            {capacity.feasible === null
+              ? "Добавьте событие наверху страницы — тогда посчитаю, хватит ли времени."
+              : capacity.feasible
               ? "При таком темпе времени должно хватить."
               : "При текущем темпе времени может не хватить — стоит увеличить часы или пересмотреть приоритеты."}
           </div>
@@ -1021,8 +1537,7 @@ export default function StudyPlanner() {
             <text x="2" y="24" fontSize="10" fill="#5A5347">{Math.round(axisMax)} ч</text>
           </svg>
         </div>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Subjects */}
@@ -1031,8 +1546,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.subjects ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Самостоятельное изучение</h2>
         </button>
-        {openSections.subjects && (
-          <>
+        <Collapsible open={openSections.subjects}>
         <div style={styles.subjGrid}>
           {ALL_SUBJECTS.map((s) => {
             const st = stats.perSubject[s.id];
@@ -1052,24 +1566,53 @@ export default function StudyPlanner() {
                       {st.done}/{st.total} · {st.pct}%
                     </span>
                   </button>
-                  {isCustomSubject && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Удалить предмет «${s.name}» вместе со всеми его уроками и записями?`)) {
-                          removeSubject(s.id);
-                        }
-                      }}
-                      style={styles.removeBtn}
-                      title="Удалить предмет"
-                    >
-                      ×
-                    </button>
-                  )}
+                  <input
+                    type="color"
+                    value={s.color}
+                    onChange={(e) => setSubjectColor(s.id, e.target.value)}
+                    style={styles.colorPick}
+                    title="Цвет предмета"
+                  />
+                  <button onClick={() => removeSubject(s.id)} style={styles.subjRemoveBtn} title="Удалить предмет">
+                    ×
+                  </button>
                 </div>
                 <div style={styles.miniTrack}>
                   <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
                 </div>
-                {open && (
+                <Collapsible open={open}>
+                  <div style={styles.tabsRow}>
+                    {[
+                      ["lessons", "Уроки"],
+                      ["notebook", "Тетрадь"],
+                    ].map(([key, label]) => {
+                      const active = (subjectTab[s.id] || "lessons") === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setSubjectTab((prev) => ({ ...prev, [s.id]: key }))}
+                          style={{
+                            ...styles.tabBtn,
+                            color: active ? "#fff" : "#5A5347",
+                            background: active ? s.color : "#fff",
+                            borderColor: active ? s.color : "#C9C1AC",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(subjectTab[s.id] || "lessons") === "notebook" ? (
+                  <div style={styles.topicList}>
+                    <Notebook
+                      blocks={notebooks["subj:" + s.id] || []}
+                      onChange={(blocks) => setNotebook("subj:" + s.id, blocks)}
+                      onUndo={showUndo}
+                      prefix={"subj-" + s.id}
+                    />
+                  </div>
+                  ) : (
                   <div style={styles.topicList}>
                     {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
                     {allTopics.map((t) => (
@@ -1085,37 +1628,98 @@ export default function StudyPlanner() {
                         onToggleDone={() => toggleTopic(s.id, t.id, t.custom)}
                         onDurationChange={(v) => setTopicDuration(s.id, t.id, t.custom, v)}
                         onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
+                        onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
                         onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
-                        onRemoveTopic={t.custom ? () => removeCustomTopic(s.id, t.id) : null}
+                        onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
                       />
                     ))}
                     <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
                   </div>
-                )}
+                  )}
+                </Collapsible>
               </div>
             );
           })}
         </div>
         <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Lyceum schedule */}
       <section style={styles.card}>
         <button onClick={() => toggleSection("lyceum")} style={styles.sectionHeaderBtn}>
           <span style={styles.sectionChevron}>{openSections.lyceum ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Лицей КЭО — расписание</h2>
+          <h2 style={styles.h2Inline}>Лицей КЭО</h2>
         </button>
-        {openSections.lyceum && (
-          <>
+        <Collapsible open={openSections.lyceum}>
         <p style={styles.muted}>
-          Отдельно от самостоятельного изучения — уроки в лицее с реальными звонками: время начала и конца, кабинет
-          и преподаватель. Впишите предмет прямо в нужный день недели.
+          Отдельно от самостоятельного изучения. Сверху — предметы лицея с тетрадями и цветом, ниже — расписание
+          с реальными звонками: время, кабинет, преподаватель и роль урока.
         </p>
 
+        <h3 style={styles.subHead}>Предметы</h3>
+        {lyceumSubjectNames.length === 0 ? (
+          <p style={styles.muted}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
+        ) : (
+          <div style={styles.lyceumNotebooks}>
+            {lyceumSubjectNames.map((name) => {
+              const key = "lyceum:" + name;
+              const isOpen = openLyceumNotebook === name;
+              const blocks = notebooks[key] || [];
+              return (
+                <div key={name} style={styles.lyceumNotebookBlock}>
+                  <div style={styles.lyceumSubjectRow}>
+                    <button
+                      onClick={() => setOpenLyceumNotebook(isOpen ? null : name)}
+                      style={{ ...styles.lyceumNotebookHead, color: lyceumColorOf(name) }}
+                    >
+                      <span style={styles.sectionChevron}>{isOpen ? "▾" : "▸"}</span>
+                      {name}
+                      <span style={styles.mutedSmall}>
+                        {blocks.length ? blocks.length + " блок." : "тетрадь пуста"}
+                      </span>
+                    </button>
+                    <input
+                      type="color"
+                      value={lyceumColorOf(name)}
+                      onChange={(e) => setSubjectColor("lyceum:" + name, e.target.value)}
+                      style={styles.colorPick}
+                      title="Цвет предмета"
+                    />
+                  </div>
+                  <Collapsible open={isOpen}>
+                    <div style={styles.lyceumNotebookBody}>
+                      <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
+                    </div>
+                  </Collapsible>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <h3 style={styles.subHead}>Расписание</h3>
+        <div style={styles.sundayRow}>
+          <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
+            {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
+          </button>
+          {!showSunday && sundayLessons > 0 && (
+            <span style={styles.mutedSmall}>уроки воскресенья сохранены ({sundayLessons})</span>
+          )}
+        </div>
+
+        <div style={styles.priorityLegend}>
+          Важность урока — значками рядом с предметом:{" "}
+          {EVENT_PRIORITIES.map((p, i) => (
+            <span key={p.value}>
+              {i > 0 && " · "}
+              <span style={{ color: p.strong, fontWeight: 700 }}>{p.mark}</span> {p.label}
+            </span>
+          ))}
+        </div>
+
         <div style={styles.scheduleGrid}>
-          {LYCEUM_DAYS.map((day) => (
+          {scheduleDays.map((day) => (
             <ScheduleDay
               key={day}
               day={day}
@@ -1127,8 +1731,7 @@ export default function StudyPlanner() {
             />
           ))}
         </div>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Journal */}
@@ -1137,8 +1740,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.journal ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Дневник занятий</h2>
         </button>
-        {openSections.journal && (
-          <>
+        <Collapsible open={openSections.journal}>
         <p style={styles.muted}>
           За последние 7 дней записано {weeklyJournalHours} ч. Записи с уроками и заметками к ним добавляются сюда
           автоматически — можно также добавить запись вручную.
@@ -1179,6 +1781,7 @@ export default function StudyPlanner() {
               const ratio = goal > 0 ? Math.min(hours / goal, 1) : hours > 0 ? 1 : 0;
               const selected = key === selectedDate;
               const hasHw = hwDates.has(key);
+              const lessonDots = lessonDotsByDate[key] || [];
               return (
                 <button
                   key={key}
@@ -1193,6 +1796,13 @@ export default function StudyPlanner() {
                     outlineOffset: "-2px",
                   }}
                 >
+                  {lessonDots.length > 0 && (
+                    <span style={styles.lessonDots}>
+                      {lessonDots.slice(0, 3).map((color) => (
+                        <span key={color} style={{ ...styles.lessonDot, background: color }} />
+                      ))}
+                    </span>
+                  )}
                   {cellDate.getDate()}
                   {hasHw && <span style={styles.hwDot} />}
                 </button>
@@ -1233,15 +1843,34 @@ export default function StudyPlanner() {
           })}
 
           <div style={styles.homeworkBlock}>
-            <div style={styles.homeworkTitle}>Домашнее задание</div>
+            <div style={styles.homeworkTitle}>Домашнее задание и дела</div>
             {selectedDaySubjects.length === 0 ? (
               <div style={styles.mutedSmall}>На этот день по расписанию лицея уроков нет.</div>
             ) : (
               selectedDaySubjects.map((name) => {
                 const items = homeworkForSelectedDate.filter((h) => h.subjectName === name);
+                const dayInfo = selectedDayLevels[name];
                 return (
                   <div key={name} style={styles.homeworkSubjectBlock}>
-                    <div style={{ ...styles.homeworkSubjectName, color: subjectColor(name) }}>{name}</div>
+                    <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
+                      {name}
+                      {dayInfo && (
+                        <>
+                          <span style={{ ...styles.dayPriority, color: priorityInfo(dayInfo.priority).strong }}>
+                            {priorityInfo(dayInfo.priority).mark}
+                          </span>
+                          <span
+                            style={{
+                              ...styles.levelChip,
+                              color: levelInfo(dayInfo.level).color,
+                              borderColor: levelInfo(dayInfo.level).color,
+                            }}
+                          >
+                            {levelInfo(dayInfo.level).short}
+                          </span>
+                        </>
+                      )}
+                    </div>
                     {items.map((h) => (
                       <HomeworkItem
                         key={h.id}
@@ -1250,8 +1879,9 @@ export default function StudyPlanner() {
                         onRemove={() => removeHomework(h.id)}
                         onAttach={(file) => attachFileToHomework(h.id, file)}
                         onOpenAttachment={openAttachment}
-                        onRemoveAttachment={(key) => removeAttachment(h.id, key)}
+                        onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                         onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
+                        onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
                       />
                     ))}
                     <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
@@ -1259,6 +1889,27 @@ export default function StudyPlanner() {
                 );
               })
             )}
+
+            <div style={styles.homeworkSubjectBlock}>
+              <div style={{ ...styles.homeworkSubjectName, color: "#6B6656" }}>Без привязки к уроку</div>
+              {freeHomework.map((h) => (
+                <HomeworkItem
+                  key={h.id}
+                  hw={h}
+                  onToggleDone={() => updateHomework(h.id, { done: !h.done })}
+                  onRemove={() => removeHomework(h.id)}
+                  onAttach={(file) => attachFileToHomework(h.id, file)}
+                  onOpenAttachment={openAttachment}
+                  onRemoveAttachment={(att) => removeAttachment(h.id, att)}
+                  onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
+                  onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
+                />
+              ))}
+              <HomeworkAddForm
+                placeholder="Например: подать заявку на олимпиаду"
+                onAdd={(text, minutes) => addHomework(selectedDate, "", text, minutes)}
+              />
+            </div>
           </div>
         </div>
 
@@ -1309,8 +1960,7 @@ export default function StudyPlanner() {
             );
           })}
         </div>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Manual backup / cross-device transfer */}
@@ -1319,8 +1969,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.backup ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Перенос данных между устройствами</h2>
         </button>
-        {openSections.backup && (
-          <>
+        <Collapsible open={openSections.backup}>
             <p style={styles.muted}>
               Если автоматическая синхронизация между устройствами не работает, данные можно перенести вручную:
               скопируйте текст на одном устройстве и вставьте его в поле импорта на другом.
@@ -1351,8 +2000,7 @@ export default function StudyPlanner() {
               Импорт полностью заменит текущие данные на этом устройстве данными из вставленного текста —
               используйте его на «пустом» или менее актуальном устройстве.
             </p>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       <div style={styles.syncRow}>
@@ -1366,12 +2014,127 @@ export default function StudyPlanner() {
           {syncDebug ? ` — ${syncDebug}` : ""}
         </span>
       </div>
+      {undoQueue.length > 0 && (
+        <div style={styles.undoStack}>
+          {undoQueue.map((item) => (
+            <div key={item.id} className="undo-toast" style={styles.undoToast}>
+              <div style={styles.undoBarTrack}>
+                <div className="undo-bar" style={styles.undoBar} />
+              </div>
+              <div style={styles.undoRow}>
+                <span style={styles.undoText}>
+                  {item.message}. Если это по ошибке — нажмите крестик, всё вернётся.
+                </span>
+                <button onClick={() => cancelUndo(item.id)} style={styles.undoCancel} title="Вернуть">
+                  ✕
+                </button>
+                <button onClick={() => confirmUndo(item.id)} style={styles.undoConfirm} title="Да, удалить">
+                  ✓
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {saveErr && (
         <div style={styles.saveErr}>
           Не удалось сохранить последние изменения — повторяю попытку автоматически. Если ошибка не проходит,
           нажмите «Обновить сейчас» и проверьте соединение с интернетом.
         </div>
       )}
+    </div>
+  );
+}
+
+function PriorityPicker({ value, onChange }) {
+  return (
+    <div style={styles.priorityRow}>
+      {EVENT_PRIORITIES.map((p) => {
+        const active = Number(value) === p.value;
+        return (
+          <button
+            key={p.value}
+            onClick={() => onChange(p.value)}
+            title={p.label}
+            style={{
+              ...styles.priorityBtn,
+              color: active ? "#fff" : p.color,
+              background: active ? p.color : "#fff",
+              borderColor: active ? p.color : "#C9C1AC",
+            }}
+          >
+            {p.mark}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, onExport }) {
+  const [name, setName] = useState("");
+  const [date, setDate] = useState(todayStr());
+  const [priority, setPriority] = useState(2);
+
+  function submit() {
+    if (!name.trim() || !date) return;
+    onAdd(name, date, priority);
+    setName("");
+    setPriority(2);
+  }
+
+  function row(e, isPast) {
+    return (
+      <div key={e.id} style={{ ...styles.eventEditRow, opacity: isPast ? 0.55 : 1 }}>
+        <input value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
+        <input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} style={styles.eventDateInput} />
+        <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
+        {e.id === mainEventId && <span style={styles.mainBadge}>по нему считается план</span>}
+        {isPast && <span style={styles.mutedSmall}>прошло</span>}
+        {!isPast && (
+          <button onClick={() => onExport(e)} style={styles.calendarBtn} title="Добавить в календарь телефона">
+            📅
+          </button>
+        )}
+        <button onClick={() => onRemove(e.id)} style={styles.removeBtn} title="Удалить событие">
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.eventsEditor}>
+      <p style={styles.muted}>
+        Кнопка 📅 отдаёт событие календарю телефона — напоминание придёт даже при закрытом приложении: за неделю до
+        «{EVENT_PRIORITIES[2].mark}», за три дня до «{EVENT_PRIORITIES[1].mark}», за день до «
+        {EVENT_PRIORITIES[0].mark}».
+      </p>
+      <p style={styles.muted}>
+        Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
+        план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
+        приоритет одинаковый, берётся ближайшее.
+      </p>
+
+      {upcoming.map((e) => row(e, false))}
+      {past.length > 0 && <div style={styles.pastLabel}>Прошедшие</div>}
+      {past.map((e) => row(e, true))}
+
+      <div style={styles.eventAddRow}>
+        <input
+          placeholder="Например: региональный этап ВсОШ"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          style={styles.eventNameInput}
+        />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.eventDateInput} />
+        <PriorityPicker value={priority} onChange={setPriority} />
+        <button onClick={submit} style={styles.addBtnSmall} disabled={!name.trim()}>
+          Добавить
+        </button>
+      </div>
     </div>
   );
 }
@@ -1387,12 +2150,14 @@ function TopicItem({
   onToggleDone,
   onDurationChange,
   onAddNote,
+  onUpdateNote,
   onRemoveNote,
   onRemoveTopic,
 }) {
   const [noteText, setNoteText] = useState("");
   const [noteMins, setNoteMins] = useState("15");
   const [urlDraft, setUrlDraft] = useState(topic.url || "");
+  const [openNoteBodies, setOpenNoteBodies] = useState({});
   const notes = topic.notes || [];
 
   return (
@@ -1430,14 +2195,12 @@ function TopicItem({
         <button onClick={onToggleNotes} style={styles.notesToggle}>
           заметки{notes.length ? ` (${notes.length})` : ""}
         </button>
-        {onRemoveTopic && (
-          <button onClick={onRemoveTopic} style={styles.removeBtn}>
-            ×
-          </button>
-        )}
+        <button onClick={onRemoveTopic} style={styles.removeBtn} title="Удалить урок">
+          ×
+        </button>
       </div>
 
-      {linkOpen && (
+      <Collapsible open={linkOpen}>
         <div style={styles.notesPanel}>
           <div style={styles.noteForm}>
             <input
@@ -1465,20 +2228,49 @@ function TopicItem({
             )}
           </div>
         </div>
-      )}
+      </Collapsible>
 
-      {notesOpen && (
+      <Collapsible open={notesOpen}>
         <div style={styles.notesPanel}>
-          {notes.map((n) => (
-            <div key={n.id} style={styles.noteRow}>
-              <span style={styles.noteDate}>{new Date(n.date).toLocaleDateString("ru-RU")}</span>
-              <span style={styles.noteText}>{n.text}</span>
-              <span style={styles.noteMins}>{n.minutes} мин</span>
-              <button onClick={() => onRemoveNote(n.id)} style={styles.removeBtn}>
-                ×
-              </button>
-            </div>
-          ))}
+          {notes.map((n) => {
+            const bodyOpen = !!openNoteBodies[n.id];
+            const hasBody = (n.html && n.html !== "<br>") || (n.files && n.files.length);
+            return (
+              <div key={n.id} style={styles.noteBlock}>
+                <div style={styles.noteRow}>
+                  <button
+                    onClick={() => setOpenNoteBodies((prev) => ({ ...prev, [n.id]: !bodyOpen }))}
+                    style={styles.noteChevron}
+                    title="Конспект и файлы"
+                  >
+                    {bodyOpen ? "▾" : "▸"}
+                  </button>
+                  <span style={styles.noteDate}>{new Date(n.date).toLocaleDateString("ru-RU")}</span>
+                  <span style={styles.noteText}>{n.text}</span>
+                  {!bodyOpen && hasBody && <span style={styles.noteHasBody}>✎</span>}
+                  <span style={styles.noteMins}>{n.minutes} мин</span>
+                  <button onClick={() => onRemoveNote(n.id)} style={styles.removeBtn}>
+                    ×
+                  </button>
+                </div>
+                <Collapsible open={bodyOpen}>
+                  <div style={styles.noteBody}>
+                    <RichText
+                      docId={n.id}
+                      html={n.html}
+                      onChange={(html) => onUpdateNote(n.id, { html })}
+                      placeholder="Конспект урока, разбор задачи, что осталось выучить…"
+                    />
+                    <Attachments
+                      files={n.files || []}
+                      onChange={(files) => onUpdateNote(n.id, { files })}
+                      prefix={"note-" + n.id}
+                    />
+                  </div>
+                </Collapsible>
+              </div>
+            );
+          })}
           <div style={styles.noteForm}>
             <input
               type="text"
@@ -1508,7 +2300,7 @@ function TopicItem({
             </button>
           </div>
         </div>
-      )}
+      </Collapsible>
     </div>
   );
 }
@@ -1594,14 +2386,23 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
 
 function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
   return (
-    <div style={{ ...styles.scheduleEntry, borderLeftColor: subjectColor(entry.subjectName || "") }}>
-      <input
-        type="text"
-        placeholder="Предмет"
-        value={entry.subjectName}
-        onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
-        style={styles.scheduleSubjectInput}
-      />
+    <div
+      style={{
+        ...styles.scheduleEntry,
+        borderLeftColor: priorityInfo(entry.priority).strong,
+        background: priorityInfo(entry.priority).tint,
+      }}
+    >
+      <div style={styles.scheduleSubjectRow}>
+        <input
+          type="text"
+          placeholder="Предмет"
+          value={entry.subjectName}
+          onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
+          style={styles.scheduleSubjectInput}
+        />
+        <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+      </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={entry.start} onChange={(e) => onUpdate(entry.id, { start: e.target.value })} style={styles.scheduleTimeInput} />
         <span style={styles.mutedSmall}>–</span>
@@ -1621,6 +2422,18 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
         onChange={(e) => onUpdate(entry.id, { teacher: e.target.value })}
         style={styles.scheduleTeacherInput}
       />
+      <select
+        value={entry.level || "base"}
+        onChange={(e) => onUpdate(entry.id, { level: e.target.value })}
+        style={{ ...styles.scheduleSelect, color: levelInfo(entry.level).color, fontWeight: 600 }}
+        title="Насколько важен этот урок"
+      >
+        {LESSON_LEVELS.map((l) => (
+          <option key={l.value} value={l.value}>
+            {l.label}
+          </option>
+        ))}
+      </select>
       <button onClick={onRemove} style={styles.removeBtn}>
         ×
       </button>
@@ -1634,10 +2447,12 @@ function AddScheduleForm({ onAdd }) {
   const [end, setEnd] = useState("09:15");
   const [room, setRoom] = useState("");
   const [teacher, setTeacher] = useState("");
+  const [level, setLevel] = useState("base");
+  const [priority, setPriority] = useState(1);
 
   function submit() {
     if (!subjectName.trim()) return;
-    onAdd({ subjectName, start, end, room, teacher });
+    onAdd({ subjectName, start, end, room, teacher, level, priority });
     setSubjectName("");
     setRoom("");
     setTeacher("");
@@ -1645,14 +2460,17 @@ function AddScheduleForm({ onAdd }) {
 
   return (
     <div style={styles.addScheduleRow}>
-      <input
-        type="text"
-        placeholder="Предмет"
-        value={subjectName}
-        onChange={(e) => setSubjectName(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        style={styles.scheduleSubjectInput}
-      />
+      <div style={styles.scheduleSubjectRow}>
+        <input
+          type="text"
+          placeholder="Предмет"
+          value={subjectName}
+          onChange={(e) => setSubjectName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          style={styles.scheduleSubjectInput}
+        />
+        <PriorityPicker value={priority} onChange={setPriority} />
+      </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
         <span style={styles.mutedSmall}>–</span>
@@ -1666,6 +2484,13 @@ function AddScheduleForm({ onAdd }) {
         onChange={(e) => setTeacher(e.target.value)}
         style={styles.scheduleTeacherInput}
       />
+      <select value={level} onChange={(e) => setLevel(e.target.value)} style={styles.scheduleSelect}>
+        {LESSON_LEVELS.map((l) => (
+          <option key={l.value} value={l.value}>
+            {l.label}
+          </option>
+        ))}
+      </select>
       <button onClick={submit} style={styles.addBtnSmall}>
         + Урок
       </button>
@@ -1673,7 +2498,7 @@ function AddScheduleForm({ onAdd }) {
   );
 }
 
-function HomeworkAddForm({ onAdd }) {
+function HomeworkAddForm({ onAdd, placeholder }) {
   const [val, setVal] = useState("");
   const [minutes, setMinutes] = useState("20");
   function submit() {
@@ -1685,7 +2510,7 @@ function HomeworkAddForm({ onAdd }) {
     <div style={styles.homeworkAddRow}>
       <input
         type="text"
-        placeholder="Например: параграф 12, упр. 5–8"
+        placeholder={placeholder || "Например: параграф 12, упр. 5–8"}
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
@@ -1708,7 +2533,7 @@ function HomeworkAddForm({ onAdd }) {
   );
 }
 
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onExport }) {
   const fileInputRef = useRef(null);
   const reminderMode = hw.reminderDays === "always" ? "always" : !hw.reminderDays || hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -1719,6 +2544,9 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
         <input type="checkbox" checked={!!hw.done} onChange={onToggleDone} />
         <span style={hw.done ? { ...styles.homeworkText, ...styles.topicDone } : styles.homeworkText}>{hw.text}</span>
         {hw.minutes > 0 && <span style={styles.mutedSmall}>{hw.minutes} мин</span>}
+        <button onClick={onExport} style={styles.attachBtn} title="Добавить срок в календарь телефона">
+          📅
+        </button>
         <button onClick={() => fileInputRef.current?.click()} style={styles.attachBtn} title="Прикрепить файл">
           📎
         </button>
@@ -1738,12 +2566,12 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
       </div>
       {(hw.attachments || []).length > 0 && (
         <div style={styles.attachmentsRow}>
-          {hw.attachments.map((a) => (
-            <span key={a.key} style={styles.attachmentChip}>
+          {hw.attachments.map((a, i) => (
+            <span key={a.path || a.key || i} style={styles.attachmentChip}>
               <button onClick={() => onOpenAttachment(a)} style={styles.attachmentLink}>
                 {a.name}
               </button>
-              <button onClick={() => onRemoveAttachment(a.key)} style={styles.removeBtn}>
+              <button onClick={() => onRemoveAttachment(a)} style={styles.removeBtn}>
                 ×
               </button>
             </span>
@@ -1810,13 +2638,141 @@ const styles = {
     textAlign: "left",
   },
   sectionChevron: { fontSize: 13, color: "#8A8370", width: 12, flexShrink: 0 },
-  countdownBox: { background: "#2B2822", color: "#EFEBE1", borderRadius: 4, padding: "14px 20px", textAlign: "center", minWidth: 150 },
+  countdownBox: { background: "#2B2822", color: "#EFEBE1", borderRadius: 4, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
   dateInput: { border: "1px solid #4A4638", background: "transparent", color: "inherit", borderRadius: 3, padding: "4px 6px", fontSize: 12, width: "100%" },
+  countdownEvent: { fontSize: 13, fontWeight: 600, marginTop: 8, lineHeight: 1.35 },
+  countdownDate: { fontSize: 11.5, opacity: 0.7, marginTop: 2 },
+  countdownRest: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTop: "1px solid #4A4638",
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+    textAlign: "left",
+  },
+  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 11.5, lineHeight: 1.3 },
+  countdownRestName: { flex: 1, minWidth: 0, opacity: 0.9 },
+  countdownRestLeft: { opacity: 0.6, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
+  countdownPlan: { fontSize: 9.5, color: "#8FBF9F", marginLeft: 6, whiteSpace: "nowrap" },
+  countdownEmpty: { fontSize: 12.5, opacity: 0.8, lineHeight: 1.5 },
+  eventsStrip: { marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 },
+  eventRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, flexWrap: "wrap" },
+  eventMark: { fontWeight: 700, minWidth: 14 },
+  eventName: { fontWeight: 600 },
+  eventDate: { color: "#6B6656", fontSize: 12.5 },
+  eventLeft: { color: "#8A8370", fontSize: 12.5, marginLeft: "auto" },
+  eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
+  calendarBtn: { background: "none", border: "none", padding: "0 2px", fontSize: 14, lineHeight: 1 },
+  eventsToggle: {
+    alignSelf: "flex-start",
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 12.5,
+    color: "#8C7326",
+    fontWeight: 600,
+    textDecoration: "underline",
+  },
+  eventsEditor: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 4 },
+  eventEditRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 },
+  eventAddRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTop: "1px solid #E7E1D2",
+  },
+  eventNameInput: { flex: "1 1 160px", minWidth: 0, padding: "5px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, background: "#fff" },
+  eventDateInput: { padding: "5px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
+  priorityRow: { display: "flex", gap: 4 },
+  priorityBtn: { border: "1px solid", borderRadius: 4, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
+  tabsRow: { display: "flex", gap: 6, marginTop: 10 },
+  tabBtn: { border: "1px solid", borderRadius: 4, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
+  subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 16, margin: "18px 0 8px" },
+  lyceumSubjectRow: { display: "flex", alignItems: "center", gap: 8 },
+  sundayRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 },
+  sundayBtn: {
+    border: "1px solid #C9C1AC",
+    background: "#fff",
+    borderRadius: 4,
+    padding: "5px 12px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "#5A5347",
+  },
+  lyceumNotebooks: { marginBottom: 18, display: "flex", flexDirection: "column", gap: 6 },
+  lyceumNotebookBlock: { borderBottom: "1px solid #E7E1D2", paddingBottom: 6 },
+  lyceumNotebookHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    background: "none",
+    border: "none",
+    padding: "4px 0",
+    fontSize: 13.5,
+    fontWeight: 600,
+    textAlign: "left",
+  },
+  lyceumNotebookBody: { padding: "6px 0 10px 20px" },
+  undoStack: {
+    position: "fixed",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    zIndex: 50,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    alignItems: "center",
+    pointerEvents: "none",
+  },
+  undoToast: {
+    width: "100%",
+    maxWidth: 560,
+    pointerEvents: "auto",
+    background: "#2B2822",
+    color: "#EFEBE1",
+    borderRadius: 6,
+    boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
+    overflow: "hidden",
+    zIndex: 50,
+  },
+  undoBarTrack: { height: 3, background: "#4A4638" },
+  undoBar: { height: "100%", background: "#8C7326" },
+  undoRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" },
+  undoText: { flex: 1, fontSize: 12.5, lineHeight: 1.45 },
+  undoCancel: {
+    border: "1px solid #8A8370",
+    background: "transparent",
+    color: "#EFEBE1",
+    borderRadius: 4,
+    padding: "4px 10px",
+    fontSize: 13,
+  },
+  undoConfirm: { border: "none", background: "#3F6E52", color: "#fff", borderRadius: 4, padding: "4px 10px", fontSize: 13 },
+  dayPriority: { fontSize: 11, fontWeight: 700, marginLeft: 6 },
+  levelChip: {
+    border: "1px solid",
+    borderRadius: 3,
+    fontSize: 10,
+    fontWeight: 600,
+    padding: "1px 5px",
+    marginLeft: 6,
+    verticalAlign: "middle",
+  },
+  mainBadge: { fontSize: 11, color: "#3F6E52", fontWeight: 600 },
+  pastLabel: { fontSize: 11.5, color: "#8A8370", margin: "10px 0 6px" },
   overallBar: { marginBottom: 24 },
   overallTrack: { height: 8, background: "#DCD5C4", borderRadius: 4, overflow: "hidden" },
   overallFill: { height: "100%", background: "#2B2822" },
+  overallBtn: { display: "block", width: "100%", border: "none", background: "none", padding: 0, textAlign: "left" },
+  overallHint: { color: "#8C7326", fontWeight: 600, marginLeft: 8, fontSize: 12 },
   overallText: { fontSize: 13, color: "#5A5347", marginTop: 6 },
   card: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 22, marginBottom: 26 },
   muted: { fontSize: 13.5, color: "#6B6656", lineHeight: 1.55, marginTop: 0 },
@@ -1869,14 +2825,24 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    borderLeft: "3px solid",
-    paddingLeft: 8,
+    borderLeft: "5px solid",
+    borderRadius: "0 4px 4px 0",
+    padding: "6px 8px",
     marginBottom: 8,
-    paddingBottom: 6,
-    borderBottom: "1px solid #E7E1D2",
   },
+  scheduleSubjectRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  priorityLegend: { fontSize: 11.5, color: "#6B6656", lineHeight: 1.5, marginBottom: 10 },
   scheduleSelect: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", width: "100%" },
-  scheduleSubjectInput: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", fontWeight: 600 },
+  scheduleSubjectInput: {
+    flex: "1 1 120px",
+    minWidth: 0,
+    padding: "4px 6px",
+    border: "1px solid #C9C1AC",
+    borderRadius: 4,
+    fontSize: 12.5,
+    background: "#fff",
+    fontWeight: 600,
+  },
   scheduleTimeRow: { display: "flex", alignItems: "center", gap: 4 },
   scheduleTimeInput: { padding: "3px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff", width: 82 },
   scheduleRoomInput: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
@@ -1889,12 +2855,35 @@ const styles = {
   topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 4, maxHeight: 380, overflowY: "auto" },
   topicBlock: { borderBottom: "1px solid #E7E1D2", paddingBottom: 4 },
   topicRow: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "5px 4px", borderRadius: 3 },
-  topicLabel: { display: "flex", alignItems: "center", gap: 8, flex: 1, cursor: "pointer" },
+  topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
   topicDone: { textDecoration: "line-through", color: "#9A927D" },
   durationInput: { width: 44, padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
   notesToggle: { background: "none", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "#5A5347" },
+  colorPick: {
+    width: 24,
+    height: 20,
+    padding: 0,
+    border: "1px solid #C9C1AC",
+    borderRadius: 3,
+    background: "#fff",
+    flexShrink: 0,
+  },
+  subjRemoveBtn: {
+    border: "none",
+    background: "none",
+    color: "#8B4A4A",
+    fontSize: 20,
+    lineHeight: 1,
+    // Крестик на телефоне должен попадаться под палец, а не под пиксель.
+    padding: "6px 10px",
+    marginRight: -6,
+  },
   removeBtn: { marginLeft: 2, background: "none", border: "none", color: "#B08A8A", fontSize: 16, lineHeight: 1, padding: "0 4px" },
   notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "#fff", border: "1px solid #E7E1D2", borderRadius: 5 },
+  noteBlock: { marginBottom: 6 },
+  noteChevron: { background: "none", border: "none", padding: 0, fontSize: 11, color: "#8A8370", width: 12 },
+  noteHasBody: { fontSize: 11, color: "#8C7326" },
+  noteBody: { display: "flex", flexDirection: "column", gap: 6, margin: "6px 0 10px 14px" },
   noteRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "3px 0" },
   noteDate: { color: "#8A8370", width: 68, flexShrink: 0 },
   noteText: { flex: 1, color: "#4A4638" },
@@ -1915,6 +2904,19 @@ const styles = {
   calGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 },
   calCell: { position: "relative", aspectRatio: "1", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" },
   hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "#8C7326" },
+  // Клетка календаря сама цветная — от красной к зелёной, — поэтому точки сидят на
+  // светлой подложке: иначе зелёный предмет пропадает на зелёном дне.
+  lessonDots: {
+    position: "absolute",
+    top: 2,
+    display: "flex",
+    gap: 2,
+    alignItems: "center",
+    padding: "2px 3px",
+    borderRadius: 6,
+    background: "rgba(247, 244, 236, 0.92)",
+  },
+  lessonDot: { width: 5, height: 5, borderRadius: "50%" },
   dayDetail: { background: "#fff", border: "1px solid #DCD5C4", borderRadius: 5, padding: "12px 14px", marginBottom: 16 },
   homeworkBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed #DCD5C4" },
   homeworkTitle: { fontSize: 13, fontWeight: 700, marginBottom: 6 },
@@ -1942,16 +2944,39 @@ const styles = {
   reminderSelect: { padding: "2px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, background: "#fff" },
   reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, background: "#fff" },
   hwBanner: {
-    background: "#EFE7D0",
-    border: "1px solid #C9B87A",
+    display: "flex",
+    alignItems: "stretch",
+    gap: 12,
+    background: "#FBF0D2",
+    border: "1px solid #C08A1E",
+    borderLeft: "5px solid #C08A1E",
     borderRadius: 6,
-    padding: "12px 16px",
+    padding: "12px 14px",
     marginBottom: 16,
   },
-  hwBannerTitle: { fontSize: 13.5, fontWeight: 700, marginBottom: 6, color: "#6B5A1E" },
-  hwBannerRow: { fontSize: 13, color: "#4A4638", marginBottom: 2 },
+  hwBannerBody: { flex: 1, minWidth: 0 },
+  hwBannerTitle: {
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 16,
+    fontWeight: 700,
+    marginBottom: 6,
+    color: "#7A5A12",
+  },
+  hwBannerRow: { fontSize: 13.5, color: "#3A362C", marginBottom: 3, lineHeight: 1.45 },
   hwBannerSubject: { fontWeight: 700 },
   hwBannerMinutes: { color: "#8A8370" },
+  hwBannerDue: { color: "#B23A3A", fontWeight: 600 },
+  // Знак ростом во всю плашку: напоминание должно цеплять взгляд, а не теряться.
+  hwBannerMark: {
+    display: "flex",
+    alignItems: "center",
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 46,
+    lineHeight: 1,
+    fontWeight: 700,
+    color: "#C08A1E",
+    flexShrink: 0,
+  },
   dayDetailTitle: { fontSize: 13.5, fontWeight: 600, marginBottom: 8, textTransform: "capitalize" },
   journalForm: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" },
   textInput: { flex: "1 1 200px", padding: "6px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13.5, background: "#fff" },
