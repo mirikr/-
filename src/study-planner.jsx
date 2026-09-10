@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { get as storageGet, set as storageSet, remove as storageRemove, onAuthChange } from "./storage.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -261,7 +262,7 @@ export default function StudyPlanner() {
     let found = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await window.storage.get(STORAGE_KEY, false);
+        const res = await storageGet(STORAGE_KEY);
         if (res && res.value) {
           found = true;
           const parsed = JSON.parse(res.value);
@@ -275,7 +276,7 @@ export default function StudyPlanner() {
           if (parsed.homework) setHomework(parsed.homework);
         }
         setLastSyncedAt(new Date());
-        setSyncDebug(found ? "" : "хранилище пока пустое — записей не найдено");
+        setSyncDebug((res && res.warning) || (found ? "" : "пока нет сохранённых записей"));
         lastError = null;
         break;
       } catch (e) {
@@ -298,6 +299,13 @@ export default function StudyPlanner() {
   // Cross-device sync: an already-open tab only reads storage once on mount, so if you
   // change something on another device while this one stays open, it would never notice.
   // Re-pull the latest saved state whenever the person comes back to this tab/app.
+  useEffect(() => {
+    if (!loaded) return;
+    return onAuthChange(() => {
+      loadFromStorage();
+    });
+  }, [loaded]);
+
   useEffect(() => {
     if (!loaded) return;
     function handleWake() {
@@ -333,18 +341,22 @@ export default function StudyPlanner() {
           openSections,
           homework,
         });
-        let res = null;
+        let saved = null;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            res = await window.storage.set(STORAGE_KEY, payload, false);
-            if (res) break;
+            saved = await storageSet(STORAGE_KEY, payload);
+            // cloud === null means this build has no cloud at all, so one attempt is final.
+            if (saved.ok && saved.cloud !== false) break;
           } catch (e) {
-            res = null;
+            saved = null;
           }
           if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
         }
-        setSaveErr(!res);
-        if (res) setLastSyncedAt(new Date());
+        setSaveErr(!(saved && saved.ok));
+        if (saved && saved.ok) {
+          setLastSyncedAt(new Date());
+          setSyncDebug(saved.cloud === false ? saved.error : "");
+        }
       })();
     }, 700);
     return () => {
@@ -652,7 +664,7 @@ export default function StudyPlanner() {
   function removeHomework(id) {
     const hw = homework.find((h) => h.id === id);
     (hw?.attachments || []).forEach((a) => {
-      window.storage.delete(a.key, false).catch(() => {});
+      storageRemove(a.key).catch(() => {});
     });
     setHomework((prev) => prev.filter((h) => h.id !== id));
   }
@@ -663,6 +675,12 @@ export default function StudyPlanner() {
 
   async function attachFileToHomework(id, file) {
     if (!file) return;
+    // Attachments are stored as base64, which inflates them by a third and shares the
+    // browser's ~5 MB local quota with everything else in the planner.
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Файл больше 2 МБ — такое вложение не поместится. Сожмите его или сфотографируйте страницу в меньшем разрешении.");
+      return;
+    }
     try {
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -671,9 +689,9 @@ export default function StudyPlanner() {
         reader.readAsDataURL(file);
       });
       const key = "hwfile-" + id + "-" + Date.now();
-      const res = await window.storage.set(key, dataUrl, false);
-      if (!res) {
-        alert("Не удалось прикрепить файл — возможно, он слишком большой.");
+      const res = await storageSet(key, dataUrl);
+      if (!res.ok) {
+        alert("Не удалось прикрепить файл: " + (res.error || "возможно, он слишком большой."));
         return;
       }
       setHomework((prev) =>
@@ -686,7 +704,7 @@ export default function StudyPlanner() {
 
   async function openAttachment(att) {
     try {
-      const res = await window.storage.get(att.key, false);
+      const res = await storageGet(att.key);
       if (!res || !res.value) {
         alert("Файл не найден.");
         return;
@@ -704,7 +722,7 @@ export default function StudyPlanner() {
   }
 
   function removeAttachment(hwId, key) {
-    window.storage.delete(key, false).catch(() => {});
+    storageRemove(key).catch(() => {});
     setHomework((prev) =>
       prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => a.key !== key) } : h))
     );
@@ -822,6 +840,17 @@ export default function StudyPlanner() {
         input, select, textarea { font-family: inherit; }
         a.lesson-link { color: inherit; text-decoration: underline; text-decoration-color: #C9C1AC; text-underline-offset: 2px; }
         a.lesson-link:hover { text-decoration-color: currentColor; }
+        /* Chrome reserves room for spinner arrows inside number inputs, which clipped "150" to "15"
+           in the narrow per-weekday fields on a phone. The values are typed, not stepped. */
+        input[type="number"] { -moz-appearance: textfield; }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        /* On a phone the lesson name alone fills the row, so let the controls drop to a second line
+           instead of being pushed off the right edge. */
+        @media (max-width: 560px) {
+          .topic-row { flex-wrap: wrap; }
+          .topic-row > label { flex: 1 1 100%; min-width: 0; }
+        }
       `}</style>
 
       {homeworkReminders.length > 0 && (
@@ -905,7 +934,7 @@ export default function StudyPlanner() {
                 max="20"
                 value={budget.alloc[s.id]}
                 onChange={(e) => setAlloc(s.id, e.target.value)}
-                style={{ accentColor: s.color, flex: 1 }}
+                style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
               />
               <input
                 type="number"
@@ -1793,10 +1822,10 @@ const styles = {
   muted: { fontSize: 13.5, color: "#6B6656", lineHeight: 1.55, marginTop: 0 },
   label: { fontSize: 13, fontWeight: 600, color: "#4A4638", display: "block", marginBottom: 6 },
   dailyGoalsBlock: { marginBottom: 18 },
-  dailyGoalsRow: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginTop: 4 },
-  dailyGoalCell: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3 },
+  dailyGoalsRow: { display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, marginTop: 4 },
+  dailyGoalCell: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 },
   dailyGoalLabel: { fontSize: 11.5, color: "#8A8370" },
-  dailyGoalInput: { width: 52, padding: "4px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, textAlign: "center", background: "#fff" },
+  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, textAlign: "center", background: "#fff" },
   dailyGoalHours: { fontSize: 11, color: "#6B6656" },
   allocGrid: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 },
   allocRow: { display: "flex", alignItems: "center", gap: 10 },
