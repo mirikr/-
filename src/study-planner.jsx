@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { get as storageGet, set as storageSet, onAuthChange } from "./storage.js";
 import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
+import Collapsible from "./collapsible.jsx";
+import HoursChart from "./hours-chart.jsx";
 import { buildIcs, saveIcs } from "./calendar.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
@@ -319,7 +321,7 @@ export default function StudyPlanner() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [openSections, setOpenSections] = useState({ events: false, kpv: false, subjects: false, lyceum: false, journal: false, backup: false });
+  const [openSections, setOpenSections] = useState({ events: false, chart: false, kpv: false, subjects: false, lyceum: false, journal: false, backup: false });
   const [importText, setImportText] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
@@ -456,6 +458,10 @@ export default function StudyPlanner() {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, lyceumSchedule, openSections, homework, loaded]);
+
+  // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
+  // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
+  const goalForDate = useCallback((date) => goalHoursForDate(budget, date), [budget]);
 
   const stats = useMemo(() => {
     let doneAll = 0;
@@ -1200,7 +1206,7 @@ export default function StudyPlanner() {
             </button>
           )}
         </div>
-        {openSections.events && (
+        <Collapsible open={openSections.events}>
           <EventsEditor
             upcoming={upcomingEvents}
             past={pastEvents}
@@ -1210,16 +1216,22 @@ export default function StudyPlanner() {
             onRemove={removeEvent}
             onExport={(e) => exportEventsToCalendar([e], e.name)}
           />
-        )}
+        </Collapsible>
       </section>
 
       <section style={styles.overallBar}>
-        <div style={styles.overallTrack}>
-          <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
-        </div>
-        <div style={styles.overallText}>
-          Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
-        </div>
+        <button onClick={() => toggleSection("chart")} style={styles.overallBtn}>
+          <div style={styles.overallTrack}>
+            <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
+          </div>
+          <div style={styles.overallText}>
+            Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
+            <span style={styles.overallHint}>{openSections.chart ? "▾ свернуть график" : "▸ график часов"}</span>
+          </div>
+        </button>
+        <Collapsible open={openSections.chart}>
+          <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
+        </Collapsible>
       </section>
 
       {/* КПВ block */}
@@ -1228,8 +1240,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.kpv ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Распределение времени (КПВ)</h2>
         </button>
-        {openSections.kpv && (
-          <>
+        <Collapsible open={openSections.kpv}>
         <p style={styles.muted}>
           Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут в день вы
           реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам и проверка, хватит
@@ -1369,8 +1380,7 @@ export default function StudyPlanner() {
             <text x="2" y="24" fontSize="10" fill="#5A5347">{Math.round(axisMax)} ч</text>
           </svg>
         </div>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Subjects */}
@@ -1379,8 +1389,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.subjects ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Самостоятельное изучение</h2>
         </button>
-        {openSections.subjects && (
-          <>
+        <Collapsible open={openSections.subjects}>
         <div style={styles.subjGrid}>
           {ALL_SUBJECTS.map((s) => {
             const st = stats.perSubject[s.id];
@@ -1469,8 +1478,7 @@ export default function StudyPlanner() {
           })}
         </div>
         <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Lyceum schedule */}
@@ -1479,8 +1487,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.lyceum ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Лицей КЭО — расписание</h2>
         </button>
-        {openSections.lyceum && (
-          <>
+        <Collapsible open={openSections.lyceum}>
         <p style={styles.muted}>
           Отдельно от самостоятельного изучения — уроки в лицее с реальными звонками: время начала и конца, кабинет
           и преподаватель. Впишите предмет прямо в нужный день недели.
@@ -1529,8 +1536,7 @@ export default function StudyPlanner() {
             />
           ))}
         </div>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Journal */}
@@ -1539,8 +1545,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.journal ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Дневник занятий</h2>
         </button>
-        {openSections.journal && (
-          <>
+        <Collapsible open={openSections.journal}>
         <p style={styles.muted}>
           За последние 7 дней записано {weeklyJournalHours} ч. Записи с уроками и заметками к ним добавляются сюда
           автоматически — можно также добавить запись вручную.
@@ -1741,8 +1746,7 @@ export default function StudyPlanner() {
             );
           })}
         </div>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       {/* Manual backup / cross-device transfer */}
@@ -1751,8 +1755,7 @@ export default function StudyPlanner() {
           <span style={styles.sectionChevron}>{openSections.backup ? "▾" : "▸"}</span>
           <h2 style={styles.h2Inline}>Перенос данных между устройствами</h2>
         </button>
-        {openSections.backup && (
-          <>
+        <Collapsible open={openSections.backup}>
             <p style={styles.muted}>
               Если автоматическая синхронизация между устройствами не работает, данные можно перенести вручную:
               скопируйте текст на одном устройстве и вставьте его в поле импорта на другом.
@@ -1783,8 +1786,7 @@ export default function StudyPlanner() {
               Импорт полностью заменит текущие данные на этом устройстве данными из вставленного текста —
               используйте его на «пустом» или менее актуальном устройстве.
             </p>
-          </>
-        )}
+        </Collapsible>
       </section>
 
       <div style={styles.syncRow}>
@@ -2503,6 +2505,8 @@ const styles = {
   overallBar: { marginBottom: 24 },
   overallTrack: { height: 8, background: "#DCD5C4", borderRadius: 4, overflow: "hidden" },
   overallFill: { height: "100%", background: "#2B2822" },
+  overallBtn: { display: "block", width: "100%", border: "none", background: "none", padding: 0, textAlign: "left" },
+  overallHint: { color: "#8C7326", fontWeight: 600, marginLeft: 8, fontSize: 12 },
   overallText: { fontSize: 13, color: "#5A5347", marginTop: 6 },
   card: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 22, marginBottom: 26 },
   muted: { fontSize: 13.5, color: "#6B6656", lineHeight: 1.55, marginTop: 0 },
