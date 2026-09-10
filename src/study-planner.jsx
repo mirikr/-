@@ -324,6 +324,8 @@ export default function StudyPlanner() {
   const [importMsg, setImportMsg] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
   const [customSubjects, setCustomSubjects] = useState([]);
+  // Встроенный предмет нельзя вычеркнуть из кода, поэтому удалённые помним по id.
+  const [hiddenSubjects, setHiddenSubjects] = useState([]);
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
   const [homework, setHomework] = useState([]);
   // Удаление показывает уведомление с отменой; через 20 секунд оно само подтверждается.
@@ -332,7 +334,10 @@ export default function StudyPlanner() {
   const firstLoad = useRef(true);
   const loadingRef = useRef(false);
 
-  const ALL_SUBJECTS = useMemo(() => [...SUBJECT_DEFS, ...customSubjects], [customSubjects]);
+  const ALL_SUBJECTS = useMemo(
+    () => [...SUBJECT_DEFS.filter((s) => !hiddenSubjects.includes(s.id)), ...customSubjects],
+    [customSubjects, hiddenSubjects]
+  );
   const saveTimer = useRef(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -356,6 +361,7 @@ export default function StudyPlanner() {
           if (parsed.events) setEvents(parsed.events);
           if (parsed.notebooks) setNotebooks(parsed.notebooks);
           if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
+          if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
@@ -423,6 +429,7 @@ export default function StudyPlanner() {
           events,
           notebooks,
           customSubjects,
+          hiddenSubjects,
           lyceumSchedule,
           openSections,
           homework,
@@ -448,7 +455,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, lyceumSchedule, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, lyceumSchedule, openSections, homework, loaded]);
 
   const stats = useMemo(() => {
     let doneAll = 0;
@@ -728,7 +735,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, lyceumSchedule, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, lyceumSchedule, openSections, homework },
       null,
       2
     );
@@ -753,6 +760,7 @@ export default function StudyPlanner() {
       if (parsed.events) setEvents(parsed.events);
       if (parsed.notebooks) setNotebooks(parsed.notebooks);
       if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
+      if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
@@ -806,20 +814,77 @@ export default function StudyPlanner() {
   }
 
   function removeSubject(id) {
-    setCustomSubjects((prev) => prev.filter((s) => s.id !== id));
-    setData((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
+    const subject = ALL_SUBJECTS.find((s) => s.id === id);
+    if (!subject) return;
+    const customIndex = customSubjects.findIndex((s) => s.id === id);
+    const isCustom = customIndex !== -1;
+    const subjectData = data[id];
+    const savedAlloc = budget.alloc[id];
+    const savedEntries = journal.filter((e) => e.subjectId === id);
+    const notebookKey = "subj:" + id;
+    const savedNotebook = notebooks[notebookKey];
+
+    if (isCustom) {
+      setCustomSubjects((prev) => prev.filter((s) => s.id !== id));
+      setData((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else {
+      // Уроки встроенного предмета остаются в данных: так отмена возвращает всё разом.
+      setHiddenSubjects((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    }
     setBudget((prev) => {
       const alloc = { ...prev.alloc };
       delete alloc[id];
       return { ...prev, alloc };
     });
     setJournal((prev) => prev.filter((e) => e.subjectId !== id));
-    if (pair[0] === id || pair[1] === id) setPair(["law", "econ"]);
+    setNotebooks((prev) => {
+      const next = { ...prev };
+      delete next[notebookKey];
+      return next;
+    });
     if (openSubject === id) setOpenSubject(null);
+    if (pair[0] === id || pair[1] === id) {
+      const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
+      setPair([rest[0] ? rest[0].id : null, rest[1] ? rest[1].id : rest[0] ? rest[0].id : null]);
+    }
+    if (jForm.subjectId === id) {
+      const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
+      setJForm((prev) => ({ ...prev, subjectId: rest[0] ? rest[0].id : "" }));
+    }
+
+    showUndo(
+      `Вы удалили предмет «${subject.name}»`,
+      () => {
+        if (isCustom) {
+          setCustomSubjects((prev) => {
+            const next = [...prev];
+            next.splice(Math.min(customIndex, next.length), 0, subject);
+            return next;
+          });
+          setData((prev) => ({ ...prev, [id]: subjectData }));
+        } else {
+          setHiddenSubjects((prev) => prev.filter((x) => x !== id));
+        }
+        setBudget((prev) => ({ ...prev, alloc: { ...prev.alloc, [id]: savedAlloc } }));
+        setJournal((prev) => [...savedEntries, ...prev]);
+        if (savedNotebook) setNotebooks((prev) => ({ ...prev, [notebookKey]: savedNotebook }));
+      },
+      () => {
+        // Подтверждено — сносим файлы: и из заметок к урокам, и из тетради предмета.
+        const lessonFiles = [
+          ...((subjectData && subjectData.topics) || []),
+          ...((subjectData && subjectData.custom) || []),
+        ].flatMap((t) => (t.notes || []).flatMap((n) => n.files || []));
+        const notebookFiles = (savedNotebook || []).flatMap((b) =>
+          (b.branches || []).flatMap((r) => r.files || [])
+        );
+        [...lessonFiles, ...notebookFiles].forEach((f) => deleteAttachment(f).catch(() => {}));
+      }
+    );
   }
 
   function addScheduleEntry(day, entry) {
@@ -1335,19 +1400,9 @@ export default function StudyPlanner() {
                       {st.done}/{st.total} · {st.pct}%
                     </span>
                   </button>
-                  {isCustomSubject && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Удалить предмет «${s.name}» вместе со всеми его уроками и записями?`)) {
-                          removeSubject(s.id);
-                        }
-                      }}
-                      style={styles.removeBtn}
-                      title="Удалить предмет"
-                    >
-                      ×
-                    </button>
-                  )}
+                  <button onClick={() => removeSubject(s.id)} style={styles.subjRemoveBtn} title="Удалить предмет">
+                    ×
+                  </button>
                 </div>
                 <div style={styles.miniTrack}>
                   <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
@@ -1750,7 +1805,7 @@ export default function StudyPlanner() {
           </div>
           <div style={styles.undoRow}>
             <span style={styles.undoText}>
-              {undoState.message}. Если это по ошибке — нажмите крестик, урок вернётся.
+              {undoState.message}. Если это по ошибке — нажмите крестик, всё вернётся.
             </span>
             <button onClick={cancelUndo} style={styles.undoCancel} title="Вернуть урок">
               ✕
@@ -2524,6 +2579,16 @@ const styles = {
   topicDone: { textDecoration: "line-through", color: "#9A927D" },
   durationInput: { width: 44, padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
   notesToggle: { background: "none", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "#5A5347" },
+  subjRemoveBtn: {
+    border: "none",
+    background: "none",
+    color: "#8B4A4A",
+    fontSize: 20,
+    lineHeight: 1,
+    // Крестик на телефоне должен попадаться под палец, а не под пиксель.
+    padding: "6px 10px",
+    marginRight: -6,
+  },
   removeBtn: { marginLeft: 2, background: "none", border: "none", color: "#B08A8A", fontSize: 16, lineHeight: 1, padding: "0 4px" },
   notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "#fff", border: "1px solid #E7E1D2", borderRadius: 5 },
   noteBlock: { marginBottom: 6 },
