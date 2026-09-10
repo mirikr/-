@@ -19,9 +19,9 @@ const DOW_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]; // Date.ge
 // Priority of an exam or olympiad stage. The mark is what the person actually sees;
 // the number is what the schedule maths sorts by.
 const EVENT_PRIORITIES = [
-  { value: 1, mark: "!", label: "не особо важно", color: "#8A8370" },
-  { value: 2, mark: "⚡", label: "важно", color: "#8C7326" },
-  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "#8B4A4A" },
+  { value: 1, mark: "!", label: "не особо важно", color: "#8A8370", onDark: "#B9B2A0" },
+  { value: 2, mark: "⚡", label: "важно", color: "#8C7326", onDark: "#D9BE6A" },
+  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "#8B4A4A", onDark: "#D98A8A" },
 ];
 
 // Weight of a lyceum lesson. Order matters: later entries outrank earlier ones when the same
@@ -1160,12 +1160,34 @@ export default function StudyPlanner() {
                 {daysWord(daysUntilDate(nextEvent.date))} до события
               </div>
               <div style={styles.countdownEvent}>
-                <span style={{ color: priorityInfo(nextEvent.priority).color }}>
+                <span style={{ color: priorityInfo(nextEvent.priority).onDark }}>
                   {priorityInfo(nextEvent.priority).mark}
                 </span>{" "}
                 {nextEvent.name}
               </div>
-              <div style={styles.countdownDate}>{formatEventDate(nextEvent.date)}</div>
+              <div style={styles.countdownDate}>
+                {formatEventDate(nextEvent.date)}
+                {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
+              </div>
+
+              {upcomingEvents.length > 1 && (
+                <div style={styles.countdownRest}>
+                  {upcomingEvents.slice(1).map((e) => {
+                    const left = daysUntilDate(e.date);
+                    const info = priorityInfo(e.priority);
+                    return (
+                      <div key={e.id} style={styles.countdownRestRow}>
+                        <span style={{ color: info.onDark }}>{info.mark}</span>
+                        <span style={styles.countdownRestName}>{e.name}</span>
+                        {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
+                        <span style={styles.countdownRestLeft}>
+                          {left} {daysWord(left)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           ) : (
             <div style={styles.countdownEmpty}>
@@ -1178,21 +1200,6 @@ export default function StudyPlanner() {
       </header>
 
       <section style={styles.eventsStrip}>
-        {upcomingEvents.slice(1).map((e) => {
-          const left = daysUntilDate(e.date);
-          const info = priorityInfo(e.priority);
-          return (
-            <div key={e.id} style={styles.eventRow}>
-              <span style={{ ...styles.eventMark, color: info.color }}>{info.mark}</span>
-              <span style={styles.eventName}>{e.name}</span>
-              <span style={styles.eventDate}>{formatEventDate(e.date)}</span>
-              {mainEvent && e.id === mainEvent.id && <span style={styles.mainBadge}>план</span>}
-              <span style={styles.eventLeft}>
-                через {left} {daysWord(left)}
-              </span>
-            </div>
-          );
-        })}
         <div style={styles.eventsActions}>
           <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
             {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
@@ -2407,12 +2414,25 @@ const styles = {
     textAlign: "left",
   },
   sectionChevron: { fontSize: 13, color: "#8A8370", width: 12, flexShrink: 0 },
-  countdownBox: { background: "#2B2822", color: "#EFEBE1", borderRadius: 4, padding: "14px 20px", textAlign: "center", minWidth: 150 },
+  countdownBox: { background: "#2B2822", color: "#EFEBE1", borderRadius: 4, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
   dateInput: { border: "1px solid #4A4638", background: "transparent", color: "inherit", borderRadius: 3, padding: "4px 6px", fontSize: 12, width: "100%" },
   countdownEvent: { fontSize: 13, fontWeight: 600, marginTop: 8, lineHeight: 1.35 },
   countdownDate: { fontSize: 11.5, opacity: 0.7, marginTop: 2 },
+  countdownRest: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTop: "1px solid #4A4638",
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+    textAlign: "left",
+  },
+  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 11.5, lineHeight: 1.3 },
+  countdownRestName: { flex: 1, minWidth: 0, opacity: 0.9 },
+  countdownRestLeft: { opacity: 0.6, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
+  countdownPlan: { fontSize: 9.5, color: "#8FBF9F", marginLeft: 6, whiteSpace: "nowrap" },
   countdownEmpty: { fontSize: 12.5, opacity: 0.8, lineHeight: 1.5 },
   eventsStrip: { marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 },
   eventRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, flexWrap: "wrap" },
