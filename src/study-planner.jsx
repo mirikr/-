@@ -330,9 +330,9 @@ export default function StudyPlanner() {
   const [hiddenSubjects, setHiddenSubjects] = useState([]);
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
   const [homework, setHomework] = useState([]);
-  // Удаление показывает уведомление с отменой; через 20 секунд оно само подтверждается.
-  const [undoState, setUndoState] = useState(null);
-  const undoTimer = useRef(null);
+  // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
+  const [undoQueue, setUndoQueue] = useState([]);
+  const undoTimers = useRef({});
   const firstLoad = useRef(true);
   const loadingRef = useRef(false);
 
@@ -608,32 +608,36 @@ export default function StudyPlanner() {
     });
   }
 
-  function showUndo(message, restore, finalize) {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    // Если предыдущее уведомление ещё висело, его удаление считается подтверждённым.
-    setUndoState((prev) => {
-      if (prev && prev.finalize) prev.finalize();
-      return { message, restore, finalize };
-    });
-    undoTimer.current = setTimeout(() => {
-      setUndoState((prev) => {
-        if (prev && prev.finalize) prev.finalize();
-        return null;
+  const showUndo = useCallback((message, restore, finalize) => {
+    const id = "undo-" + Date.now() + "-" + Math.round(Math.random() * 10000);
+    setUndoQueue((prev) => [...prev, { id, message, restore, finalize }]);
+    undoTimers.current[id] = setTimeout(() => {
+      setUndoQueue((prev) => {
+        const item = prev.find((u) => u.id === id);
+        if (item && item.finalize) item.finalize();
+        return prev.filter((u) => u.id !== id);
       });
+      delete undoTimers.current[id];
     }, UNDO_SECONDS * 1000);
+  }, []);
+
+  function closeUndo(id, apply) {
+    if (undoTimers.current[id]) {
+      clearTimeout(undoTimers.current[id]);
+      delete undoTimers.current[id];
+    }
+    setUndoQueue((prev) => {
+      const item = prev.find((u) => u.id === id);
+      if (item) apply(item);
+      return prev.filter((u) => u.id !== id);
+    });
   }
 
-  function confirmUndo() {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    if (undoState && undoState.finalize) undoState.finalize();
-    setUndoState(null);
-  }
+  const confirmUndo = (id) => closeUndo(id, (item) => item.finalize && item.finalize());
+  const cancelUndo = (id) => closeUndo(id, (item) => item.restore && item.restore());
 
-  function cancelUndo() {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    if (undoState && undoState.restore) undoState.restore();
-    setUndoState(null);
-  }
+  // Вкладку могут закрыть с висящими уведомлениями — таймеры за собой убираем.
+  useEffect(() => () => Object.values(undoTimers.current).forEach(clearTimeout), []);
 
   function removeTopic(subjectId, topicId, custom) {
     const key = custom ? "custom" : "topics";
@@ -701,11 +705,31 @@ export default function StudyPlanner() {
   }
 
   function removeNote(subjectId, topicId, custom, noteId) {
+    const topic = getTopic(subjectId, topicId, custom);
+    const notes = (topic && topic.notes) || [];
+    const index = notes.findIndex((n) => n.id === noteId);
+    const note = index === -1 ? null : notes[index];
+    const relatedEntries = journal.filter((e) => e.noteId === noteId);
+
     updateTopic(subjectId, topicId, custom, (t) => ({
       ...t,
       notes: (t.notes || []).filter((n) => n.id !== noteId),
     }));
     setJournal((prev) => prev.filter((e) => e.noteId !== noteId));
+
+    if (!note) return;
+    showUndo(
+      `Вы удалили заметку «${note.text}»`,
+      () => {
+        updateTopic(subjectId, topicId, custom, (t) => {
+          const next = [...(t.notes || [])];
+          next.splice(Math.min(index, next.length), 0, note);
+          return { ...t, notes: next };
+        });
+        setJournal((prev) => [...relatedEntries, ...prev]);
+      },
+      () => (note.files || []).forEach((f) => deleteAttachment(f).catch(() => {}))
+    );
   }
 
   function addJournalEntry() {
@@ -916,7 +940,17 @@ export default function StudyPlanner() {
   }
 
   function removeScheduleEntry(id) {
+    const index = lyceumSchedule.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const entry = lyceumSchedule[index];
     setLyceumSchedule((prev) => prev.filter((e) => e.id !== id));
+    showUndo(`Вы удалили урок «${entry.subjectName || "без названия"}» из расписания`, () => {
+      setLyceumSchedule((prev) => {
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, entry);
+        return next;
+      });
+    });
   }
 
   function addHomework(date, subjectName, text, minutes) {
@@ -929,11 +963,21 @@ export default function StudyPlanner() {
   }
 
   function removeHomework(id) {
-    const hw = homework.find((h) => h.id === id);
-    (hw?.attachments || []).forEach((a) => {
-      deleteAttachment(a).catch(() => {});
-    });
+    const index = homework.findIndex((h) => h.id === id);
+    if (index === -1) return;
+    const hw = homework[index];
     setHomework((prev) => prev.filter((h) => h.id !== id));
+    showUndo(
+      `Вы удалили «${hw.text}»`,
+      () => {
+        setHomework((prev) => {
+          const next = [...prev];
+          next.splice(Math.min(index, next.length), 0, hw);
+          return next;
+        });
+      },
+      () => (hw.attachments || []).forEach((a) => deleteAttachment(a).catch(() => {}))
+    );
   }
 
   function updateHomework(id, patch) {
@@ -1118,6 +1162,9 @@ export default function StudyPlanner() {
         /* On a phone the lesson name alone fills the row, so let the controls drop to a second line
            instead of being pushed off the right edge. */
         .undo-bar { animation: undo-countdown ${UNDO_SECONDS}s linear forwards; }
+        .undo-toast { animation: undo-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1); }
+        @keyframes undo-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
         @keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
         @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
@@ -1452,6 +1499,7 @@ export default function StudyPlanner() {
                     <Notebook
                       blocks={notebooks["subj:" + s.id] || []}
                       onChange={(blocks) => setNotebook("subj:" + s.id, blocks)}
+                      onUndo={showUndo}
                       prefix={"subj-" + s.id}
                     />
                   </div>
@@ -1521,7 +1569,7 @@ export default function StudyPlanner() {
                   </button>
                   {isOpen && (
                     <div style={styles.lyceumNotebookBody}>
-                      <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} prefix={"lyceum-" + name} />
+                      <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
                     </div>
                   )}
                 </div>
@@ -1807,22 +1855,26 @@ export default function StudyPlanner() {
           {syncDebug ? ` — ${syncDebug}` : ""}
         </span>
       </div>
-      {undoState && (
-        <div style={styles.undoToast}>
-          <div style={styles.undoBarTrack}>
-            <div className="undo-bar" style={styles.undoBar} />
-          </div>
-          <div style={styles.undoRow}>
-            <span style={styles.undoText}>
-              {undoState.message}. Если это по ошибке — нажмите крестик, всё вернётся.
-            </span>
-            <button onClick={cancelUndo} style={styles.undoCancel} title="Вернуть урок">
-              ✕
-            </button>
-            <button onClick={confirmUndo} style={styles.undoConfirm} title="Да, удалить">
-              ✓
-            </button>
-          </div>
+      {undoQueue.length > 0 && (
+        <div style={styles.undoStack}>
+          {undoQueue.map((item) => (
+            <div key={item.id} className="undo-toast" style={styles.undoToast}>
+              <div style={styles.undoBarTrack}>
+                <div className="undo-bar" style={styles.undoBar} />
+              </div>
+              <div style={styles.undoRow}>
+                <span style={styles.undoText}>
+                  {item.message}. Если это по ошибке — нажмите крестик, всё вернётся.
+                </span>
+                <button onClick={() => cancelUndo(item.id)} style={styles.undoCancel} title="Вернуть">
+                  ✕
+                </button>
+                <button onClick={() => confirmUndo(item.id)} style={styles.undoConfirm} title="Да, удалить">
+                  ✓
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -2484,13 +2536,22 @@ const styles = {
     textAlign: "left",
   },
   lyceumNotebookBody: { padding: "6px 0 10px 20px" },
-  undoToast: {
+  undoStack: {
     position: "fixed",
     left: 12,
     right: 12,
     bottom: 12,
+    zIndex: 50,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    alignItems: "center",
+    pointerEvents: "none",
+  },
+  undoToast: {
+    width: "100%",
     maxWidth: 560,
-    margin: "0 auto",
+    pointerEvents: "auto",
     background: "#2B2822",
     color: "#EFEBE1",
     borderRadius: 6,

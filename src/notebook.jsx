@@ -4,7 +4,25 @@ import { attachFile, attachmentUrl, removeAttachment, formatSize } from "./files
 
 // Тетрадь предмета: блоки, которые вы называете сами, внутри — ветки (темы),
 // внутри ветки — конспект с форматированием и прикреплённые файлы.
-export default function Notebook({ blocks, onChange, prefix }) {
+// Пустую ветку не о чем предупреждать: ни текста, ни файлов — терять нечего.
+function isBranchEmpty(branch) {
+  const text = String(branch.html || "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+  return !text && !(branch.files || []).length;
+}
+
+function isBlockEmpty(block) {
+  const branches = block.branches || [];
+  return branches.length === 0 || branches.every(isBranchEmpty);
+}
+
+function branchFiles(branch) {
+  return branch.files || [];
+}
+
+export default function Notebook({ blocks, onChange, onUndo, prefix }) {
   const [openBlocks, setOpenBlocks] = useState({});
   const [openBranches, setOpenBranches] = useState({});
   const [title, setTitle] = useState("");
@@ -24,7 +42,28 @@ export default function Notebook({ blocks, onChange, prefix }) {
   }
 
   function dropBlock(id) {
+    const index = list.findIndex((b) => b.id === id);
+    if (index === -1) return;
+    const block = list[index];
     onChange(list.filter((b) => b.id !== id));
+
+    const files = (block.branches || []).flatMap(branchFiles);
+    if (isBlockEmpty(block)) {
+      files.forEach((f) => removeAttachment(f).catch(() => {}));
+      return;
+    }
+    if (!onUndo) return;
+    onUndo(
+      `Вы удалили блок «${block.title}»`,
+      () => {
+        onChange((() => {
+          const next = list.filter((b) => b.id !== id);
+          next.splice(Math.min(index, next.length), 0, block);
+          return next;
+        })());
+      },
+      () => files.forEach((f) => removeAttachment(f).catch(() => {}))
+    );
   }
 
   function patchBranch(blockId, branchId, patch) {
@@ -47,9 +86,33 @@ export default function Notebook({ blocks, onChange, prefix }) {
   }
 
   function dropBranch(blockId, branchId) {
-    const branch = list.find((b) => b.id === blockId)?.branches.find((r) => r.id === branchId);
-    (branch?.files || []).forEach((f) => removeAttachment(f).catch(() => {}));
+    const block = list.find((b) => b.id === blockId);
+    const branches = (block && block.branches) || [];
+    const index = branches.findIndex((r) => r.id === branchId);
+    if (index === -1) return;
+    const branch = branches[index];
     onChange(list.map((b) => (b.id === blockId ? { ...b, branches: b.branches.filter((r) => r.id !== branchId) } : b)));
+
+    const files = branchFiles(branch);
+    if (isBranchEmpty(branch)) {
+      files.forEach((f) => removeAttachment(f).catch(() => {}));
+      return;
+    }
+    if (!onUndo) return;
+    onUndo(
+      `Вы удалили ветку «${branch.title}»`,
+      () => {
+        onChange(
+          list.map((b) => {
+            if (b.id !== blockId) return b;
+            const next = b.branches.filter((r) => r.id !== branchId);
+            next.splice(Math.min(index, next.length), 0, branch);
+            return { ...b, branches: next };
+          })
+        );
+      },
+      () => files.forEach((f) => removeAttachment(f).catch(() => {}))
+    );
   }
 
   return (

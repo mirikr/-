@@ -5,9 +5,15 @@ import React, { useEffect, useRef, useState } from "react";
 // Поле намеренно неуправляемое. Если писать innerHTML на каждый рендер, курсор
 // прыгает в начало после каждой буквы, поэтому содержимое ставится один раз —
 // при монтировании и при смене ветки (docId), — а наружу уходит через onChange.
+const DEFAULT_HIGHLIGHT = "#F2E7B8";
+
 export default function RichText({ docId, html, onChange, placeholder }) {
   const ref = useRef(null);
   const [focused, setFocused] = useState(false);
+  const [highlight, setHighlight] = useState(DEFAULT_HIGHLIGHT);
+  // Выбор цвета открывает системную палитру и забирает фокус, поэтому выделение
+  // приходится запоминать до того, как оно потеряется.
+  const savedRange = useRef(null);
 
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== (html || "")) {
@@ -17,8 +23,29 @@ export default function RichText({ docId, html, onChange, placeholder }) {
   }, [docId]);
 
   function exec(command, value) {
+    // styleWithCSS заставляет браузер писать style="background-color: …" вместо <font>,
+    // иначе подсветку нельзя снять — «прозрачный» цвет такому тегу не задать.
+    document.execCommand("styleWithCSS", false, true);
     document.execCommand(command, false, value);
     onChange(ref.current.innerHTML);
+  }
+
+  function rememberSelection() {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount && ref.current && ref.current.contains(selection.anchorNode)) {
+      savedRange.current = selection.getRangeAt(0).cloneRange();
+    }
+  }
+
+  function withSelection(action) {
+    const selection = window.getSelection();
+    const inside = ref.current && selection && selection.rangeCount && ref.current.contains(selection.anchorNode);
+    if (!inside && savedRange.current) {
+      ref.current.focus();
+      selection.removeAllRanges();
+      selection.addRange(savedRange.current);
+    }
+    action();
   }
 
   // Кнопка панели забирает фокус у поля, выделение теряется, и форматирование
@@ -62,11 +89,31 @@ export default function RichText({ docId, html, onChange, placeholder }) {
         <span style={styles.sep} />
         <button
           onMouseDown={keepSelection}
-          onClick={() => exec("hiliteColor", "#F2E7B8")}
-          style={{ ...styles.btn, background: "#F2E7B8" }}
-          title="Выделить"
+          onClick={() => exec("hiliteColor", highlight)}
+          style={{ ...styles.btn, background: highlight }}
+          title="Выделить выбранным цветом"
         >
           ▉
+        </button>
+        <input
+          type="color"
+          value={highlight}
+          onMouseDown={rememberSelection}
+          onChange={(e) => {
+            const color = e.target.value;
+            setHighlight(color);
+            withSelection(() => exec("hiliteColor", color));
+          }}
+          style={styles.colorInput}
+          title="Цвет выделения"
+        />
+        <button
+          onMouseDown={keepSelection}
+          onClick={() => exec("hiliteColor", "transparent")}
+          style={styles.btn}
+          title="Снять выделение"
+        >
+          ▢
         </button>
         <button onMouseDown={keepSelection} onClick={() => exec("removeFormat")} style={styles.btn} title="Убрать форматирование">
           ✕ф
@@ -81,7 +128,10 @@ export default function RichText({ docId, html, onChange, placeholder }) {
           onInput={() => onChange(ref.current.innerHTML)}
           onPaste={handlePaste}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            rememberSelection();
+            setFocused(false);
+          }}
           style={styles.editor}
         />
       </div>
@@ -111,6 +161,15 @@ const styles = {
     lineHeight: 1.2,
   },
   sep: { width: 1, height: 16, background: "#DCD5C4", margin: "0 3px" },
+  colorInput: {
+    width: 28,
+    height: 24,
+    padding: 0,
+    border: "1px solid #DCD5C4",
+    borderRadius: 3,
+    background: "#fff",
+    cursor: "pointer",
+  },
   editorWrap: { position: "relative" },
   placeholder: { position: "absolute", top: 10, left: 10, fontSize: 13, color: "#B9B2A0", pointerEvents: "none" },
   editor: { minHeight: 110, padding: 10, fontSize: 13.5, lineHeight: 1.6, outline: "none", overflowWrap: "anywhere" },
