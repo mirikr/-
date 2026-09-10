@@ -1,17 +1,17 @@
 -- Проверка после schema.sql. Выполняется в SQL Editor панели Supabase.
--- Ожидаемый результат описан в комментариях к каждому запросу.
+--
+-- ВАЖНО: редактор показывает результат только последнего оператора, поэтому
+-- запросы ниже запускайте по одному (выделите нужный и нажмите Run).
 
--- 1. Таблица существует и RLS включён.
---    Ожидается одна строка: planner_kv | true
-select relname as table, relrowsecurity as rls_enabled
-from pg_class
-where relname = 'planner_kv';
-
--- 2. Политика на месте.
---    Ожидается одна строка с ролью {authenticated} и cmd = ALL.
-select policyname, cmd, roles
-from pg_policies
-where schemaname = 'public' and tablename = 'planner_kv';
+-- 1. Таблица есть, RLS включён, политика на месте — всё одной строкой.
+--    Ожидается: true | true | 1
+select
+  (select count(*) = 1 from pg_class
+     where relname = 'planner_kv' and relnamespace = 'public'::regnamespace) as table_exists,
+  (select relrowsecurity from pg_class
+     where relname = 'planner_kv' and relnamespace = 'public'::regnamespace) as rls_enabled,
+  (select count(*) from pg_policies
+     where schemaname = 'public' and tablename = 'planner_kv') as policies;
 
 -- 3. Сколько записей и чьих (после первого входа в приложение).
 --    До первого сохранения таблица пустая — это нормально.
