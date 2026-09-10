@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import RichText from "./rich-text.jsx";
+import Collapsible from "./collapsible.jsx";
 import { attachFile, attachmentUrl, removeAttachment, formatSize } from "./files.js";
 
 // Тетрадь предмета: блоки, которые вы называете сами, внутри — ветки (темы),
@@ -143,7 +144,7 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
               </button>
             </div>
 
-            {open && (
+            <Collapsible open={open}>
               <div style={styles.branches}>
                 {block.branches.map((branch) => (
                   <Branch
@@ -158,7 +159,7 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
                 ))}
                 <AddRow placeholder="Название ветки — например: признаки государства" onAdd={(v) => addBranch(block.id, v)} />
               </div>
-            )}
+            </Collapsible>
           </div>
         );
       })}
@@ -261,12 +262,12 @@ function Branch({ branch, open, onToggle, onPatch, onRemove, prefix }) {
         </button>
       </div>
 
-      {open && (
+      <Collapsible open={open}>
         <div style={styles.branchBody}>
           <RichText docId={branch.id} html={branch.html} onChange={(html) => onPatch({ html })} />
           <Attachments files={files} onChange={(next) => onPatch({ files: next })} prefix={prefix} />
         </div>
-      )}
+      </Collapsible>
     </div>
   );
 }

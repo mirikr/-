@@ -1580,7 +1580,7 @@ export default function StudyPlanner() {
                 <div style={styles.miniTrack}>
                   <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
                 </div>
-                {open && (
+                <Collapsible open={open}>
                   <div style={styles.tabsRow}>
                     {[
                       ["lessons", "Уроки"],
@@ -1603,8 +1603,7 @@ export default function StudyPlanner() {
                       );
                     })}
                   </div>
-                )}
-                {open && (subjectTab[s.id] || "lessons") === "notebook" && (
+                  {(subjectTab[s.id] || "lessons") === "notebook" ? (
                   <div style={styles.topicList}>
                     <Notebook
                       blocks={notebooks["subj:" + s.id] || []}
@@ -1613,8 +1612,7 @@ export default function StudyPlanner() {
                       prefix={"subj-" + s.id}
                     />
                   </div>
-                )}
-                {open && (subjectTab[s.id] || "lessons") === "lessons" && (
+                  ) : (
                   <div style={styles.topicList}>
                     {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
                     {allTopics.map((t) => (
@@ -1637,7 +1635,8 @@ export default function StudyPlanner() {
                     ))}
                     <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
                   </div>
-                )}
+                  )}
+                </Collapsible>
               </div>
             );
           })}
@@ -1688,11 +1687,11 @@ export default function StudyPlanner() {
                       title="Цвет предмета"
                     />
                   </div>
-                  {isOpen && (
+                  <Collapsible open={isOpen}>
                     <div style={styles.lyceumNotebookBody}>
                       <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
                     </div>
-                  )}
+                  </Collapsible>
                 </div>
               );
             })}
@@ -2201,7 +2200,7 @@ function TopicItem({
         </button>
       </div>
 
-      {linkOpen && (
+      <Collapsible open={linkOpen}>
         <div style={styles.notesPanel}>
           <div style={styles.noteForm}>
             <input
@@ -2229,9 +2228,9 @@ function TopicItem({
             )}
           </div>
         </div>
-      )}
+      </Collapsible>
 
-      {notesOpen && (
+      <Collapsible open={notesOpen}>
         <div style={styles.notesPanel}>
           {notes.map((n) => {
             const bodyOpen = !!openNoteBodies[n.id];
@@ -2254,7 +2253,7 @@ function TopicItem({
                     ×
                   </button>
                 </div>
-                {bodyOpen && (
+                <Collapsible open={bodyOpen}>
                   <div style={styles.noteBody}>
                     <RichText
                       docId={n.id}
@@ -2268,7 +2267,7 @@ function TopicItem({
                       prefix={"note-" + n.id}
                     />
                   </div>
-                )}
+                </Collapsible>
               </div>
             );
           })}
@@ -2301,7 +2300,7 @@ function TopicItem({
             </button>
           </div>
         </div>
-      )}
+      </Collapsible>
     </div>
   );
 }
