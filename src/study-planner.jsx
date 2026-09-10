@@ -28,8 +28,9 @@ const EVENT_PRIORITIES = [
 // subject appears twice in a day.
 const LESSON_LEVELS = [
   { value: "base", short: "база", label: "база — не особо важно", color: "#8A8370" },
+  { value: "outside", short: "вне лицея", label: "урок вне лицея", color: "#5C4A80" },
   { value: "prof", short: "проф", label: "проф — важно", color: "#2F4E70" },
-  { value: "olymp", short: "олимп", label: "олимпиадное занятие — приоритет", color: "#8B4A4A" },
+  { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс — особо важно", color: "#8B4A4A" },
 ];
 
 const SUBJECT_COLOR_PALETTE = ["#4A6B6B", "#7A5233", "#5C4A80", "#8C7326", "#2F4E70", "#8B4A4A", "#3F6E52", "#6B4A6B"];
@@ -334,6 +335,10 @@ export default function StudyPlanner() {
   const [customSubjects, setCustomSubjects] = useState([]);
   // Встроенный предмет нельзя вычеркнуть из кода, поэтому удалённые помним по id.
   const [hiddenSubjects, setHiddenSubjects] = useState([]);
+  // Свой цвет предмета: ключ — id предмета или "lyceum:<название>". Пусто = цвет по умолчанию.
+  const [subjectColors, setSubjectColors] = useState({});
+  // Воскресенье прячется, но его уроки остаются в расписании — вдруг понадобится вернуть.
+  const [showSunday, setShowSunday] = useState(false);
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
   const [homework, setHomework] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
@@ -343,9 +348,23 @@ export default function StudyPlanner() {
   const loadingRef = useRef(false);
 
   const ALL_SUBJECTS = useMemo(
-    () => [...SUBJECT_DEFS.filter((s) => !hiddenSubjects.includes(s.id)), ...customSubjects],
-    [customSubjects, hiddenSubjects]
+    () =>
+      [...SUBJECT_DEFS.filter((s) => !hiddenSubjects.includes(s.id)), ...customSubjects].map((s) => ({
+        ...s,
+        color: subjectColors[s.id] || s.color,
+      })),
+    [customSubjects, hiddenSubjects, subjectColors]
   );
+
+  // Предметы лицея живут не списком, а названиями в расписании, поэтому цвет ищем по имени.
+  const lyceumColorOf = useCallback(
+    (name) => subjectColors["lyceum:" + name] || subjectColor(name),
+    [subjectColors]
+  );
+
+  function setSubjectColor(key, color) {
+    setSubjectColors((prev) => ({ ...prev, [key]: color }));
+  }
   const saveTimer = useRef(null);
   const pendingSince = useRef(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
@@ -371,6 +390,8 @@ export default function StudyPlanner() {
           if (parsed.notebooks) setNotebooks(parsed.notebooks);
           if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
           if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
+          if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
+          if (parsed.showSunday) setShowSunday(parsed.showSunday);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
@@ -443,6 +464,8 @@ export default function StudyPlanner() {
           notebooks,
           customSubjects,
           hiddenSubjects,
+          subjectColors,
+          showSunday,
           lyceumSchedule,
           openSections,
           homework,
@@ -468,7 +491,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, lyceumSchedule, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -812,7 +835,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, lyceumSchedule, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework },
       null,
       2
     );
@@ -838,6 +861,8 @@ export default function StudyPlanner() {
       if (parsed.notebooks) setNotebooks(parsed.notebooks);
       if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
       if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
+      if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
+      if (parsed.showSunday) setShowSunday(parsed.showSunday);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
@@ -856,6 +881,17 @@ export default function StudyPlanner() {
   function setNotebook(ownerKey, blocks) {
     setNotebooks((prev) => ({ ...prev, [ownerKey]: blocks }));
   }
+
+  // Пока воскресенье скрыто, его уроки не участвуют в дневнике и домашних заданиях,
+  // но остаются в данных: вернули день — вернулись и уроки.
+  const activeSchedule = useMemo(
+    () => (showSunday ? lyceumSchedule : lyceumSchedule.filter((e) => e.day !== "sun")),
+    [lyceumSchedule, showSunday]
+  );
+
+  const scheduleDays = useMemo(() => (showSunday ? [...LYCEUM_DAYS, "sun"] : LYCEUM_DAYS), [showSunday]);
+
+  const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
   const lyceumSubjectNames = useMemo(() => {
     const names = [];
@@ -1140,10 +1176,24 @@ export default function StudyPlanner() {
 
   const hwDates = useMemo(() => new Set(homework.map((h) => h.date)), [homework]);
 
+  // Точки над числом — пройденные в этот день уроки, каждая в цвете своего предмета.
+  // Берём только записи об отметке урока: заметки со временем сюда не считаются.
+  const lessonDotsByDate = useMemo(() => {
+    const map = {};
+    journal.forEach((e) => {
+      if (!e.auto || !e.lessonId || e.noteId) return;
+      const subject = ALL_SUBJECTS.find((x) => x.id === e.subjectId);
+      if (!subject) return;
+      if (!map[e.date]) map[e.date] = [];
+      if (!map[e.date].includes(subject.color)) map[e.date].push(subject.color);
+    });
+    return map;
+  }, [journal, ALL_SUBJECTS]);
+
   const selectedDaySubjects = useMemo(() => {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const names = [];
-    lyceumSchedule
+    activeSchedule
       .filter((e) => e.day === dow)
       .sort((a, b) => a.start.localeCompare(b.start))
       .forEach((e) => {
@@ -1155,20 +1205,20 @@ export default function StudyPlanner() {
       if (h.date === selectedDate && h.subjectName && !names.includes(h.subjectName)) names.push(h.subjectName);
     });
     return names;
-  }, [lyceumSchedule, selectedDate, homework]);
+  }, [activeSchedule, selectedDate, homework]);
 
   // Highest level among that weekday's lessons, per subject.
   const selectedDayLevels = useMemo(() => {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const map = {};
-    lyceumSchedule
+    activeSchedule
       .filter((e) => e.day === dow && e.subjectName)
       .forEach((e) => {
         const current = map[e.subjectName];
         if (!current || levelRank(e.level) > levelRank(current)) map[e.subjectName] = e.level || "base";
       });
     return map;
-  }, [lyceumSchedule, selectedDate]);
+  }, [activeSchedule, selectedDate]);
 
   const homeworkForSelectedDate = useMemo(() => homework.filter((h) => h.date === selectedDate), [homework, selectedDate]);
 
@@ -1230,7 +1280,7 @@ export default function StudyPlanner() {
             <div key={h.id} style={styles.hwBannerRow}>
               {h.subjectName && (
                 <>
-                  <span style={{ ...styles.hwBannerSubject, color: subjectColor(h.subjectName) }}>{h.subjectName}:</span>{" "}
+                  <span style={{ ...styles.hwBannerSubject, color: lyceumColorOf(h.subjectName) }}>{h.subjectName}:</span>{" "}
                 </>
               )}
               <span>{h.text}</span>
@@ -1510,6 +1560,13 @@ export default function StudyPlanner() {
                       {st.done}/{st.total} · {st.pct}%
                     </span>
                   </button>
+                  <input
+                    type="color"
+                    value={s.color}
+                    onChange={(e) => setSubjectColor(s.id, e.target.value)}
+                    style={styles.colorPick}
+                    title="Цвет предмета"
+                  />
                   <button onClick={() => removeSubject(s.id)} style={styles.subjRemoveBtn} title="Удалить предмет">
                     ×
                   </button>
@@ -1587,33 +1644,44 @@ export default function StudyPlanner() {
       <section style={styles.card}>
         <button onClick={() => toggleSection("lyceum")} style={styles.sectionHeaderBtn}>
           <span style={styles.sectionChevron}>{openSections.lyceum ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Лицей КЭО — расписание</h2>
+          <h2 style={styles.h2Inline}>Лицей КЭО</h2>
         </button>
         <Collapsible open={openSections.lyceum}>
         <p style={styles.muted}>
-          Отдельно от самостоятельного изучения — уроки в лицее с реальными звонками: время начала и конца, кабинет
-          и преподаватель. Впишите предмет прямо в нужный день недели.
+          Отдельно от самостоятельного изучения. Сверху — предметы лицея с тетрадями и цветом, ниже — расписание
+          с реальными звонками: время, кабинет, преподаватель и роль урока.
         </p>
 
-        {lyceumSubjectNames.length > 0 && (
+        <h3 style={styles.subHead}>Предметы</h3>
+        {lyceumSubjectNames.length === 0 ? (
+          <p style={styles.muted}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
+        ) : (
           <div style={styles.lyceumNotebooks}>
-            <div style={styles.label}>Тетради по предметам лицея</div>
             {lyceumSubjectNames.map((name) => {
               const key = "lyceum:" + name;
               const isOpen = openLyceumNotebook === name;
               const blocks = notebooks[key] || [];
               return (
                 <div key={name} style={styles.lyceumNotebookBlock}>
-                  <button
-                    onClick={() => setOpenLyceumNotebook(isOpen ? null : name)}
-                    style={{ ...styles.lyceumNotebookHead, color: subjectColor(name) }}
-                  >
-                    <span style={styles.sectionChevron}>{isOpen ? "▾" : "▸"}</span>
-                    {name}
-                    <span style={styles.mutedSmall}>
-                      {blocks.length ? blocks.length + " блок." : "пусто"}
-                    </span>
-                  </button>
+                  <div style={styles.lyceumSubjectRow}>
+                    <button
+                      onClick={() => setOpenLyceumNotebook(isOpen ? null : name)}
+                      style={{ ...styles.lyceumNotebookHead, color: lyceumColorOf(name) }}
+                    >
+                      <span style={styles.sectionChevron}>{isOpen ? "▾" : "▸"}</span>
+                      {name}
+                      <span style={styles.mutedSmall}>
+                        {blocks.length ? blocks.length + " блок." : "тетрадь пуста"}
+                      </span>
+                    </button>
+                    <input
+                      type="color"
+                      value={lyceumColorOf(name)}
+                      onChange={(e) => setSubjectColor("lyceum:" + name, e.target.value)}
+                      style={styles.colorPick}
+                      title="Цвет предмета"
+                    />
+                  </div>
                   {isOpen && (
                     <div style={styles.lyceumNotebookBody}>
                       <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
@@ -1625,8 +1693,18 @@ export default function StudyPlanner() {
           </div>
         )}
 
+        <h3 style={styles.subHead}>Расписание</h3>
+        <div style={styles.sundayRow}>
+          <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
+            {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
+          </button>
+          {!showSunday && sundayLessons > 0 && (
+            <span style={styles.mutedSmall}>уроки воскресенья сохранены ({sundayLessons})</span>
+          )}
+        </div>
+
         <div style={styles.scheduleGrid}>
-          {LYCEUM_DAYS.map((day) => (
+          {scheduleDays.map((day) => (
             <ScheduleDay
               key={day}
               day={day}
@@ -1688,6 +1766,7 @@ export default function StudyPlanner() {
               const ratio = goal > 0 ? Math.min(hours / goal, 1) : hours > 0 ? 1 : 0;
               const selected = key === selectedDate;
               const hasHw = hwDates.has(key);
+              const lessonDots = lessonDotsByDate[key] || [];
               return (
                 <button
                   key={key}
@@ -1702,6 +1781,13 @@ export default function StudyPlanner() {
                     outlineOffset: "-2px",
                   }}
                 >
+                  {lessonDots.length > 0 && (
+                    <span style={styles.lessonDots}>
+                      {lessonDots.slice(0, 3).map((color) => (
+                        <span key={color} style={{ ...styles.lessonDot, background: color }} />
+                      ))}
+                    </span>
+                  )}
                   {cellDate.getDate()}
                   {hasHw && <span style={styles.hwDot} />}
                 </button>
@@ -1751,7 +1837,7 @@ export default function StudyPlanner() {
                 const level = selectedDayLevels[name];
                 return (
                   <div key={name} style={styles.homeworkSubjectBlock}>
-                    <div style={{ ...styles.homeworkSubjectName, color: subjectColor(name) }}>
+                    <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
                       {name}
                       {level && (
                         <span style={{ ...styles.levelChip, color: levelInfo(level).color, borderColor: levelInfo(level).color }}>
@@ -2568,6 +2654,18 @@ const styles = {
   priorityBtn: { border: "1px solid", borderRadius: 4, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
   tabBtn: { border: "1px solid", borderRadius: 4, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
+  subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 16, margin: "18px 0 8px" },
+  lyceumSubjectRow: { display: "flex", alignItems: "center", gap: 8 },
+  sundayRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 },
+  sundayBtn: {
+    border: "1px solid #C9C1AC",
+    background: "#fff",
+    borderRadius: 4,
+    padding: "5px 12px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "#5A5347",
+  },
   lyceumNotebooks: { marginBottom: 18, display: "flex", flexDirection: "column", gap: 6 },
   lyceumNotebookBlock: { borderBottom: "1px solid #E7E1D2", paddingBottom: 6 },
   lyceumNotebookHead: {
@@ -2711,6 +2809,15 @@ const styles = {
   topicDone: { textDecoration: "line-through", color: "#9A927D" },
   durationInput: { width: 44, padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
   notesToggle: { background: "none", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "#5A5347" },
+  colorPick: {
+    width: 24,
+    height: 20,
+    padding: 0,
+    border: "1px solid #C9C1AC",
+    borderRadius: 3,
+    background: "#fff",
+    flexShrink: 0,
+  },
   subjRemoveBtn: {
     border: "none",
     background: "none",
@@ -2747,6 +2854,19 @@ const styles = {
   calGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 },
   calCell: { position: "relative", aspectRatio: "1", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" },
   hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "#8C7326" },
+  // Клетка календаря сама цветная — от красной к зелёной, — поэтому точки сидят на
+  // светлой подложке: иначе зелёный предмет пропадает на зелёном дне.
+  lessonDots: {
+    position: "absolute",
+    top: 2,
+    display: "flex",
+    gap: 2,
+    alignItems: "center",
+    padding: "2px 3px",
+    borderRadius: 6,
+    background: "rgba(247, 244, 236, 0.92)",
+  },
+  lessonDot: { width: 5, height: 5, borderRadius: "50%" },
   dayDetail: { background: "#fff", border: "1px solid #DCD5C4", borderRadius: 5, padding: "12px 14px", marginBottom: 16 },
   homeworkBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed #DCD5C4" },
   homeworkTitle: { fontSize: 13, fontWeight: 700, marginBottom: 6 },

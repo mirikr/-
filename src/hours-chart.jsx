@@ -15,6 +15,19 @@ const AXIS = "#C9C1AC";
 const INK = "#5A5347";
 const MUTED = "#8A8370";
 
+// Деления оси — «круглые» значения: 0,5 ч, 1 ч, 5 ч. Шаг подбирается так, чтобы
+// делений было три-четыре, иначе подписи налезают друг на друга.
+const NICE_STEPS = [0.25, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 250, 500, 1000, 2500];
+
+function niceScale(maxValue) {
+  const target = 4;
+  const step = NICE_STEPS.find((candidate) => candidate * target >= maxValue) || NICE_STEPS[NICE_STEPS.length - 1];
+  const top = Math.max(step, Math.ceil(maxValue / step) * step);
+  const ticks = [];
+  for (let v = 0; v <= top + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+  return { top, ticks };
+}
+
 const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 
 function ymd(date) {
@@ -158,7 +171,8 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   // реальные столбцы к нулю. Отметка цели рисуется, только если попадает в шкалу,
   // а точное её значение всегда видно в подписи под графиком.
   const maxHours = Math.max(0, ...buckets.map((b) => b.hours));
-  const maxValue = Math.max(1, maxHours * 1.12);
+  const scaleInfo = niceScale(Math.max(0.5, maxHours));
+  const maxValue = scaleInfo.top;
   const maxIndex = buckets.reduce((best, b, i) => (b.hours > buckets[best].hours ? i : best), 0);
 
   // Система координат подписей и штрихов — одна на всех: сетка, отметки, столбцы.
@@ -175,7 +189,7 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   const barW = Math.min(44, Math.max(3, step - 2));
   const yOf = (value) => top + plotH - (value / maxValue) * plotH;
 
-  const ticks = [0, maxValue / 2, maxValue];
+  const ticks = scaleInfo.ticks;
   const activeBucket = active === null ? null : buckets[active];
 
   return (
