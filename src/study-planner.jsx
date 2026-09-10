@@ -19,18 +19,21 @@ const DOW_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]; // Date.ge
 // Priority of an exam or olympiad stage. The mark is what the person actually sees;
 // the number is what the schedule maths sorts by.
 const EVENT_PRIORITIES = [
-  { value: 1, mark: "!", label: "не особо важно", color: "#8A8370", onDark: "#B9B2A0" },
-  { value: 2, mark: "⚡", label: "важно", color: "#8C7326", onDark: "#D9BE6A" },
-  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "#8B4A4A", onDark: "#D98A8A" },
+  // strong и tint — для карточек расписания: тонкая полоска сбоку читалась плохо.
+  { value: 1, mark: "!", label: "не особо важно", color: "#8A8370", onDark: "#B9B2A0", strong: "#6E6857", tint: "#F1EEE4" },
+  { value: 2, mark: "⚡", label: "важно", color: "#8C7326", onDark: "#D9BE6A", strong: "#C08A1E", tint: "#FBF0D2" },
+  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "#8B4A4A", onDark: "#D98A8A", strong: "#B23A3A", tint: "#F9E2DF" },
 ];
 
 // Weight of a lyceum lesson. Order matters: later entries outrank earlier ones when the same
 // subject appears twice in a day.
+// Тип урока — это про программу, а не про важность: важность ученик ставит сам,
+// значками рядом с названием предмета.
 const LESSON_LEVELS = [
-  { value: "base", short: "база", label: "база — не особо важно", color: "#8A8370" },
+  { value: "base", short: "база", label: "база", color: "#8A8370" },
+  { value: "prof", short: "проф", label: "проф", color: "#2F4E70" },
+  { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс", color: "#8B4A4A" },
   { value: "outside", short: "вне лицея", label: "урок вне лицея", color: "#5C4A80" },
-  { value: "prof", short: "проф", label: "проф — важно", color: "#2F4E70" },
-  { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс — особо важно", color: "#8B4A4A" },
 ];
 
 const SUBJECT_COLOR_PALETTE = ["#4A6B6B", "#7A5233", "#5C4A80", "#8C7326", "#2F4E70", "#8B4A4A", "#3F6E52", "#6B4A6B"];
@@ -160,11 +163,6 @@ const STORAGE_KEY = "planner-state-v5";
 
 function levelInfo(value) {
   return LESSON_LEVELS.find((l) => l.value === value) || LESSON_LEVELS[0];
-}
-
-function levelRank(value) {
-  const idx = LESSON_LEVELS.findIndex((l) => l.value === value);
-  return idx === -1 ? 0 : idx;
 }
 
 const UNDO_SECONDS = 20;
@@ -1010,6 +1008,7 @@ export default function StudyPlanner() {
         day,
         subjectName: entry.subjectName.trim(),
         level: entry.level || "base",
+        priority: Number(entry.priority) || 1,
         start: entry.start || "08:30",
         end: entry.end || "09:15",
         room: entry.room || "",
@@ -1215,7 +1214,10 @@ export default function StudyPlanner() {
       .filter((e) => e.day === dow && e.subjectName)
       .forEach((e) => {
         const current = map[e.subjectName];
-        if (!current || levelRank(e.level) > levelRank(current)) map[e.subjectName] = e.level || "base";
+        const priority = Number(e.priority) || 1;
+        if (!current || priority > current.priority) {
+          map[e.subjectName] = { level: e.level || "base", priority };
+        }
       });
     return map;
   }, [activeSchedule, selectedDate]);
@@ -1275,7 +1277,8 @@ export default function StudyPlanner() {
 
       {homeworkReminders.length > 0 && (
         <div style={styles.hwBanner}>
-          <div style={styles.hwBannerTitle}>Напоминания о домашних заданиях</div>
+          <div style={styles.hwBannerBody}>
+          <div style={styles.hwBannerTitle}>Скоро сдавать</div>
           {homeworkReminders.map((h) => (
             <div key={h.id} style={styles.hwBannerRow}>
               {h.subjectName && (
@@ -1285,16 +1288,19 @@ export default function StudyPlanner() {
               )}
               <span>{h.text}</span>
               {h.minutes > 0 && <span style={styles.hwBannerMinutes}> · {h.minutes} мин</span>}
-              <span style={styles.hwBannerMinutes}> · {relativeDayLabel(h.daysUntil)}</span>
+              <span style={styles.hwBannerDue}> · {relativeDayLabel(h.daysUntil)}</span>
             </div>
           ))}
+          </div>
+          <div style={styles.hwBannerMark} aria-hidden="true">
+            !
+          </div>
         </div>
       )}
 
       <header style={styles.header}>
         <div>
-          <div style={styles.eyebrow}>Ежедневник обществоведа</div>
-          <h1 style={styles.h1}>План подготовки к экзамену и олимпиаде</h1>
+          <h1 style={styles.h1}>Ежедневник ученика Лицея КЭО</h1>
         </div>
         <div style={styles.countdownBox}>
           {nextEvent ? (
@@ -1703,6 +1709,16 @@ export default function StudyPlanner() {
           )}
         </div>
 
+        <div style={styles.priorityLegend}>
+          Важность урока — значками рядом с предметом:{" "}
+          {EVENT_PRIORITIES.map((p, i) => (
+            <span key={p.value}>
+              {i > 0 && " · "}
+              <span style={{ color: p.strong, fontWeight: 700 }}>{p.mark}</span> {p.label}
+            </span>
+          ))}
+        </div>
+
         <div style={styles.scheduleGrid}>
           {scheduleDays.map((day) => (
             <ScheduleDay
@@ -1834,15 +1850,26 @@ export default function StudyPlanner() {
             ) : (
               selectedDaySubjects.map((name) => {
                 const items = homeworkForSelectedDate.filter((h) => h.subjectName === name);
-                const level = selectedDayLevels[name];
+                const dayInfo = selectedDayLevels[name];
                 return (
                   <div key={name} style={styles.homeworkSubjectBlock}>
                     <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
                       {name}
-                      {level && (
-                        <span style={{ ...styles.levelChip, color: levelInfo(level).color, borderColor: levelInfo(level).color }}>
-                          {levelInfo(level).short}
-                        </span>
+                      {dayInfo && (
+                        <>
+                          <span style={{ ...styles.dayPriority, color: priorityInfo(dayInfo.priority).strong }}>
+                            {priorityInfo(dayInfo.priority).mark}
+                          </span>
+                          <span
+                            style={{
+                              ...styles.levelChip,
+                              color: levelInfo(dayInfo.level).color,
+                              borderColor: levelInfo(dayInfo.level).color,
+                            }}
+                          >
+                            {levelInfo(dayInfo.level).short}
+                          </span>
+                        </>
                       )}
                     </div>
                     {items.map((h) => (
@@ -2360,14 +2387,23 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
 
 function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
   return (
-    <div style={{ ...styles.scheduleEntry, borderLeftColor: levelInfo(entry.level).color }}>
-      <input
-        type="text"
-        placeholder="Предмет"
-        value={entry.subjectName}
-        onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
-        style={styles.scheduleSubjectInput}
-      />
+    <div
+      style={{
+        ...styles.scheduleEntry,
+        borderLeftColor: priorityInfo(entry.priority).strong,
+        background: priorityInfo(entry.priority).tint,
+      }}
+    >
+      <div style={styles.scheduleSubjectRow}>
+        <input
+          type="text"
+          placeholder="Предмет"
+          value={entry.subjectName}
+          onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
+          style={styles.scheduleSubjectInput}
+        />
+        <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+      </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={entry.start} onChange={(e) => onUpdate(entry.id, { start: e.target.value })} style={styles.scheduleTimeInput} />
         <span style={styles.mutedSmall}>–</span>
@@ -2413,10 +2449,11 @@ function AddScheduleForm({ onAdd }) {
   const [room, setRoom] = useState("");
   const [teacher, setTeacher] = useState("");
   const [level, setLevel] = useState("base");
+  const [priority, setPriority] = useState(1);
 
   function submit() {
     if (!subjectName.trim()) return;
-    onAdd({ subjectName, start, end, room, teacher, level });
+    onAdd({ subjectName, start, end, room, teacher, level, priority });
     setSubjectName("");
     setRoom("");
     setTeacher("");
@@ -2424,14 +2461,17 @@ function AddScheduleForm({ onAdd }) {
 
   return (
     <div style={styles.addScheduleRow}>
-      <input
-        type="text"
-        placeholder="Предмет"
-        value={subjectName}
-        onChange={(e) => setSubjectName(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        style={styles.scheduleSubjectInput}
-      />
+      <div style={styles.scheduleSubjectRow}>
+        <input
+          type="text"
+          placeholder="Предмет"
+          value={subjectName}
+          onChange={(e) => setSubjectName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          style={styles.scheduleSubjectInput}
+        />
+        <PriorityPicker value={priority} onChange={setPriority} />
+      </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
         <span style={styles.mutedSmall}>–</span>
@@ -2717,6 +2757,7 @@ const styles = {
     fontSize: 13,
   },
   undoConfirm: { border: "none", background: "#3F6E52", color: "#fff", borderRadius: 4, padding: "4px 10px", fontSize: 13 },
+  dayPriority: { fontSize: 11, fontWeight: 700, marginLeft: 6 },
   levelChip: {
     border: "1px solid",
     borderRadius: 3,
@@ -2785,14 +2826,24 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    borderLeft: "3px solid",
-    paddingLeft: 8,
+    borderLeft: "5px solid",
+    borderRadius: "0 4px 4px 0",
+    padding: "6px 8px",
     marginBottom: 8,
-    paddingBottom: 6,
-    borderBottom: "1px solid #E7E1D2",
   },
+  scheduleSubjectRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  priorityLegend: { fontSize: 11.5, color: "#6B6656", lineHeight: 1.5, marginBottom: 10 },
   scheduleSelect: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", width: "100%" },
-  scheduleSubjectInput: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", fontWeight: 600 },
+  scheduleSubjectInput: {
+    flex: "1 1 120px",
+    minWidth: 0,
+    padding: "4px 6px",
+    border: "1px solid #C9C1AC",
+    borderRadius: 4,
+    fontSize: 12.5,
+    background: "#fff",
+    fontWeight: 600,
+  },
   scheduleTimeRow: { display: "flex", alignItems: "center", gap: 4 },
   scheduleTimeInput: { padding: "3px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff", width: 82 },
   scheduleRoomInput: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
@@ -2894,16 +2945,39 @@ const styles = {
   reminderSelect: { padding: "2px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, background: "#fff" },
   reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, background: "#fff" },
   hwBanner: {
-    background: "#EFE7D0",
-    border: "1px solid #C9B87A",
+    display: "flex",
+    alignItems: "stretch",
+    gap: 12,
+    background: "#FBF0D2",
+    border: "1px solid #C08A1E",
+    borderLeft: "5px solid #C08A1E",
     borderRadius: 6,
-    padding: "12px 16px",
+    padding: "12px 14px",
     marginBottom: 16,
   },
-  hwBannerTitle: { fontSize: 13.5, fontWeight: 700, marginBottom: 6, color: "#6B5A1E" },
-  hwBannerRow: { fontSize: 13, color: "#4A4638", marginBottom: 2 },
+  hwBannerBody: { flex: 1, minWidth: 0 },
+  hwBannerTitle: {
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 16,
+    fontWeight: 700,
+    marginBottom: 6,
+    color: "#7A5A12",
+  },
+  hwBannerRow: { fontSize: 13.5, color: "#3A362C", marginBottom: 3, lineHeight: 1.45 },
   hwBannerSubject: { fontWeight: 700 },
   hwBannerMinutes: { color: "#8A8370" },
+  hwBannerDue: { color: "#B23A3A", fontWeight: 600 },
+  // Знак ростом во всю плашку: напоминание должно цеплять взгляд, а не теряться.
+  hwBannerMark: {
+    display: "flex",
+    alignItems: "center",
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 46,
+    lineHeight: 1,
+    fontWeight: 700,
+    color: "#C08A1E",
+    flexShrink: 0,
+  },
   dayDetailTitle: { fontSize: 13.5, fontWeight: 600, marginBottom: 8, textTransform: "capitalize" },
   journalForm: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" },
   textInput: { flex: "1 1 200px", padding: "6px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13.5, background: "#fff" },

@@ -14,9 +14,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["apple-touch-icon.png", "icon-192.png"],
       manifest: {
-        name: "Ежедневник обществоведа",
+        name: "Ежедневник ученика Лицея КЭО",
         short_name: "Ежедневник",
-        description: "Планировщик подготовки к экзамену и олимпиаде по обществознанию и истории",
+        description: "Учёба, расписание, конспекты и дедлайны в одном месте",
         lang: "ru",
         start_url: base,
         scope: base,
