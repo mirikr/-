@@ -6,3 +6,4 @@ dev-dist/
 .env.*.local
 .DS_Store
 *.log
+.env.production
