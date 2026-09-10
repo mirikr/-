@@ -164,6 +164,8 @@ function levelRank(value) {
   return idx === -1 ? 0 : idx;
 }
 
+const UNDO_SECONDS = 20;
+
 const EVENT_ALARM_DAYS = { 1: 1, 2: 3, 3: 7 };
 
 function eventIcsItem(event) {
@@ -324,6 +326,9 @@ export default function StudyPlanner() {
   const [customSubjects, setCustomSubjects] = useState([]);
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
   const [homework, setHomework] = useState([]);
+  // Удаление показывает уведомление с отменой; через 20 секунд оно само подтверждается.
+  const [undoState, setUndoState] = useState(null);
+  const undoTimer = useRef(null);
   const firstLoad = useRef(true);
   const loadingRef = useRef(false);
 
@@ -590,12 +595,63 @@ export default function StudyPlanner() {
     });
   }
 
-  function removeCustomTopic(subjectId, topicId) {
+  function showUndo(message, restore, finalize) {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    // Если предыдущее уведомление ещё висело, его удаление считается подтверждённым.
+    setUndoState((prev) => {
+      if (prev && prev.finalize) prev.finalize();
+      return { message, restore, finalize };
+    });
+    undoTimer.current = setTimeout(() => {
+      setUndoState((prev) => {
+        if (prev && prev.finalize) prev.finalize();
+        return null;
+      });
+    }, UNDO_SECONDS * 1000);
+  }
+
+  function confirmUndo() {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    if (undoState && undoState.finalize) undoState.finalize();
+    setUndoState(null);
+  }
+
+  function cancelUndo() {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    if (undoState && undoState.restore) undoState.restore();
+    setUndoState(null);
+  }
+
+  function removeTopic(subjectId, topicId, custom) {
+    const key = custom ? "custom" : "topics";
+    const list = data[subjectId][key];
+    const index = list.findIndex((t) => t.id === topicId);
+    if (index === -1) return;
+    const topic = list[index];
+    const relatedEntries = journal.filter((e) => e.lessonId === topicId);
+
     setData((prev) => ({
       ...prev,
-      [subjectId]: { ...prev[subjectId], custom: prev[subjectId].custom.filter((t) => t.id !== topicId) },
+      [subjectId]: { ...prev[subjectId], [key]: prev[subjectId][key].filter((t) => t.id !== topicId) },
     }));
     setJournal((prev) => prev.filter((e) => e.lessonId !== topicId));
+
+    showUndo(
+      `Вы удалили урок «${topic.name}»`,
+      () => {
+        // Урок возвращается на своё место в списке, вместе с записями в дневнике.
+        setData((prev) => {
+          const next = [...prev[subjectId][key]];
+          next.splice(Math.min(index, next.length), 0, topic);
+          return { ...prev, [subjectId]: { ...prev[subjectId], [key]: next } };
+        });
+        setJournal((prev) => [...relatedEntries, ...prev]);
+      },
+      () => {
+        // Подтверждено — только теперь можно убрать файлы из заметок урока.
+        (topic.notes || []).forEach((n) => (n.files || []).forEach((f) => deleteAttachment(f).catch(() => {})));
+      }
+    );
   }
 
   function addNote(subjectId, topicId, custom, text, minutes) {
@@ -978,8 +1034,9 @@ export default function StudyPlanner() {
         * { box-sizing: border-box; }
         .topic-row:hover { background: #EFEAE0; }
         .subj-card:hover { transform: translateY(-2px); }
-        button { cursor: pointer; font-family: inherit; }
-        input, select, textarea { font-family: inherit; }
+        button, input, select, textarea { color: inherit; font-family: inherit; }
+        button { cursor: pointer; background-color: transparent; }
+        h1, h2, h3 { color: inherit; }
         a.lesson-link { color: inherit; text-decoration: underline; text-decoration-color: #C9C1AC; text-underline-offset: 2px; }
         a.lesson-link:hover { text-decoration-color: currentColor; }
         /* Chrome reserves room for spinner arrows inside number inputs, which clipped "150" to "15"
@@ -989,9 +1046,15 @@ export default function StudyPlanner() {
         input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         /* On a phone the lesson name alone fills the row, so let the controls drop to a second line
            instead of being pushed off the right edge. */
+        .undo-bar { animation: undo-countdown ${UNDO_SECONDS}s linear forwards; }
+        @keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
+        @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
+        /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
+           min-width: 0 применяется, а flex — нет, и название вылезает поверх полей. */
+        .topic-row > label { flex: 1 1 auto; min-width: 0; }
         @media (max-width: 560px) {
           .topic-row { flex-wrap: wrap; }
-          .topic-row > label { flex: 1 1 100%; min-width: 0; }
+          .topic-row > label { flex-basis: 100%; }
         }
       `}</style>
 
@@ -1340,7 +1403,7 @@ export default function StudyPlanner() {
                         onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
                         onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
                         onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
-                        onRemoveTopic={t.custom ? () => removeCustomTopic(s.id, t.id) : null}
+                        onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
                       />
                     ))}
                     <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
@@ -1680,6 +1743,25 @@ export default function StudyPlanner() {
           {syncDebug ? ` — ${syncDebug}` : ""}
         </span>
       </div>
+      {undoState && (
+        <div style={styles.undoToast}>
+          <div style={styles.undoBarTrack}>
+            <div className="undo-bar" style={styles.undoBar} />
+          </div>
+          <div style={styles.undoRow}>
+            <span style={styles.undoText}>
+              {undoState.message}. Если это по ошибке — нажмите крестик, урок вернётся.
+            </span>
+            <button onClick={cancelUndo} style={styles.undoCancel} title="Вернуть урок">
+              ✕
+            </button>
+            <button onClick={confirmUndo} style={styles.undoConfirm} title="Да, удалить">
+              ✓
+            </button>
+          </div>
+        </div>
+      )}
+
       {saveErr && (
         <div style={styles.saveErr}>
           Не удалось сохранить последние изменения — повторяю попытку автоматически. Если ошибка не проходит,
@@ -1838,11 +1920,9 @@ function TopicItem({
         <button onClick={onToggleNotes} style={styles.notesToggle}>
           заметки{notes.length ? ` (${notes.length})` : ""}
         </button>
-        {onRemoveTopic && (
-          <button onClick={onRemoveTopic} style={styles.removeBtn}>
-            ×
-          </button>
-        )}
+        <button onClick={onRemoveTopic} style={styles.removeBtn} title="Удалить урок">
+          ×
+        </button>
       </div>
 
       {linkOpen && (
@@ -2327,6 +2407,33 @@ const styles = {
     textAlign: "left",
   },
   lyceumNotebookBody: { padding: "6px 0 10px 20px" },
+  undoToast: {
+    position: "fixed",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    maxWidth: 560,
+    margin: "0 auto",
+    background: "#2B2822",
+    color: "#EFEBE1",
+    borderRadius: 6,
+    boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
+    overflow: "hidden",
+    zIndex: 50,
+  },
+  undoBarTrack: { height: 3, background: "#4A4638" },
+  undoBar: { height: "100%", background: "#8C7326" },
+  undoRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" },
+  undoText: { flex: 1, fontSize: 12.5, lineHeight: 1.45 },
+  undoCancel: {
+    border: "1px solid #8A8370",
+    background: "transparent",
+    color: "#EFEBE1",
+    borderRadius: 4,
+    padding: "4px 10px",
+    fontSize: 13,
+  },
+  undoConfirm: { border: "none", background: "#3F6E52", color: "#fff", borderRadius: 4, padding: "4px 10px", fontSize: 13 },
   levelChip: {
     border: "1px solid",
     borderRadius: 3,
@@ -2413,7 +2520,7 @@ const styles = {
   topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 4, maxHeight: 380, overflowY: "auto" },
   topicBlock: { borderBottom: "1px solid #E7E1D2", paddingBottom: 4 },
   topicRow: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "5px 4px", borderRadius: 3 },
-  topicLabel: { display: "flex", alignItems: "center", gap: 8, flex: 1, cursor: "pointer" },
+  topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
   topicDone: { textDecoration: "line-through", color: "#9A927D" },
   durationInput: { width: 44, padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
   notesToggle: { background: "none", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "#5A5347" },

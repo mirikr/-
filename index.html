@@ -18,7 +18,10 @@
       rel="stylesheet"
     />
     <style>
-      html, body { margin: 0; background: #EFEBE1; }
+      /* Приложение нарисовано в светлой палитре. Без color-scheme браузер в тёмной
+         теме системы перекрашивает служебные цвета: текст кнопок, поля дат, чекбоксы. */
+      html { color-scheme: light; }
+      html, body { margin: 0; background: #EFEBE1; color: #2B2822; }
       body { font-family: Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
       /* Home-screen PWA on iPhone: keep content clear of the notch and the home indicator. */
       #root { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
