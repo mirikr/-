@@ -168,6 +168,12 @@ function levelRank(value) {
 
 const UNDO_SECONDS = 20;
 
+// Запись откладывается на SAVE_DEBOUNCE_MS после последней правки, но не дольше
+// SAVE_MAX_WAIT_MS с момента первой несохранённой: иначе длинный конспект, который
+// печатают без пауз, не сохранялся бы вовсе — каждая буква сдвигала бы таймер.
+const SAVE_DEBOUNCE_MS = 700;
+const SAVE_MAX_WAIT_MS = 15000;
+
 const EVENT_ALARM_DAYS = { 1: 1, 2: 3, 3: 7 };
 
 function eventIcsItem(event) {
@@ -341,6 +347,7 @@ export default function StudyPlanner() {
     [customSubjects, hiddenSubjects]
   );
   const saveTimer = useRef(null);
+  const pendingSince = useRef(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -422,7 +429,11 @@ export default function StudyPlanner() {
     // every single change hammers the storage API and is the most likely reason writes were
     // failing — debounce so a burst of edits becomes one write shortly after typing pauses.
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (pendingSince.current === null) pendingSince.current = Date.now();
+    const waited = Date.now() - pendingSince.current;
+    const delay = Math.max(0, Math.min(SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS - waited));
     saveTimer.current = setTimeout(() => {
+      pendingSince.current = null;
       (async () => {
         const payload = JSON.stringify({
           data,
@@ -453,7 +464,7 @@ export default function StudyPlanner() {
           setSyncDebug(saved.cloud === false ? saved.error : "");
         }
       })();
-    }, 700);
+    }, delay);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
