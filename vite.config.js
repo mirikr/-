@@ -14,7 +14,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["apple-touch-icon.png", "icon-192.png"],
       manifest: {
-        name: "Ежедневник ученика Лицея КЭО",
+        name: "Ежедневник лицеиста",
         short_name: "Ежедневник",
         description: "Учёба, расписание, конспекты и дедлайны в одном месте",
         lang: "ru",
