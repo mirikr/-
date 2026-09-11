@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { get as storageGet, set as storageSet, onAuthChange } from "./storage.js";
+import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
+import { stampState, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
@@ -365,6 +366,12 @@ export default function StudyPlanner() {
   }
   const saveTimer = useRef(null);
   const pendingSince = useRef(null);
+  // Последнее сохранённое состояние с метками времени: с ним сравнивается текущее,
+  // чтобы пометить как изменённые только те элементы, которые вправду поменялись.
+  const syncSnapshot = useRef(null);
+  const [cloudPending, setCloudPending] = useState(false);
+  const [cloudOn, setCloudOn] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -377,10 +384,11 @@ export default function StudyPlanner() {
     let found = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await storageGet(STORAGE_KEY);
+        const res = await storageGet(STORAGE_KEY, mergeSerialized);
         if (res && res.value) {
           found = true;
           const parsed = JSON.parse(res.value);
+          syncSnapshot.current = parsed;
           if (parsed.data) setData(parsed.data);
           if (parsed.journal) setJournal(parsed.journal);
           if (parsed.budget) setBudget(parsed.budget);
@@ -425,6 +433,25 @@ export default function StudyPlanner() {
     });
   }, [loaded]);
 
+  // Раньше правки, сделанные без сети, уходили в облако только при следующем
+  // сохранении или возврате в приложение. Теперь — сразу, как связь появилась.
+  useEffect(() => {
+    if (!loaded) return;
+    function handleOnline() {
+      loadFromStorage();
+    }
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [loaded]);
+
+  useEffect(() => {
+    let alive = true;
+    cloudAvailable().then((on) => alive && setCloudOn(on));
+    return onAuthChange(() => {
+      cloudAvailable().then((on) => alive && setCloudOn(on));
+    });
+  }, []);
+
   useEffect(() => {
     if (!loaded) return;
     function handleWake() {
@@ -454,7 +481,7 @@ export default function StudyPlanner() {
     saveTimer.current = setTimeout(() => {
       pendingSince.current = null;
       (async () => {
-        const payload = JSON.stringify({
+        const stamped = stampState(syncSnapshot.current, {
           data,
           journal,
           budget,
@@ -468,6 +495,8 @@ export default function StudyPlanner() {
           openSections,
           homework,
         });
+        syncSnapshot.current = stamped;
+        const payload = JSON.stringify(stamped);
         let saved = null;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
@@ -480,6 +509,7 @@ export default function StudyPlanner() {
           if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
         }
         setSaveErr(!(saved && saved.ok));
+        setCloudPending(!!saved && saved.cloud === false);
         if (saved && saved.ok) {
           setLastSyncedAt(new Date());
           setSyncDebug(saved.cloud === false ? saved.error : "");
@@ -864,6 +894,9 @@ export default function StudyPlanner() {
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
+      // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
+      // данные ушли в облако как свежие и победили то, что там лежит.
+      syncSnapshot.current = null;
       setImportMsg("Данные импортированы и сохранены на этом устройстве.");
       setImportText("");
     } catch (e) {
@@ -1963,7 +1996,16 @@ export default function StudyPlanner() {
         </Collapsible>
       </section>
 
-      {/* Manual backup / cross-device transfer */}
+      {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
+          занимает место, поэтому сворачивается в одну строку. */}
+      {cloudOn && !saveErr && !cloudPending && !showBackup ? (
+        <div style={styles.backupHint}>
+          <button onClick={() => setShowBackup(true)} style={styles.eventsToggle}>
+            Резервная копия данных
+          </button>
+          <span style={styles.mutedSmall}>синхронизация работает — переносить вручную не нужно</span>
+        </div>
+      ) : (
       <section style={styles.card}>
         <button onClick={() => toggleSection("backup")} style={styles.sectionHeaderBtn}>
           <span style={styles.sectionChevron}>{openSections.backup ? "▾" : "▸"}</span>
@@ -2002,6 +2044,7 @@ export default function StudyPlanner() {
             </p>
         </Collapsible>
       </section>
+      )}
 
       <div style={styles.syncRow}>
         <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
@@ -2013,6 +2056,9 @@ export default function StudyPlanner() {
             : "Ещё не синхронизировано"}
           {syncDebug ? ` — ${syncDebug}` : ""}
         </span>
+        {cloudPending && (
+          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
+        )}
       </div>
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
@@ -2987,6 +3033,8 @@ const styles = {
   jHours: { width: 44, flexShrink: 0, color: "#6B6656" },
   jNote: { flex: 1, color: "#4A4638" },
   saveErr: { fontSize: 12, color: "#8B4A4A", marginTop: 10, lineHeight: 1.6 },
+  backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
+  pendingBadge: { fontSize: 11.5, color: "#8C7326", fontWeight: 600 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid #DCD5C4" },
   syncBtn: {
     border: "1px solid #C9C1AC",
