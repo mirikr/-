@@ -181,12 +181,64 @@ const SAVE_MAX_WAIT_MS = 15000;
 
 const EVENT_ALARM_DAYS = { 1: 1, 2: 3, 3: 7 };
 
+// Экзамен и олимпиада живут в расписании по-разному от урока: у них есть дата,
+// и по ней всё и считается — в какой день недели они попадают и пора ли их
+// показывать. Событие наверху и запись в расписании — одно и то же: событие
+// строится из записи, отдельной копии нет, поэтому расходиться нечему.
+const EXAM_KINDS = [
+  { value: "exam", label: "Экзамен" },
+  { value: "olympiad", label: "Олимпиада" },
+];
+
+function examKindLabel(value) {
+  return value === "olympiad" ? "олимпиада" : "экзамен";
+}
+
+// За сколько дней до даты запись возвращается в недельную сетку. Ровно неделя
+// впереди — ещё рано: сетка про «эту неделю», а не про следующую.
+const EXAM_SCHEDULE_DAYS = 7;
+
+const SCHEDULE_EVENT_PREFIX = "sch-ev:";
+
+function weekdayKeyFromDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return null;
+  return DOW_TO_KEY[d.getDay()];
+}
+
+// Без даты запись видно всегда — иначе её негде было бы дозаполнить.
+function examVisibleInSchedule(entry) {
+  if (!entry.date) return true;
+  const left = daysUntilDate(entry.date);
+  return left >= 0 && left < EXAM_SCHEDULE_DAYS;
+}
+
+// Запись, до которой больше недели, тут же исчезает из сетки — без объяснения
+// это выглядит как потерянная работа.
+function examAddedNote(entry) {
+  const olympiad = entry.examKind === "olympiad";
+  const what = olympiad ? "Олимпиада" : "Экзамен";
+  const added = olympiad ? "добавлена" : "добавлен";
+  if (!entry.date) {
+    return `${what} ${added}. Впишите дату — запись сама встанет на нужный день недели.`;
+  }
+  const when = `${formatEventDate(entry.date)} (${WEEKDAY_LABELS[weekdayKeyFromDate(entry.date)]})`;
+  const left = daysUntilDate(entry.date);
+  if (left < 0) return `${what} ${added}: ${when} — эта дата уже прошла.`;
+  if (left >= EXAM_SCHEDULE_DAYS) {
+    return `${what} ${added}: ${when}. В расписании появится за неделю до даты, а отсчёт до неё уже идёт в событиях наверху.`;
+  }
+  return `${what} ${added}: ${when}.`;
+}
+
 function eventIcsItem(event) {
   const info = priorityInfo(event.priority);
   return {
     uid: event.id,
     title: `${info.mark} ${event.name}`,
     date: event.date,
+    description: event.description || "",
     alarmDaysBefore: EVENT_ALARM_DAYS[Number(event.priority)] || 1,
   };
 }
@@ -555,14 +607,35 @@ export default function StudyPlanner() {
     return { perSubject, doneAll, totalAll, overallPct: totalAll ? Math.round((doneAll / totalAll) * 100) : 0 };
   }, [data]);
 
+  // Экзамены и олимпиады из расписания — те же события, только описанные в
+  // другом месте. Они не копируются в список событий, а строятся из записи на
+  // лету: правка в любом из двух мест меняет одну и ту же запись.
+  const scheduleEvents = useMemo(
+    () =>
+      lyceumSchedule
+        .filter((e) => e.kind === "exam" && e.date)
+        .map((e) => ({
+          id: SCHEDULE_EVENT_PREFIX + e.id,
+          name: e.subjectName || (e.examKind === "olympiad" ? "Олимпиада" : "Экзамен"),
+          date: e.date,
+          priority: Number(e.priority) || 3,
+          fromSchedule: true,
+          examKind: e.examKind === "olympiad" ? "olympiad" : "exam",
+          description: [e.place, e.start && e.end ? e.start + "–" + e.end : "", e.url].filter(Boolean).join(" · "),
+        })),
+    [lyceumSchedule]
+  );
+
+  const allEvents = useMemo(() => [...events, ...scheduleEvents], [events, scheduleEvents]);
+
   const upcomingEvents = useMemo(
-    () => events.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
-    [events]
+    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
+    [allEvents]
   );
 
   const pastEvents = useMemo(
-    () => events.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
-    [events]
+    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
+    [allEvents]
   );
 
   const nextEvent = upcomingEvents[0] || null;
@@ -924,21 +997,10 @@ export default function StudyPlanner() {
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
   // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
   const calendarIcs = useMemo(() => {
-    const items = events.map(eventIcsItem);
-    lyceumSchedule
-      .filter((e) => e.kind === "exam" && e.date)
-      .forEach((e) =>
-        items.push({
-          uid: e.id,
-          title: "Экзамен: " + e.subjectName,
-          date: e.date,
-          description: [e.place, e.start && e.start + "–" + e.end, e.url].filter(Boolean).join(" · "),
-          alarmDaysBefore: EVENT_ALARM_DAYS[Number(e.priority)] || 1,
-        })
-      );
+    const items = allEvents.map(eventIcsItem);
     homework.filter((h) => h.date).forEach((h) => items.push(homeworkIcsItem(h)));
     return buildIcs(items, { name: "Ежедневник лицеиста", refreshHours: 1 });
-  }, [events, lyceumSchedule, homework]);
+  }, [allEvents, homework]);
 
   async function enableCalendarFeed() {
     setCalendarBusy(true);
@@ -1023,12 +1085,37 @@ export default function StudyPlanner() {
     ]);
   }
 
+  // Событие из расписания правится там же, где живёт: в записи расписания.
+  // Название события — это название экзамена, дата — его дата.
   function updateEvent(id, patch) {
+    if (id.startsWith(SCHEDULE_EVENT_PREFIX)) {
+      const entryId = id.slice(SCHEDULE_EVENT_PREFIX.length);
+      const mapped = {};
+      if (patch.name !== undefined) mapped.subjectName = patch.name;
+      if (patch.date !== undefined) mapped.date = patch.date;
+      if (patch.priority !== undefined) mapped.priority = patch.priority;
+      updateScheduleEntry(entryId, mapped);
+      return;
+    }
     setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }
 
   function removeEvent(id) {
+    if (id.startsWith(SCHEDULE_EVENT_PREFIX)) {
+      removeScheduleEntry(id.slice(SCHEDULE_EVENT_PREFIX.length));
+      return;
+    }
+    const index = events.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const event = events[index];
     setEvents((prev) => prev.filter((e) => e.id !== id));
+    showUndo(`Вы удалили событие «${event.name || "без названия"}»`, () => {
+      setEvents((prev) => {
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, event);
+        return next;
+      });
+    });
   }
 
   function addSubject(name) {
@@ -1114,15 +1201,22 @@ export default function StudyPlanner() {
     );
   }
 
+  // День недели у экзамена не выбирают — его задаёт дата. Ошиблись днём при
+  // добавлении, вписали верную дату — запись переедет сама.
   function addScheduleEntry(day, entry) {
     if (!entry.subjectName || !entry.subjectName.trim()) return;
     const id = "sch-" + Date.now() + "-" + Math.round(Math.random() * 1000);
+    const isExam = entry.kind === "exam";
+    const dayByDate = isExam ? weekdayKeyFromDate(entry.date) : null;
+    const finalDay = dayByDate || day;
+    if (finalDay === "sun") setShowSunday(true);
     setLyceumSchedule((prev) => [
       ...prev,
       {
         id,
-        day,
-        kind: entry.kind === "exam" ? "exam" : "lesson",
+        day: finalDay,
+        kind: isExam ? "exam" : "lesson",
+        examKind: isExam ? (entry.examKind === "olympiad" ? "olympiad" : "exam") : undefined,
         subjectName: entry.subjectName.trim(),
         level: entry.level || "base",
         // Экзамен по умолчанию важнее урока: его и заводят ради даты.
@@ -1139,7 +1233,20 @@ export default function StudyPlanner() {
   }
 
   function updateScheduleEntry(id, patch) {
-    setLyceumSchedule((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    setLyceumSchedule((prev) =>
+      prev.map((e) => {
+        if (e.id !== id) return e;
+        const next = { ...e, ...patch };
+        if (next.kind === "exam" && patch.date !== undefined) {
+          // Дата — единственный источник правды о дне недели для экзамена.
+          const day = weekdayKeyFromDate(patch.date);
+          if (day) next.day = day;
+        }
+        return next;
+      })
+    );
+    // Экзамен, переехавший на воскресенье, не должен пропасть вместе со скрытым днём.
+    if (patch.date !== undefined && weekdayKeyFromDate(patch.date) === "sun") setShowSunday(true);
   }
 
   function removeScheduleEntry(id) {
@@ -1147,7 +1254,8 @@ export default function StudyPlanner() {
     if (index === -1) return;
     const entry = lyceumSchedule[index];
     setLyceumSchedule((prev) => prev.filter((e) => e.id !== id));
-    showUndo(`Вы удалили урок «${entry.subjectName || "без названия"}» из расписания`, () => {
+    const what = entry.kind === "exam" ? examKindLabel(entry.examKind) : "урок";
+    showUndo(`Вы удалили ${what} «${entry.subjectName || "без названия"}» из расписания`, () => {
       setLyceumSchedule((prev) => {
         const next = [...prev];
         next.splice(Math.min(index, next.length), 0, entry);
@@ -1912,7 +2020,9 @@ export default function StudyPlanner() {
               key={day}
               day={day}
               label={WEEKDAY_LABELS[day]}
-              entries={lyceumSchedule.filter((e) => e.day === day).sort((a, b) => a.start.localeCompare(b.start))}
+              entries={lyceumSchedule
+                .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
+                .sort((a, b) => a.start.localeCompare(b.start))}
               onAdd={(entry) => addScheduleEntry(day, entry)}
               onUpdate={updateScheduleEntry}
               onRemove={removeScheduleEntry}
@@ -2293,12 +2403,18 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
   function row(e, isPast) {
     return (
       <div key={e.id} style={{ ...styles.eventEditRow, opacity: isPast ? 0.55 : 1 }}>
-        <input value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
+        <AutoGrow value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
         <input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} style={styles.eventDateInput} />
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
+        {/* Одна и та же запись: правка здесь меняет её и в расписании. */}
+        {e.fromSchedule && <span style={styles.fromScheduleBadge}>{examKindLabel(e.examKind)} из расписания</span>}
         {e.id === mainEventId && <span style={styles.mainBadge}>по нему считается план</span>}
         {isPast && <span style={styles.mutedSmall}>прошло</span>}
-        <button onClick={() => onRemove(e.id)} style={styles.removeBtn} title="Удалить событие">
+        <button
+          onClick={() => onRemove(e.id)}
+          style={styles.removeBtn}
+          title={e.fromSchedule ? "Удалить из расписания и событий" : "Удалить событие"}
+        >
           ×
         </button>
       </div>
@@ -2310,7 +2426,8 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
       <p style={styles.muted}>
         Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
         план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
-        приоритет одинаковый, берётся ближайшее.
+        приоритет одинаковый, берётся ближайшее. Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
+        это одна и та же запись, и править её можно с любой стороны.
       </p>
 
       {upcoming.map((e) => row(e, false))}
@@ -2318,11 +2435,11 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
       {past.map((e) => row(e, true))}
 
       <div style={styles.eventAddRow}>
-        <input
+        <AutoGrow
           placeholder="Например: региональный этап ВсОШ"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onEnter={submit}
           style={styles.eventNameInput}
         />
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.eventDateInput} />
@@ -2569,6 +2686,13 @@ function AddSubjectForm({ onAdd, placeholder }) {
 
 function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   const [examOpen, setExamOpen] = useState(false);
+  const [examNote, setExamNote] = useState("");
+
+  useEffect(() => {
+    if (!examNote) return;
+    const timer = setTimeout(() => setExamNote(""), 12000);
+    return () => clearTimeout(timer);
+  }, [examNote]);
 
   return (
     <div style={styles.scheduleDayBlock}>
@@ -2584,8 +2708,12 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
           onAdd={(entry) => {
             onAdd({ ...entry, kind: "exam" });
             setExamOpen(false);
+            setExamNote(examAddedNote(entry));
           }}
         />
+      </Collapsible>
+      <Collapsible open={!!examNote}>
+        <div style={styles.examNote}>{examNote}</div>
       </Collapsible>
 
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
@@ -2597,10 +2725,29 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   );
 }
 
+// Экзамен или олимпиада — разные вещи, и в расписании это видно сразу.
+function ExamKindPicker({ value, onChange }) {
+  const current = value === "olympiad" ? "olympiad" : "exam";
+  return (
+    <div style={styles.examKindPicker}>
+      {EXAM_KINDS.map((k) => (
+        <button
+          key={k.value}
+          onClick={() => onChange(k.value)}
+          style={k.value === current ? styles.examKindOn : styles.examKindOff}
+        >
+          {k.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Экзамен живёт в том же расписании, но описывается иначе: важно не «кабинет и
 // преподаватель», а место проведения и ссылка на регистрацию или задания.
 function AddExamForm({ onAdd }) {
   const [subjectName, setSubjectName] = useState("");
+  const [examKind, setExamKind] = useState("exam");
   const [date, setDate] = useState("");
   const [start, setStart] = useState("10:00");
   const [end, setEnd] = useState("13:00");
@@ -2609,7 +2756,7 @@ function AddExamForm({ onAdd }) {
 
   function submit() {
     if (!subjectName.trim()) return;
-    onAdd({ subjectName, date, start, end, place, url });
+    onAdd({ subjectName, examKind, date, start, end, place, url });
     setSubjectName("");
     setPlace("");
     setUrl("");
@@ -2618,6 +2765,7 @@ function AddExamForm({ onAdd }) {
 
   return (
     <div style={styles.examForm}>
+      <ExamKindPicker value={examKind} onChange={setExamKind} />
       <AutoGrow
         placeholder="Например: региональный этап по праву"
         value={subjectName}
@@ -2626,7 +2774,11 @@ function AddExamForm({ onAdd }) {
         style={styles.scheduleSubjectInput}
       />
       <div style={styles.scheduleTimeRow}>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.scheduleSelect} title="Дата, если известна" />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.scheduleSelect} title="Дата" />
+      </div>
+      <div style={styles.mutedSmall}>
+        День недели берётся из даты, так что ошибиться днём нельзя. В расписании запись появится за неделю до даты,
+        отсчёт до неё — сразу в событиях наверху.
       </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
@@ -2668,13 +2820,13 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
     >
       {isExam && (
         <div style={styles.examRow}>
-          <span style={styles.examBadge}>экзамен или олимпиада</span>
+          <ExamKindPicker value={entry.examKind} onChange={(v) => onUpdate(entry.id, { examKind: v })} />
           <input
             type="date"
             value={entry.date || ""}
             onChange={(e) => onUpdate(entry.id, { date: e.target.value })}
             style={styles.examDateInput}
-            title="Дата"
+            title="Дата — по ней же считается день недели"
           />
         </div>
       )}
@@ -3038,7 +3190,7 @@ const styles = {
     textDecoration: "underline",
   },
   eventsEditor: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 4 },
-  eventEditRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 },
+  eventEditRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap", marginBottom: 8 },
   eventAddRow: {
     display: "flex",
     alignItems: "center",
@@ -3127,6 +3279,7 @@ const styles = {
     marginLeft: 6,
     verticalAlign: "middle",
   },
+  fromScheduleBadge: { fontSize: 10.5, color: "#8B4A4A", border: "1px solid #E0B9B4", borderRadius: 4, padding: "1px 6px" },
   mainBadge: { fontSize: 11, color: "#3F6E52", fontWeight: 600 },
   pastLabel: { fontSize: 11.5, color: "#8A8370", margin: "10px 0 6px" },
   overallBar: { marginBottom: 24 },
@@ -3220,12 +3373,30 @@ const styles = {
     borderLeftColor: "#B23A3A",
   },
   examRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 },
-  examBadge: {
-    fontSize: 10,
+  examNote: { fontSize: 11.5, color: "#3F6E52", lineHeight: 1.5, marginTop: 6 },
+  examKindPicker: { display: "flex", gap: 4 },
+  examKindOn: {
+    border: "1px solid #B23A3A",
+    background: "#B23A3A",
+    color: "#fff",
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: 11,
     fontWeight: 700,
     letterSpacing: 0.3,
     textTransform: "uppercase",
-    color: "#B23A3A",
+  },
+  examKindOff: {
+    // Невыбранное — серое: иначе два значка рядом читаются как две пометки сразу.
+    border: "1px solid #DCD5C4",
+    background: "#FBF9F4",
+    color: "#8A8370",
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   examDateInput: { padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
   examLink: { fontSize: 12, color: "#2F4E70" },
