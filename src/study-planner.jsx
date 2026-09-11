@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { get as storageGet, set as storageSet, onAuthChange } from "./storage.js";
+import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
+import { stampState, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
@@ -365,6 +366,12 @@ export default function StudyPlanner() {
   }
   const saveTimer = useRef(null);
   const pendingSince = useRef(null);
+  // Последнее сохранённое состояние с метками времени: с ним сравнивается текущее,
+  // чтобы пометить как изменённые только те элементы, которые вправду поменялись.
+  const syncSnapshot = useRef(null);
+  const [cloudPending, setCloudPending] = useState(false);
+  const [cloudOn, setCloudOn] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -377,10 +384,11 @@ export default function StudyPlanner() {
     let found = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const res = await storageGet(STORAGE_KEY);
+        const res = await storageGet(STORAGE_KEY, mergeSerialized);
         if (res && res.value) {
           found = true;
           const parsed = JSON.parse(res.value);
+          syncSnapshot.current = parsed;
           if (parsed.data) setData(parsed.data);
           if (parsed.journal) setJournal(parsed.journal);
           if (parsed.budget) setBudget(parsed.budget);
@@ -425,6 +433,25 @@ export default function StudyPlanner() {
     });
   }, [loaded]);
 
+  // Раньше правки, сделанные без сети, уходили в облако только при следующем
+  // сохранении или возврате в приложение. Теперь — сразу, как связь появилась.
+  useEffect(() => {
+    if (!loaded) return;
+    function handleOnline() {
+      loadFromStorage();
+    }
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [loaded]);
+
+  useEffect(() => {
+    let alive = true;
+    cloudAvailable().then((on) => alive && setCloudOn(on));
+    return onAuthChange(() => {
+      cloudAvailable().then((on) => alive && setCloudOn(on));
+    });
+  }, []);
+
   useEffect(() => {
     if (!loaded) return;
     function handleWake() {
@@ -454,7 +481,7 @@ export default function StudyPlanner() {
     saveTimer.current = setTimeout(() => {
       pendingSince.current = null;
       (async () => {
-        const payload = JSON.stringify({
+        const stamped = stampState(syncSnapshot.current, {
           data,
           journal,
           budget,
@@ -468,6 +495,8 @@ export default function StudyPlanner() {
           openSections,
           homework,
         });
+        syncSnapshot.current = stamped;
+        const payload = JSON.stringify(stamped);
         let saved = null;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
@@ -480,6 +509,7 @@ export default function StudyPlanner() {
           if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
         }
         setSaveErr(!(saved && saved.ok));
+        setCloudPending(!!saved && saved.cloud === false);
         if (saved && saved.ok) {
           setLastSyncedAt(new Date());
           setSyncDebug(saved.cloud === false ? saved.error : "");
@@ -864,6 +894,9 @@ export default function StudyPlanner() {
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
+      // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
+      // данные ушли в облако как свежие и победили то, что там лежит.
+      syncSnapshot.current = null;
       setImportMsg("Данные импортированы и сохранены на этом устройстве.");
       setImportText("");
     } catch (e) {
@@ -1266,6 +1299,11 @@ export default function StudyPlanner() {
         @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
         @keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
         @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
+        /* На телефоне пояснение про ресурс времени отодвигало бы отсчёт за край экрана:
+           там оно ни к чему, приложение уже открыто и знакомо. */
+        @media (max-width: 700px) {
+          .lead-extra { display: none; }
+        }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
            min-width: 0 применяется, а flex — нет, и название вылезает поверх полей. */
         .topic-row > label { flex: 1 1 auto; min-width: 0; }
@@ -1300,7 +1338,15 @@ export default function StudyPlanner() {
 
       <header style={styles.header}>
         <div>
-          <h1 style={styles.h1}>Ежедневник ученика Лицея КЭО</h1>
+          <h1 style={styles.h1}>Ежедневник лицеиста</h1>
+          <p style={styles.lead}>
+            Учёба лицея и самостоятельная подготовка в одном месте: расписание с ролями уроков, конспекты по темам,
+            домашние задания со сроками и дневник занятий.
+          </p>
+          <p className="lead-extra" style={styles.leadMuted}>
+            Время здесь — ограниченный ресурс: приложение считает, сколько его остаётся до ближайшего экзамена или
+            этапа олимпиады, и показывает, на какой предмет оно уходит на самом деле.
+          </p>
         </div>
         <div style={styles.countdownBox}>
           {nextEvent ? (
@@ -1963,7 +2009,16 @@ export default function StudyPlanner() {
         </Collapsible>
       </section>
 
-      {/* Manual backup / cross-device transfer */}
+      {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
+          занимает место, поэтому сворачивается в одну строку. */}
+      {cloudOn && !saveErr && !cloudPending && !showBackup ? (
+        <div style={styles.backupHint}>
+          <button onClick={() => setShowBackup(true)} style={styles.eventsToggle}>
+            Резервная копия данных
+          </button>
+          <span style={styles.mutedSmall}>синхронизация работает — переносить вручную не нужно</span>
+        </div>
+      ) : (
       <section style={styles.card}>
         <button onClick={() => toggleSection("backup")} style={styles.sectionHeaderBtn}>
           <span style={styles.sectionChevron}>{openSections.backup ? "▾" : "▸"}</span>
@@ -2002,6 +2057,7 @@ export default function StudyPlanner() {
             </p>
         </Collapsible>
       </section>
+      )}
 
       <div style={styles.syncRow}>
         <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
@@ -2013,6 +2069,9 @@ export default function StudyPlanner() {
             : "Ещё не синхронизировано"}
           {syncDebug ? ` — ${syncDebug}` : ""}
         </span>
+        {cloudPending && (
+          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
+        )}
       </div>
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
@@ -2624,6 +2683,8 @@ const styles = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap", marginBottom: 20 },
   eyebrow: { fontSize: 13, color: "#8C7326", fontWeight: 600, marginBottom: 4 },
   h1: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, margin: 0, lineHeight: 1.25, maxWidth: 480 },
+  lead: { fontSize: 13.5, color: "#5A5347", lineHeight: 1.55, maxWidth: 420, margin: "10px 0 0" },
+  leadMuted: { fontSize: 12.5, color: "#8A8370", lineHeight: 1.55, maxWidth: 420, margin: "6px 0 0" },
   h2: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 20, margin: "0 0 10px" },
   h2Inline: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 20, margin: 0 },
   sectionHeaderBtn: {
@@ -2642,8 +2703,8 @@ const styles = {
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
   dateInput: { border: "1px solid #4A4638", background: "transparent", color: "inherit", borderRadius: 3, padding: "4px 6px", fontSize: 12, width: "100%" },
-  countdownEvent: { fontSize: 13, fontWeight: 600, marginTop: 8, lineHeight: 1.35 },
-  countdownDate: { fontSize: 11.5, opacity: 0.7, marginTop: 2 },
+  countdownEvent: { fontSize: 16, fontWeight: 700, marginTop: 8, lineHeight: 1.3 },
+  countdownDate: { fontSize: 12, opacity: 0.7, marginTop: 3 },
   countdownRest: {
     marginTop: 10,
     paddingTop: 8,
@@ -2653,9 +2714,9 @@ const styles = {
     gap: 5,
     textAlign: "left",
   },
-  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 11.5, lineHeight: 1.3 },
+  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 12.5, lineHeight: 1.35 },
   countdownRestName: { flex: 1, minWidth: 0, opacity: 0.9 },
-  countdownRestLeft: { opacity: 0.6, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
+  countdownRestLeft: { fontSize: 13.5, opacity: 0.75, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
   countdownPlan: { fontSize: 9.5, color: "#8FBF9F", marginLeft: 6, whiteSpace: "nowrap" },
   countdownEmpty: { fontSize: 12.5, opacity: 0.8, lineHeight: 1.5 },
   eventsStrip: { marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 },
@@ -2987,6 +3048,8 @@ const styles = {
   jHours: { width: 44, flexShrink: 0, color: "#6B6656" },
   jNote: { flex: 1, color: "#4A4638" },
   saveErr: { fontSize: 12, color: "#8B4A4A", marginTop: 10, lineHeight: 1.6 },
+  backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
+  pendingBadge: { fontSize: 11.5, color: "#8C7326", fontWeight: 600 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid #DCD5C4" },
   syncBtn: {
     border: "1px solid #C9C1AC",

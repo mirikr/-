@@ -85,8 +85,9 @@ function describe(error) {
 }
 
 // Returns { value, updatedAt, source, warning } or null when the key was never written.
-// Newer timestamp wins, and whichever side was behind is brought up to date.
-export async function get(key) {
+// Когда обе стороны расходятся и передан mergeFn, они сливаются поэлементно;
+// без него остаётся прежнее правило «свежая копия побеждает целиком».
+export async function get(key, mergeFn) {
   const local = localRead(key);
   const userId = await cloudUserId();
   if (!userId) return local ? { ...local, source: "local", warning: "" } : null;
@@ -97,6 +98,16 @@ export async function get(key) {
     cloud = await cloudRead(key, userId);
   } catch (e) {
     warning = describe(e);
+  }
+
+  if (local && cloud && mergeFn && local.value !== cloud.value) {
+    const merged = mergeFn(local.value, cloud.value);
+    if (merged) {
+      const updatedAt = Math.max(local.updatedAt, cloud.updatedAt, Date.now());
+      localWrite(key, merged, updatedAt);
+      cloudWrite(key, merged, updatedAt, userId).catch(() => {});
+      return { value: merged, updatedAt, source: "merged", warning };
+    }
   }
 
   if (cloud && (!local || cloud.updatedAt > local.updatedAt)) {
