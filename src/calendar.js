@@ -48,14 +48,25 @@ function fold(line) {
 }
 
 // items: [{ uid, title, date: "YYYY-MM-DD", description, alarmDaysBefore }]
-export function buildIcs(items) {
+// options.name — имя календаря в телефоне; options.refreshHours — как часто
+// подписка просит перечитать файл.
+export function buildIcs(items, options = {}) {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Ежедневник обществоведа//RU",
+    "PRODID:-//Ежедневник лицеиста//RU",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
   ];
+
+  if (options.name) {
+    lines.push(fold(`X-WR-CALNAME:${escapeText(options.name)}`));
+  }
+  if (options.refreshHours) {
+    // Две записи об одном и том же: первую понимает Apple, вторую — остальные.
+    lines.push(`REFRESH-INTERVAL;VALUE=DURATION:PT${options.refreshHours}H`);
+    lines.push(`X-PUBLISHED-TTL:PT${options.refreshHours}H`);
+  }
 
   items.forEach((item) => {
     if (!item.date) return;

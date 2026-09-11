@@ -5,7 +5,8 @@ import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
-import { buildIcs, saveIcs } from "./calendar.js";
+import { buildIcs } from "./calendar.js";
+import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
 // Duration is stored in minutes for each lesson.
@@ -372,6 +373,13 @@ export default function StudyPlanner() {
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudOn, setCloudOn] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
+  // Токен подписки хранится вместе с остальными данными: он один на все устройства.
+  const [calendarToken, setCalendarToken] = useState("");
+  const [calendarPanel, setCalendarPanel] = useState(false);
+  const [calendarLinks, setCalendarLinks] = useState(null);
+  const [calendarMsg, setCalendarMsg] = useState("");
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const publishedIcs = useRef("");
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -398,6 +406,7 @@ export default function StudyPlanner() {
           if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
           if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
           if (parsed.showSunday) setShowSunday(parsed.showSunday);
+          if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
@@ -491,6 +500,7 @@ export default function StudyPlanner() {
           hiddenSubjects,
           subjectColors,
           showSunday,
+          calendarToken,
           lyceumSchedule,
           openSections,
           homework,
@@ -519,7 +529,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -863,7 +873,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, openSections, homework },
       null,
       2
     );
@@ -891,6 +901,7 @@ export default function StudyPlanner() {
       if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
       if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
       if (parsed.showSunday) setShowSunday(parsed.showSunday);
+      if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
@@ -904,9 +915,73 @@ export default function StudyPlanner() {
     }
   }
 
-  function exportEventsToCalendar(list, name) {
-    if (!list.length) return;
-    saveIcs(name, buildIcs(list.map(eventIcsItem)));
+  // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
+  // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
+  const calendarIcs = useMemo(() => {
+    const items = events.map(eventIcsItem);
+    lyceumSchedule
+      .filter((e) => e.kind === "exam" && e.date)
+      .forEach((e) =>
+        items.push({
+          uid: e.id,
+          title: "Экзамен: " + e.subjectName,
+          date: e.date,
+          description: [e.place, e.start && e.start + "–" + e.end, e.url].filter(Boolean).join(" · "),
+          alarmDaysBefore: EVENT_ALARM_DAYS[Number(e.priority)] || 1,
+        })
+      );
+    homework.filter((h) => h.date).forEach((h) => items.push(homeworkIcsItem(h)));
+    return buildIcs(items, { name: "Ежедневник лицеиста", refreshHours: 1 });
+  }, [events, lyceumSchedule, homework]);
+
+  async function enableCalendarFeed() {
+    setCalendarBusy(true);
+    setCalendarMsg("");
+    const token = calendarToken || newFeedToken();
+    const res = await publishFeed(token, calendarIcs);
+    setCalendarBusy(false);
+    if (!res.ok) {
+      setCalendarMsg(res.error);
+      return;
+    }
+    publishedIcs.current = calendarIcs;
+    setCalendarToken(token);
+    setCalendarLinks(await feedUrls(token));
+    setCalendarMsg("Подписка готова.");
+  }
+
+  async function refreshCalendarFeed() {
+    if (!calendarToken) return;
+    setCalendarBusy(true);
+    const res = await publishFeed(calendarToken, calendarIcs);
+    setCalendarBusy(false);
+    publishedIcs.current = res.ok ? calendarIcs : publishedIcs.current;
+    setCalendarMsg(res.ok ? "Обновлено." : res.error);
+  }
+
+  // Файл подписки обновляется сам, когда меняется то, что в нём лежит: иначе
+  // календарь в телефоне показывал бы вчерашние даты.
+  useEffect(() => {
+    if (!loaded || !calendarToken || !cloudOn) return;
+    if (publishedIcs.current === calendarIcs) return;
+    const timer = setTimeout(async () => {
+      const res = await publishFeed(calendarToken, calendarIcs);
+      if (res.ok) publishedIcs.current = calendarIcs;
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [calendarIcs, calendarToken, cloudOn, loaded]);
+
+  useEffect(() => {
+    if (!calendarToken) return;
+    feedUrls(calendarToken).then((links) => setCalendarLinks(links));
+  }, [calendarToken, cloudOn]);
+
+  async function disableCalendarFeed() {
+    await removeFeed(calendarToken);
+    setCalendarToken("");
+    setCalendarLinks(null);
+    publishedIcs.current = "";
+    setCalendarMsg("Подписка отключена. В телефоне календарь придётся удалить вручную.");
   }
 
   function setNotebook(ownerKey, blocks) {
@@ -1407,15 +1482,67 @@ export default function StudyPlanner() {
           <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
             {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
           </button>
-          {upcomingEvents.length > 0 && (
-            <button
-              onClick={() => exportEventsToCalendar(upcomingEvents, "События подготовки")}
-              style={styles.eventsToggle}
-            >
-              Все в календарь
-            </button>
-          )}
+          <button onClick={() => setCalendarPanel(!calendarPanel)} style={styles.eventsToggle}>
+            {calendarPanel ? "Скрыть календарь" : "Календарь телефона"}
+          </button>
         </div>
+
+        <Collapsible open={calendarPanel}>
+          <div style={styles.calendarPanel}>
+            <div style={styles.calendarTitle}>Календарь телефона</div>
+            {!cloudOn ? (
+              <p style={styles.muted}>
+                Подписка живёт в облаке — войдите в аккаунт по ссылке в самом верху страницы, и она появится здесь.
+              </p>
+            ) : !calendarToken ? (
+              <>
+                <p style={styles.muted}>
+                  В телефоне появится отдельный календарь «Ежедневник лицеиста»: события, экзамены из расписания и
+                  домашние задания со сроками. Он обновляется сам — поменяли дату здесь, она поменяется и там.
+                </p>
+                <button onClick={enableCalendarFeed} style={styles.addBtnSmall} disabled={calendarBusy}>
+                  {calendarBusy ? "Включаю…" : "Включить подписку"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={styles.muted}>
+                  Нажмите «Подписаться» на том устройстве, где нужен календарь. Ссылку никому не давайте: по ней видно
+                  всё, что вы внесли в события и задания.
+                </p>
+                <div style={styles.calendarRow}>
+                  <a href={calendarLinks ? calendarLinks.webcal : "#"} style={styles.addBtnSmall}>
+                    Подписаться
+                  </a>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard
+                        .writeText(calendarLinks ? calendarLinks.https : "")
+                        .then(() => setCalendarMsg("Ссылка скопирована."))
+                        .catch(() => setCalendarMsg("Скопируйте ссылку из поля ниже вручную."));
+                    }}
+                    style={styles.secondaryBtnSmall}
+                  >
+                    Скопировать ссылку
+                  </button>
+                  <button onClick={refreshCalendarFeed} style={styles.secondaryBtnSmall} disabled={calendarBusy}>
+                    {calendarBusy ? "…" : "Обновить"}
+                  </button>
+                  <button onClick={disableCalendarFeed} style={styles.linkBtnSmall}>
+                    Отключить
+                  </button>
+                </div>
+                <input
+                  readOnly
+                  value={calendarLinks ? calendarLinks.https : ""}
+                  onFocus={(e) => e.target.select()}
+                  style={styles.calendarLinkInput}
+                />
+              </>
+            )}
+            {calendarMsg && <div style={styles.calendarMsg}>{calendarMsg}</div>}
+          </div>
+        </Collapsible>
         <Collapsible open={openSections.events}>
           <EventsEditor
             upcoming={upcomingEvents}
@@ -1424,7 +1551,6 @@ export default function StudyPlanner() {
             onAdd={addEvent}
             onUpdate={updateEvent}
             onRemove={removeEvent}
-            onExport={(e) => exportEventsToCalendar([e], e.name)}
           />
         </Collapsible>
       </section>
@@ -1934,8 +2060,7 @@ export default function StudyPlanner() {
                         onOpenAttachment={openAttachment}
                         onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                         onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                        onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
-                      />
+                            />
                     ))}
                     <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
                   </div>
@@ -1955,7 +2080,6 @@ export default function StudyPlanner() {
                   onOpenAttachment={openAttachment}
                   onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                   onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                  onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
                 />
               ))}
               <HomeworkAddForm
@@ -2016,6 +2140,20 @@ export default function StudyPlanner() {
         </Collapsible>
       </section>
 
+      <div style={styles.syncRow}>
+        <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
+          {syncing ? "Обновление…" : "Обновить сейчас"}
+        </button>
+        <span style={styles.mutedSmall}>
+          {lastSyncedAt
+            ? `Синхронизировано в ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
+            : "Ещё не синхронизировано"}
+          {syncDebug ? ` — ${syncDebug}` : ""}
+        </span>
+        {cloudPending && (
+          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
+        )}
+      </div>
       {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
           занимает место, поэтому сворачивается в одну строку. */}
       {cloudOn && !saveErr && !cloudPending && !showBackup ? (
@@ -2066,20 +2204,6 @@ export default function StudyPlanner() {
       </section>
       )}
 
-      <div style={styles.syncRow}>
-        <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
-          {syncing ? "Обновление…" : "Обновить сейчас"}
-        </button>
-        <span style={styles.mutedSmall}>
-          {lastSyncedAt
-            ? `Синхронизировано в ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
-            : "Ещё не синхронизировано"}
-          {syncDebug ? ` — ${syncDebug}` : ""}
-        </span>
-        {cloudPending && (
-          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
-        )}
-      </div>
       <div style={styles.versionRow}>
         Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
         {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
@@ -2144,7 +2268,7 @@ function PriorityPicker({ value, onChange }) {
   );
 }
 
-function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, onExport }) {
+function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState(todayStr());
   const [priority, setPriority] = useState(2);
@@ -2164,11 +2288,6 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, 
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
         {e.id === mainEventId && <span style={styles.mainBadge}>по нему считается план</span>}
         {isPast && <span style={styles.mutedSmall}>прошло</span>}
-        {!isPast && (
-          <button onClick={() => onExport(e)} style={styles.calendarBtn} title="Добавить в календарь телефона">
-            📅
-          </button>
-        )}
         <button onClick={() => onRemove(e.id)} style={styles.removeBtn} title="Удалить событие">
           ×
         </button>
@@ -2178,11 +2297,6 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, 
 
   return (
     <div style={styles.eventsEditor}>
-      <p style={styles.muted}>
-        Кнопка 📅 отдаёт событие календарю телефона — напоминание придёт даже при закрытом приложении: за неделю до
-        «{EVENT_PRIORITIES[2].mark}», за три дня до «{EVENT_PRIORITIES[1].mark}», за день до «
-        {EVENT_PRIORITIES[0].mark}».
-      </p>
       <p style={styles.muted}>
         Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
         план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
@@ -2721,7 +2835,7 @@ function HomeworkAddForm({ onAdd, placeholder }) {
   );
 }
 
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onExport }) {
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
   const fileInputRef = useRef(null);
   const reminderMode = hw.reminderDays === "always" ? "always" : !hw.reminderDays || hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -2732,9 +2846,6 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
         <input type="checkbox" checked={!!hw.done} onChange={onToggleDone} />
         <span style={hw.done ? { ...styles.homeworkText, ...styles.topicDone } : styles.homeworkText}>{hw.text}</span>
         {hw.minutes > 0 && <span style={styles.mutedSmall}>{hw.minutes} мин</span>}
-        <button onClick={onExport} style={styles.attachBtn} title="Добавить срок в календарь телефона">
-          📅
-        </button>
         <button onClick={() => fileInputRef.current?.click()} style={styles.attachBtn} title="Прикрепить файл">
           📎
         </button>
@@ -2854,6 +2965,36 @@ const styles = {
   eventName: { fontWeight: 600 },
   eventDate: { color: "#6B6656", fontSize: 12.5 },
   eventLeft: { color: "#8A8370", fontSize: 12.5, marginLeft: "auto" },
+  calendarPanel: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 8 },
+  calendarTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 15, marginBottom: 8 },
+  calendarRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 },
+  calendarLinkInput: {
+    width: "100%",
+    padding: "5px 8px",
+    border: "1px solid #C9C1AC",
+    borderRadius: 4,
+    fontSize: 11.5,
+    background: "#fff",
+    color: "#5A5347",
+  },
+  calendarMsg: { fontSize: 12, color: "#3F6E52", marginTop: 8 },
+  secondaryBtnSmall: {
+    border: "1px solid #C9C1AC",
+    background: "#fff",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#2B2822",
+  },
+  linkBtnSmall: {
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 12,
+    color: "#8B4A4A",
+    textDecoration: "underline",
+  },
   eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
   calendarBtn: { background: "none", border: "none", padding: "0 2px", fontSize: 14, lineHeight: 1 },
   eventsToggle: {
