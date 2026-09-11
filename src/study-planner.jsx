@@ -7,6 +7,7 @@ import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
 import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
+import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
 import ReleaseNotes from "./release-notes.jsx";
 import { platform as detectPlatform } from "./device.js";
@@ -2617,12 +2618,11 @@ function AddExamForm({ onAdd }) {
 
   return (
     <div style={styles.examForm}>
-      <input
-        type="text"
+      <AutoGrow
         placeholder="Например: региональный этап по праву"
         value={subjectName}
         onChange={(e) => setSubjectName(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
+        onEnter={submit}
         style={styles.scheduleSubjectInput}
       />
       <div style={styles.scheduleTimeRow}>
@@ -2633,11 +2633,11 @@ function AddExamForm({ onAdd }) {
         <span style={styles.mutedSmall}>–</span>
         <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={styles.scheduleTimeInput} />
       </div>
-      <input
-        type="text"
+      <AutoGrow
         placeholder="Место проведения"
         value={place}
         onChange={(e) => setPlace(e.target.value)}
+        onEnter={submit}
         style={styles.scheduleRoomInput}
       />
       <input
@@ -2679,8 +2679,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
         </div>
       )}
       <div style={styles.scheduleSubjectRow}>
-        <input
-          type="text"
+        <AutoGrow
           placeholder={isExam ? "Название" : "Предмет"}
           value={entry.subjectName}
           onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
@@ -2695,8 +2694,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
       </div>
       {isExam ? (
         <>
-          <input
-            type="text"
+          <AutoGrow
             placeholder="Место проведения"
             value={entry.place || ""}
             onChange={(e) => onUpdate(entry.id, { place: e.target.value })}
@@ -2772,12 +2770,11 @@ function AddScheduleForm({ onAdd }) {
   return (
     <div style={styles.addScheduleRow}>
       <div style={styles.scheduleSubjectRow}>
-        <input
-          type="text"
+        <AutoGrow
           placeholder="Предмет"
           value={subjectName}
           onChange={(e) => setSubjectName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onEnter={submit}
           style={styles.scheduleSubjectInput}
         />
         <PriorityPicker value={priority} onChange={setPriority} />
@@ -3232,7 +3229,8 @@ const styles = {
   },
   examDateInput: { padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
   examLink: { fontSize: 12, color: "#2F4E70" },
-  scheduleSubjectRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  // Название переносится на несколько строк, значки важности остаются у первой.
+  scheduleSubjectRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" },
   priorityLegend: { fontSize: 11.5, color: "#6B6656", lineHeight: 1.5, marginBottom: 10 },
   scheduleSelect: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", width: "100%" },
   scheduleSubjectInput: {
