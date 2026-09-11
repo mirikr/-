@@ -924,9 +924,11 @@ export default function StudyPlanner() {
 
   const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
+  // Экзамен — не предмет: тетрадь и цвет ему ни к чему, он живёт только в расписании.
   const lyceumSubjectNames = useMemo(() => {
     const names = [];
     lyceumSchedule.forEach((e) => {
+      if (e.kind === "exam") return;
       if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
     });
     return names.sort((a, b) => a.localeCompare(b, "ru"));
@@ -1039,13 +1041,18 @@ export default function StudyPlanner() {
       {
         id,
         day,
+        kind: entry.kind === "exam" ? "exam" : "lesson",
         subjectName: entry.subjectName.trim(),
         level: entry.level || "base",
-        priority: Number(entry.priority) || 1,
+        // Экзамен по умолчанию важнее урока: его и заводят ради даты.
+        priority: Number(entry.priority) || (entry.kind === "exam" ? 3 : 1),
         start: entry.start || "08:30",
         end: entry.end || "09:15",
         room: entry.room || "",
         teacher: entry.teacher || "",
+        place: entry.place || "",
+        url: entry.url || "",
+        date: entry.date || "",
       },
     ]);
   }
@@ -1226,7 +1233,7 @@ export default function StudyPlanner() {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const names = [];
     activeSchedule
-      .filter((e) => e.day === dow)
+      .filter((e) => e.day === dow && e.kind !== "exam")
       .sort((a, b) => a.start.localeCompare(b.start))
       .forEach((e) => {
         if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
@@ -1244,7 +1251,7 @@ export default function StudyPlanner() {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const map = {};
     activeSchedule
-      .filter((e) => e.day === dow && e.subjectName)
+      .filter((e) => e.day === dow && e.subjectName && e.kind !== "exam")
       .forEach((e) => {
         const current = map[e.subjectName];
         const priority = Number(e.priority) || 1;
@@ -2073,6 +2080,12 @@ export default function StudyPlanner() {
           <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
         )}
       </div>
+      <div style={styles.versionRow}>
+        Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
+        {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
+        {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+      </div>
+
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
           {undoQueue.map((item) => (
@@ -2431,9 +2444,26 @@ function AddSubjectForm({ onAdd, placeholder }) {
 }
 
 function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
+  const [examOpen, setExamOpen] = useState(false);
+
   return (
     <div style={styles.scheduleDayBlock}>
-      <div style={styles.scheduleDayHeader}>{label}</div>
+      <div style={styles.scheduleDayTop}>
+        <div style={styles.scheduleDayHeader}>{label}</div>
+        <button onClick={() => setExamOpen(!examOpen)} style={styles.examToggle}>
+          {examOpen ? "Скрыть" : "+ Экзамен или олимпиада"}
+        </button>
+      </div>
+
+      <Collapsible open={examOpen}>
+        <AddExamForm
+          onAdd={(entry) => {
+            onAdd({ ...entry, kind: "exam" });
+            setExamOpen(false);
+          }}
+        />
+      </Collapsible>
+
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
       {entries.map((e) => (
         <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} />
@@ -2443,19 +2473,92 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   );
 }
 
+// Экзамен живёт в том же расписании, но описывается иначе: важно не «кабинет и
+// преподаватель», а место проведения и ссылка на регистрацию или задания.
+function AddExamForm({ onAdd }) {
+  const [subjectName, setSubjectName] = useState("");
+  const [date, setDate] = useState("");
+  const [start, setStart] = useState("10:00");
+  const [end, setEnd] = useState("13:00");
+  const [place, setPlace] = useState("");
+  const [url, setUrl] = useState("");
+
+  function submit() {
+    if (!subjectName.trim()) return;
+    onAdd({ subjectName, date, start, end, place, url });
+    setSubjectName("");
+    setPlace("");
+    setUrl("");
+    setDate("");
+  }
+
+  return (
+    <div style={styles.examForm}>
+      <input
+        type="text"
+        placeholder="Например: региональный этап по праву"
+        value={subjectName}
+        onChange={(e) => setSubjectName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        style={styles.scheduleSubjectInput}
+      />
+      <div style={styles.scheduleTimeRow}>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.scheduleSelect} title="Дата, если известна" />
+      </div>
+      <div style={styles.scheduleTimeRow}>
+        <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
+        <span style={styles.mutedSmall}>–</span>
+        <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={styles.scheduleTimeInput} />
+      </div>
+      <input
+        type="text"
+        placeholder="Место проведения"
+        value={place}
+        onChange={(e) => setPlace(e.target.value)}
+        style={styles.scheduleRoomInput}
+      />
+      <input
+        type="url"
+        placeholder="Ссылка: регистрация, задания"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        style={styles.scheduleRoomInput}
+      />
+      <button onClick={submit} style={styles.addBtnSmall} disabled={!subjectName.trim()}>
+        + Добавить
+      </button>
+    </div>
+  );
+}
+
 function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
+  const isExam = entry.kind === "exam";
+
   return (
     <div
       style={{
         ...styles.scheduleEntry,
         borderLeftColor: priorityInfo(entry.priority).strong,
         background: priorityInfo(entry.priority).tint,
+        ...(isExam ? styles.scheduleExam : null),
       }}
     >
+      {isExam && (
+        <div style={styles.examRow}>
+          <span style={styles.examBadge}>экзамен или олимпиада</span>
+          <input
+            type="date"
+            value={entry.date || ""}
+            onChange={(e) => onUpdate(entry.id, { date: e.target.value })}
+            style={styles.examDateInput}
+            title="Дата"
+          />
+        </div>
+      )}
       <div style={styles.scheduleSubjectRow}>
         <input
           type="text"
-          placeholder="Предмет"
+          placeholder={isExam ? "Название" : "Предмет"}
           value={entry.subjectName}
           onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
           style={styles.scheduleSubjectInput}
@@ -2467,32 +2570,58 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
         <span style={styles.mutedSmall}>–</span>
         <input type="time" value={entry.end} onChange={(e) => onUpdate(entry.id, { end: e.target.value })} style={styles.scheduleTimeInput} />
       </div>
-      <input
-        type="text"
-        placeholder="Кабинет"
-        value={entry.room}
-        onChange={(e) => onUpdate(entry.id, { room: e.target.value })}
-        style={styles.scheduleRoomInput}
-      />
-      <input
-        type="text"
-        placeholder="Преподаватель"
-        value={entry.teacher}
-        onChange={(e) => onUpdate(entry.id, { teacher: e.target.value })}
-        style={styles.scheduleTeacherInput}
-      />
-      <select
-        value={entry.level || "base"}
-        onChange={(e) => onUpdate(entry.id, { level: e.target.value })}
-        style={{ ...styles.scheduleSelect, color: levelInfo(entry.level).color, fontWeight: 600 }}
-        title="Насколько важен этот урок"
-      >
-        {LESSON_LEVELS.map((l) => (
-          <option key={l.value} value={l.value}>
-            {l.label}
-          </option>
-        ))}
-      </select>
+      {isExam ? (
+        <>
+          <input
+            type="text"
+            placeholder="Место проведения"
+            value={entry.place || ""}
+            onChange={(e) => onUpdate(entry.id, { place: e.target.value })}
+            style={styles.scheduleRoomInput}
+          />
+          <input
+            type="url"
+            placeholder="Ссылка: регистрация, задания"
+            value={entry.url || ""}
+            onChange={(e) => onUpdate(entry.id, { url: e.target.value })}
+            style={styles.scheduleRoomInput}
+          />
+          {entry.url && (
+            <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
+              Открыть ссылку
+            </a>
+          )}
+        </>
+      ) : (
+        <>
+          <input
+            type="text"
+            placeholder="Кабинет"
+            value={entry.room}
+            onChange={(e) => onUpdate(entry.id, { room: e.target.value })}
+            style={styles.scheduleRoomInput}
+          />
+          <input
+            type="text"
+            placeholder="Преподаватель"
+            value={entry.teacher}
+            onChange={(e) => onUpdate(entry.id, { teacher: e.target.value })}
+            style={styles.scheduleTeacherInput}
+          />
+          <select
+            value={entry.level || "base"}
+            onChange={(e) => onUpdate(entry.id, { level: e.target.value })}
+            style={{ ...styles.scheduleSelect, color: levelInfo(entry.level).color, fontWeight: 600 }}
+            title="Тип урока"
+          >
+            {LESSON_LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       <button onClick={onRemove} style={styles.removeBtn}>
         ×
       </button>
@@ -2891,6 +3020,44 @@ const styles = {
     padding: "6px 8px",
     marginBottom: 8,
   },
+  scheduleDayTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  examToggle: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "#8C7326",
+    fontWeight: 600,
+    textDecoration: "underline",
+  },
+  examForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: "8px 8px 10px",
+    marginBottom: 8,
+    border: "1px dashed #C08A1E",
+    borderRadius: 5,
+    background: "#FBF6E8",
+  },
+  // Экзамен выделяется рамкой: цвет заливки уже занят под важность. Границы заданы
+  // по сторонам, иначе сокращённое `border` сбрасывало бы толстую полосу слева.
+  scheduleExam: {
+    borderTop: "1px solid #B23A3A",
+    borderRight: "1px solid #B23A3A",
+    borderBottom: "1px solid #B23A3A",
+    borderLeftColor: "#B23A3A",
+  },
+  examRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 },
+  examBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+    color: "#B23A3A",
+  },
+  examDateInput: { padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
+  examLink: { fontSize: 12, color: "#2F4E70" },
   scheduleSubjectRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
   priorityLegend: { fontSize: 11.5, color: "#6B6656", lineHeight: 1.5, marginBottom: 10 },
   scheduleSelect: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", width: "100%" },
@@ -3050,6 +3217,7 @@ const styles = {
   saveErr: { fontSize: 12, color: "#8B4A4A", marginTop: 10, lineHeight: 1.6 },
   backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
   pendingBadge: { fontSize: 11.5, color: "#8C7326", fontWeight: 600 },
+  versionRow: { fontSize: 11, color: "#A39B86", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid #DCD5C4" },
   syncBtn: {
     border: "1px solid #C9C1AC",

@@ -74,6 +74,9 @@
    - важность ученик ставит сам, значками «!», «⚡», «⚡⚡⚡» рядом с названием
      предмета. Она красит карточку урока — заливка и полоса слева — и видна в
      дневнике рядом с предметом вместе с типом;
+   - кнопкой в шапке дня добавляется экзамен или олимпиада: у такой записи дата,
+     время, место проведения и ссылка вместо кабинета, преподавателя и типа урока.
+     В список предметов лицея и в домашние задания они не попадают — это не предмет;
    - воскресенья по умолчанию нет — оно добавляется кнопкой над сеткой. Убранное
      воскресенье перестаёт влиять на дневник и домашние задания, но его уроки
      остаются в данных и возвращаются вместе с днём.
@@ -114,7 +117,8 @@
   customSubjects: [{ id, name, color }],
   subjectColors: { [subjectId | "lyceum:<название>"]: "#hex" },  // свой цвет вместо стандартного
   showSunday: bool,
-  lyceumSchedule: [{ id, day, subjectName, level, priority, start, end, room, teacher }],
+  lyceumSchedule: [{ id, day, kind: "lesson" | "exam", subjectName, level, priority,
+                    start, end, room, teacher, place, url, date }],
   openSections: { kpv, subjects, lyceum, journal, backup: bool },
   homework: [{ id, date, subjectName, text, minutes, done, attachments, reminderDays }]
 }
