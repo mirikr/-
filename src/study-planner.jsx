@@ -7,6 +7,9 @@ import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
 import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
+import CalendarHowTo from "./calendar-howto.jsx";
+import ReleaseNotes from "./release-notes.jsx";
+import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
 // Duration is stored in minutes for each lesson.
@@ -375,6 +378,8 @@ export default function StudyPlanner() {
   const [showBackup, setShowBackup] = useState(false);
   // Токен подписки хранится вместе с остальными данными: он один на все устройства.
   const [calendarToken, setCalendarToken] = useState("");
+  // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
+  const [devicePlatform] = useState(detectPlatform);
   const [calendarPanel, setCalendarPanel] = useState(false);
   const [calendarLinks, setCalendarLinks] = useState(null);
   const [calendarMsg, setCalendarMsg] = useState("");
@@ -1506,14 +1511,11 @@ export default function StudyPlanner() {
               </>
             ) : (
               <>
-                <p style={styles.muted}>
-                  Нажмите «Подписаться» на том устройстве, где нужен календарь. Ссылку никому не давайте: по ней видно
-                  всё, что вы внесли в события и задания.
+                <CalendarHowTo platform={devicePlatform} styles={styles} />
+                <p style={styles.mutedSmall}>
+                  Ссылку никому не давайте: по ней видно всё, что вы внесли в события и задания.
                 </p>
                 <div style={styles.calendarRow}>
-                  <a href={calendarLinks ? calendarLinks.webcal : "#"} style={styles.addBtnSmall}>
-                    Подписаться
-                  </a>
                   <button
                     onClick={() => {
                       navigator.clipboard
@@ -1521,10 +1523,16 @@ export default function StudyPlanner() {
                         .then(() => setCalendarMsg("Ссылка скопирована."))
                         .catch(() => setCalendarMsg("Скопируйте ссылку из поля ниже вручную."));
                     }}
-                    style={styles.secondaryBtnSmall}
+                    style={devicePlatform === "android" ? styles.addBtnSmall : styles.secondaryBtnSmall}
                   >
                     Скопировать ссылку
                   </button>
+                  <a
+                    href={calendarLinks ? calendarLinks.webcal : "#"}
+                    style={devicePlatform === "android" ? styles.subscribeLinkSecondary : styles.subscribeLink}
+                  >
+                    Подписаться
+                  </a>
                   <button onClick={refreshCalendarFeed} style={styles.secondaryBtnSmall} disabled={calendarBusy}>
                     {calendarBusy ? "…" : "Обновить"}
                   </button>
@@ -2209,6 +2217,7 @@ export default function StudyPlanner() {
         {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
         {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
       </div>
+      <ReleaseNotes />
 
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
@@ -2978,6 +2987,30 @@ const styles = {
     color: "#5A5347",
   },
   calendarMsg: { fontSize: 12, color: "#3F6E52", marginTop: 8 },
+  calendarSteps: { margin: "0 0 8px", paddingLeft: 20, fontSize: 12.5, color: "#5A5347", lineHeight: 1.6 },
+  // Ссылка webcal: выглядит и ведёт себя как кнопка рядом с соседями.
+  subscribeLink: {
+    display: "inline-block",
+    border: "none",
+    color: "#fff",
+    background: "#2B2822",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    textDecoration: "none",
+  },
+  subscribeLinkSecondary: {
+    display: "inline-block",
+    border: "1px solid #C9C1AC",
+    background: "#fff",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#2B2822",
+    textDecoration: "none",
+  },
   secondaryBtnSmall: {
     border: "1px solid #C9C1AC",
     background: "#fff",
