@@ -5,7 +5,12 @@ import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
-import { buildIcs, saveIcs } from "./calendar.js";
+import { buildIcs } from "./calendar.js";
+import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
+import AutoGrow from "./auto-grow.jsx";
+import CalendarHowTo from "./calendar-howto.jsx";
+import ReleaseNotes from "./release-notes.jsx";
+import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
 // Duration is stored in minutes for each lesson.
@@ -176,12 +181,64 @@ const SAVE_MAX_WAIT_MS = 15000;
 
 const EVENT_ALARM_DAYS = { 1: 1, 2: 3, 3: 7 };
 
+// Экзамен и олимпиада живут в расписании по-разному от урока: у них есть дата,
+// и по ней всё и считается — в какой день недели они попадают и пора ли их
+// показывать. Событие наверху и запись в расписании — одно и то же: событие
+// строится из записи, отдельной копии нет, поэтому расходиться нечему.
+const EXAM_KINDS = [
+  { value: "exam", label: "Экзамен" },
+  { value: "olympiad", label: "Олимпиада" },
+];
+
+function examKindLabel(value) {
+  return value === "olympiad" ? "олимпиада" : "экзамен";
+}
+
+// За сколько дней до даты запись возвращается в недельную сетку. Ровно неделя
+// впереди — ещё рано: сетка про «эту неделю», а не про следующую.
+const EXAM_SCHEDULE_DAYS = 7;
+
+const SCHEDULE_EVENT_PREFIX = "sch-ev:";
+
+function weekdayKeyFromDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return null;
+  return DOW_TO_KEY[d.getDay()];
+}
+
+// Без даты запись видно всегда — иначе её негде было бы дозаполнить.
+function examVisibleInSchedule(entry) {
+  if (!entry.date) return true;
+  const left = daysUntilDate(entry.date);
+  return left >= 0 && left < EXAM_SCHEDULE_DAYS;
+}
+
+// Запись, до которой больше недели, тут же исчезает из сетки — без объяснения
+// это выглядит как потерянная работа.
+function examAddedNote(entry) {
+  const olympiad = entry.examKind === "olympiad";
+  const what = olympiad ? "Олимпиада" : "Экзамен";
+  const added = olympiad ? "добавлена" : "добавлен";
+  if (!entry.date) {
+    return `${what} ${added}. Впишите дату — запись сама встанет на нужный день недели.`;
+  }
+  const when = `${formatEventDate(entry.date)} (${WEEKDAY_LABELS[weekdayKeyFromDate(entry.date)]})`;
+  const left = daysUntilDate(entry.date);
+  if (left < 0) return `${what} ${added}: ${when} — эта дата уже прошла.`;
+  if (left >= EXAM_SCHEDULE_DAYS) {
+    return `${what} ${added}: ${when}. В расписании появится за неделю до даты, а отсчёт до неё уже идёт в событиях наверху.`;
+  }
+  return `${what} ${added}: ${when}.`;
+}
+
 function eventIcsItem(event) {
   const info = priorityInfo(event.priority);
   return {
     uid: event.id,
     title: `${info.mark} ${event.name}`,
     date: event.date,
+    description: event.description || "",
     alarmDaysBefore: EVENT_ALARM_DAYS[Number(event.priority)] || 1,
   };
 }
@@ -372,6 +429,15 @@ export default function StudyPlanner() {
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudOn, setCloudOn] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
+  // Токен подписки хранится вместе с остальными данными: он один на все устройства.
+  const [calendarToken, setCalendarToken] = useState("");
+  // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
+  const [devicePlatform] = useState(detectPlatform);
+  const [calendarPanel, setCalendarPanel] = useState(false);
+  const [calendarLinks, setCalendarLinks] = useState(null);
+  const [calendarMsg, setCalendarMsg] = useState("");
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const publishedIcs = useRef("");
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -398,6 +464,7 @@ export default function StudyPlanner() {
           if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
           if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
           if (parsed.showSunday) setShowSunday(parsed.showSunday);
+          if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
@@ -491,6 +558,7 @@ export default function StudyPlanner() {
           hiddenSubjects,
           subjectColors,
           showSunday,
+          calendarToken,
           lyceumSchedule,
           openSections,
           homework,
@@ -519,7 +587,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -539,14 +607,35 @@ export default function StudyPlanner() {
     return { perSubject, doneAll, totalAll, overallPct: totalAll ? Math.round((doneAll / totalAll) * 100) : 0 };
   }, [data]);
 
+  // Экзамены и олимпиады из расписания — те же события, только описанные в
+  // другом месте. Они не копируются в список событий, а строятся из записи на
+  // лету: правка в любом из двух мест меняет одну и ту же запись.
+  const scheduleEvents = useMemo(
+    () =>
+      lyceumSchedule
+        .filter((e) => e.kind === "exam" && e.date)
+        .map((e) => ({
+          id: SCHEDULE_EVENT_PREFIX + e.id,
+          name: e.subjectName || (e.examKind === "olympiad" ? "Олимпиада" : "Экзамен"),
+          date: e.date,
+          priority: Number(e.priority) || 3,
+          fromSchedule: true,
+          examKind: e.examKind === "olympiad" ? "olympiad" : "exam",
+          description: [e.place, e.start && e.end ? e.start + "–" + e.end : "", e.url].filter(Boolean).join(" · "),
+        })),
+    [lyceumSchedule]
+  );
+
+  const allEvents = useMemo(() => [...events, ...scheduleEvents], [events, scheduleEvents]);
+
   const upcomingEvents = useMemo(
-    () => events.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
-    [events]
+    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
+    [allEvents]
   );
 
   const pastEvents = useMemo(
-    () => events.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
-    [events]
+    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
+    [allEvents]
   );
 
   const nextEvent = upcomingEvents[0] || null;
@@ -863,7 +952,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, lyceumSchedule, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, openSections, homework },
       null,
       2
     );
@@ -891,6 +980,7 @@ export default function StudyPlanner() {
       if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
       if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
       if (parsed.showSunday) setShowSunday(parsed.showSunday);
+      if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
@@ -904,9 +994,62 @@ export default function StudyPlanner() {
     }
   }
 
-  function exportEventsToCalendar(list, name) {
-    if (!list.length) return;
-    saveIcs(name, buildIcs(list.map(eventIcsItem)));
+  // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
+  // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
+  const calendarIcs = useMemo(() => {
+    const items = allEvents.map(eventIcsItem);
+    homework.filter((h) => h.date).forEach((h) => items.push(homeworkIcsItem(h)));
+    return buildIcs(items, { name: "Ежедневник лицеиста", refreshHours: 1 });
+  }, [allEvents, homework]);
+
+  async function enableCalendarFeed() {
+    setCalendarBusy(true);
+    setCalendarMsg("");
+    const token = calendarToken || newFeedToken();
+    const res = await publishFeed(token, calendarIcs);
+    setCalendarBusy(false);
+    if (!res.ok) {
+      setCalendarMsg(res.error);
+      return;
+    }
+    publishedIcs.current = calendarIcs;
+    setCalendarToken(token);
+    setCalendarLinks(await feedUrls(token));
+    setCalendarMsg("Подписка готова.");
+  }
+
+  async function refreshCalendarFeed() {
+    if (!calendarToken) return;
+    setCalendarBusy(true);
+    const res = await publishFeed(calendarToken, calendarIcs);
+    setCalendarBusy(false);
+    publishedIcs.current = res.ok ? calendarIcs : publishedIcs.current;
+    setCalendarMsg(res.ok ? "Обновлено." : res.error);
+  }
+
+  // Файл подписки обновляется сам, когда меняется то, что в нём лежит: иначе
+  // календарь в телефоне показывал бы вчерашние даты.
+  useEffect(() => {
+    if (!loaded || !calendarToken || !cloudOn) return;
+    if (publishedIcs.current === calendarIcs) return;
+    const timer = setTimeout(async () => {
+      const res = await publishFeed(calendarToken, calendarIcs);
+      if (res.ok) publishedIcs.current = calendarIcs;
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [calendarIcs, calendarToken, cloudOn, loaded]);
+
+  useEffect(() => {
+    if (!calendarToken) return;
+    feedUrls(calendarToken).then((links) => setCalendarLinks(links));
+  }, [calendarToken, cloudOn]);
+
+  async function disableCalendarFeed() {
+    await removeFeed(calendarToken);
+    setCalendarToken("");
+    setCalendarLinks(null);
+    publishedIcs.current = "";
+    setCalendarMsg("Подписка отключена. В телефоне календарь придётся удалить вручную.");
   }
 
   function setNotebook(ownerKey, blocks) {
@@ -924,9 +1067,11 @@ export default function StudyPlanner() {
 
   const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
+  // Экзамен — не предмет: тетрадь и цвет ему ни к чему, он живёт только в расписании.
   const lyceumSubjectNames = useMemo(() => {
     const names = [];
     lyceumSchedule.forEach((e) => {
+      if (e.kind === "exam") return;
       if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
     });
     return names.sort((a, b) => a.localeCompare(b, "ru"));
@@ -940,12 +1085,37 @@ export default function StudyPlanner() {
     ]);
   }
 
+  // Событие из расписания правится там же, где живёт: в записи расписания.
+  // Название события — это название экзамена, дата — его дата.
   function updateEvent(id, patch) {
+    if (id.startsWith(SCHEDULE_EVENT_PREFIX)) {
+      const entryId = id.slice(SCHEDULE_EVENT_PREFIX.length);
+      const mapped = {};
+      if (patch.name !== undefined) mapped.subjectName = patch.name;
+      if (patch.date !== undefined) mapped.date = patch.date;
+      if (patch.priority !== undefined) mapped.priority = patch.priority;
+      updateScheduleEntry(entryId, mapped);
+      return;
+    }
     setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }
 
   function removeEvent(id) {
+    if (id.startsWith(SCHEDULE_EVENT_PREFIX)) {
+      removeScheduleEntry(id.slice(SCHEDULE_EVENT_PREFIX.length));
+      return;
+    }
+    const index = events.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const event = events[index];
     setEvents((prev) => prev.filter((e) => e.id !== id));
+    showUndo(`Вы удалили событие «${event.name || "без названия"}»`, () => {
+      setEvents((prev) => {
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, event);
+        return next;
+      });
+    });
   }
 
   function addSubject(name) {
@@ -1031,27 +1201,52 @@ export default function StudyPlanner() {
     );
   }
 
+  // День недели у экзамена не выбирают — его задаёт дата. Ошиблись днём при
+  // добавлении, вписали верную дату — запись переедет сама.
   function addScheduleEntry(day, entry) {
     if (!entry.subjectName || !entry.subjectName.trim()) return;
     const id = "sch-" + Date.now() + "-" + Math.round(Math.random() * 1000);
+    const isExam = entry.kind === "exam";
+    const dayByDate = isExam ? weekdayKeyFromDate(entry.date) : null;
+    const finalDay = dayByDate || day;
+    if (finalDay === "sun") setShowSunday(true);
     setLyceumSchedule((prev) => [
       ...prev,
       {
         id,
-        day,
+        day: finalDay,
+        kind: isExam ? "exam" : "lesson",
+        examKind: isExam ? (entry.examKind === "olympiad" ? "olympiad" : "exam") : undefined,
         subjectName: entry.subjectName.trim(),
         level: entry.level || "base",
-        priority: Number(entry.priority) || 1,
+        // Экзамен по умолчанию важнее урока: его и заводят ради даты.
+        priority: Number(entry.priority) || (entry.kind === "exam" ? 3 : 1),
         start: entry.start || "08:30",
         end: entry.end || "09:15",
         room: entry.room || "",
         teacher: entry.teacher || "",
+        place: entry.place || "",
+        url: entry.url || "",
+        date: entry.date || "",
       },
     ]);
   }
 
   function updateScheduleEntry(id, patch) {
-    setLyceumSchedule((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    setLyceumSchedule((prev) =>
+      prev.map((e) => {
+        if (e.id !== id) return e;
+        const next = { ...e, ...patch };
+        if (next.kind === "exam" && patch.date !== undefined) {
+          // Дата — единственный источник правды о дне недели для экзамена.
+          const day = weekdayKeyFromDate(patch.date);
+          if (day) next.day = day;
+        }
+        return next;
+      })
+    );
+    // Экзамен, переехавший на воскресенье, не должен пропасть вместе со скрытым днём.
+    if (patch.date !== undefined && weekdayKeyFromDate(patch.date) === "sun") setShowSunday(true);
   }
 
   function removeScheduleEntry(id) {
@@ -1059,7 +1254,8 @@ export default function StudyPlanner() {
     if (index === -1) return;
     const entry = lyceumSchedule[index];
     setLyceumSchedule((prev) => prev.filter((e) => e.id !== id));
-    showUndo(`Вы удалили урок «${entry.subjectName || "без названия"}» из расписания`, () => {
+    const what = entry.kind === "exam" ? examKindLabel(entry.examKind) : "урок";
+    showUndo(`Вы удалили ${what} «${entry.subjectName || "без названия"}» из расписания`, () => {
       setLyceumSchedule((prev) => {
         const next = [...prev];
         next.splice(Math.min(index, next.length), 0, entry);
@@ -1226,7 +1422,7 @@ export default function StudyPlanner() {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const names = [];
     activeSchedule
-      .filter((e) => e.day === dow)
+      .filter((e) => e.day === dow && e.kind !== "exam")
       .sort((a, b) => a.start.localeCompare(b.start))
       .forEach((e) => {
         if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
@@ -1244,7 +1440,7 @@ export default function StudyPlanner() {
     const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
     const map = {};
     activeSchedule
-      .filter((e) => e.day === dow && e.subjectName)
+      .filter((e) => e.day === dow && e.subjectName && e.kind !== "exam")
       .forEach((e) => {
         const current = map[e.subjectName];
         const priority = Number(e.priority) || 1;
@@ -1400,15 +1596,70 @@ export default function StudyPlanner() {
           <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
             {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
           </button>
-          {upcomingEvents.length > 0 && (
-            <button
-              onClick={() => exportEventsToCalendar(upcomingEvents, "События подготовки")}
-              style={styles.eventsToggle}
-            >
-              Все в календарь
-            </button>
-          )}
+          <button onClick={() => setCalendarPanel(!calendarPanel)} style={styles.eventsToggle}>
+            {calendarPanel ? "Скрыть календарь" : "Календарь телефона"}
+          </button>
         </div>
+
+        <Collapsible open={calendarPanel}>
+          <div style={styles.calendarPanel}>
+            <div style={styles.calendarTitle}>Календарь телефона</div>
+            {!cloudOn ? (
+              <p style={styles.muted}>
+                Подписка живёт в облаке — войдите в аккаунт по ссылке в самом верху страницы, и она появится здесь.
+              </p>
+            ) : !calendarToken ? (
+              <>
+                <p style={styles.muted}>
+                  В телефоне появится отдельный календарь «Ежедневник лицеиста»: события, экзамены из расписания и
+                  домашние задания со сроками. Он обновляется сам — поменяли дату здесь, она поменяется и там.
+                </p>
+                <button onClick={enableCalendarFeed} style={styles.addBtnSmall} disabled={calendarBusy}>
+                  {calendarBusy ? "Включаю…" : "Включить подписку"}
+                </button>
+              </>
+            ) : (
+              <>
+                <CalendarHowTo platform={devicePlatform} styles={styles} />
+                <p style={styles.mutedSmall}>
+                  Ссылку никому не давайте: по ней видно всё, что вы внесли в события и задания.
+                </p>
+                <div style={styles.calendarRow}>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard
+                        .writeText(calendarLinks ? calendarLinks.https : "")
+                        .then(() => setCalendarMsg("Ссылка скопирована."))
+                        .catch(() => setCalendarMsg("Скопируйте ссылку из поля ниже вручную."));
+                    }}
+                    style={devicePlatform === "android" ? styles.addBtnSmall : styles.secondaryBtnSmall}
+                  >
+                    Скопировать ссылку
+                  </button>
+                  <a
+                    href={calendarLinks ? calendarLinks.webcal : "#"}
+                    style={devicePlatform === "android" ? styles.subscribeLinkSecondary : styles.subscribeLink}
+                  >
+                    Подписаться
+                  </a>
+                  <button onClick={refreshCalendarFeed} style={styles.secondaryBtnSmall} disabled={calendarBusy}>
+                    {calendarBusy ? "…" : "Обновить"}
+                  </button>
+                  <button onClick={disableCalendarFeed} style={styles.linkBtnSmall}>
+                    Отключить
+                  </button>
+                </div>
+                <input
+                  readOnly
+                  value={calendarLinks ? calendarLinks.https : ""}
+                  onFocus={(e) => e.target.select()}
+                  style={styles.calendarLinkInput}
+                />
+              </>
+            )}
+            {calendarMsg && <div style={styles.calendarMsg}>{calendarMsg}</div>}
+          </div>
+        </Collapsible>
         <Collapsible open={openSections.events}>
           <EventsEditor
             upcoming={upcomingEvents}
@@ -1417,7 +1668,6 @@ export default function StudyPlanner() {
             onAdd={addEvent}
             onUpdate={updateEvent}
             onRemove={removeEvent}
-            onExport={(e) => exportEventsToCalendar([e], e.name)}
           />
         </Collapsible>
       </section>
@@ -1770,7 +2020,9 @@ export default function StudyPlanner() {
               key={day}
               day={day}
               label={WEEKDAY_LABELS[day]}
-              entries={lyceumSchedule.filter((e) => e.day === day).sort((a, b) => a.start.localeCompare(b.start))}
+              entries={lyceumSchedule
+                .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
+                .sort((a, b) => a.start.localeCompare(b.start))}
               onAdd={(entry) => addScheduleEntry(day, entry)}
               onUpdate={updateScheduleEntry}
               onRemove={removeScheduleEntry}
@@ -1927,8 +2179,7 @@ export default function StudyPlanner() {
                         onOpenAttachment={openAttachment}
                         onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                         onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                        onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
-                      />
+                            />
                     ))}
                     <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
                   </div>
@@ -1948,7 +2199,6 @@ export default function StudyPlanner() {
                   onOpenAttachment={openAttachment}
                   onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                   onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                  onExport={() => saveIcs(h.text, buildIcs([homeworkIcsItem(h)]))}
                 />
               ))}
               <HomeworkAddForm
@@ -2009,6 +2259,20 @@ export default function StudyPlanner() {
         </Collapsible>
       </section>
 
+      <div style={styles.syncRow}>
+        <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
+          {syncing ? "Обновление…" : "Обновить сейчас"}
+        </button>
+        <span style={styles.mutedSmall}>
+          {lastSyncedAt
+            ? `Синхронизировано в ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
+            : "Ещё не синхронизировано"}
+          {syncDebug ? ` — ${syncDebug}` : ""}
+        </span>
+        {cloudPending && (
+          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
+        )}
+      </div>
       {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
           занимает место, поэтому сворачивается в одну строку. */}
       {cloudOn && !saveErr && !cloudPending && !showBackup ? (
@@ -2059,20 +2323,13 @@ export default function StudyPlanner() {
       </section>
       )}
 
-      <div style={styles.syncRow}>
-        <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
-          {syncing ? "Обновление…" : "Обновить сейчас"}
-        </button>
-        <span style={styles.mutedSmall}>
-          {lastSyncedAt
-            ? `Синхронизировано в ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
-            : "Ещё не синхронизировано"}
-          {syncDebug ? ` — ${syncDebug}` : ""}
-        </span>
-        {cloudPending && (
-          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
-        )}
+      <div style={styles.versionRow}>
+        Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
+        {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
+        {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
       </div>
+      <ReleaseNotes />
+
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
           {undoQueue.map((item) => (
@@ -2131,7 +2388,7 @@ function PriorityPicker({ value, onChange }) {
   );
 }
 
-function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, onExport }) {
+function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState(todayStr());
   const [priority, setPriority] = useState(2);
@@ -2146,17 +2403,18 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, 
   function row(e, isPast) {
     return (
       <div key={e.id} style={{ ...styles.eventEditRow, opacity: isPast ? 0.55 : 1 }}>
-        <input value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
+        <AutoGrow value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
         <input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} style={styles.eventDateInput} />
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
+        {/* Одна и та же запись: правка здесь меняет её и в расписании. */}
+        {e.fromSchedule && <span style={styles.fromScheduleBadge}>{examKindLabel(e.examKind)} из расписания</span>}
         {e.id === mainEventId && <span style={styles.mainBadge}>по нему считается план</span>}
         {isPast && <span style={styles.mutedSmall}>прошло</span>}
-        {!isPast && (
-          <button onClick={() => onExport(e)} style={styles.calendarBtn} title="Добавить в календарь телефона">
-            📅
-          </button>
-        )}
-        <button onClick={() => onRemove(e.id)} style={styles.removeBtn} title="Удалить событие">
+        <button
+          onClick={() => onRemove(e.id)}
+          style={styles.removeBtn}
+          title={e.fromSchedule ? "Удалить из расписания и событий" : "Удалить событие"}
+        >
           ×
         </button>
       </div>
@@ -2166,14 +2424,10 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, 
   return (
     <div style={styles.eventsEditor}>
       <p style={styles.muted}>
-        Кнопка 📅 отдаёт событие календарю телефона — напоминание придёт даже при закрытом приложении: за неделю до
-        «{EVENT_PRIORITIES[2].mark}», за три дня до «{EVENT_PRIORITIES[1].mark}», за день до «
-        {EVENT_PRIORITIES[0].mark}».
-      </p>
-      <p style={styles.muted}>
         Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
         план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
-        приоритет одинаковый, берётся ближайшее.
+        приоритет одинаковый, берётся ближайшее. Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
+        это одна и та же запись, и править её можно с любой стороны.
       </p>
 
       {upcoming.map((e) => row(e, false))}
@@ -2181,11 +2435,11 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove, 
       {past.map((e) => row(e, true))}
 
       <div style={styles.eventAddRow}>
-        <input
+        <AutoGrow
           placeholder="Например: региональный этап ВсОШ"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onEnter={submit}
           style={styles.eventNameInput}
         />
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.eventDateInput} />
@@ -2431,9 +2685,37 @@ function AddSubjectForm({ onAdd, placeholder }) {
 }
 
 function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
+  const [examOpen, setExamOpen] = useState(false);
+  const [examNote, setExamNote] = useState("");
+
+  useEffect(() => {
+    if (!examNote) return;
+    const timer = setTimeout(() => setExamNote(""), 12000);
+    return () => clearTimeout(timer);
+  }, [examNote]);
+
   return (
     <div style={styles.scheduleDayBlock}>
-      <div style={styles.scheduleDayHeader}>{label}</div>
+      <div style={styles.scheduleDayTop}>
+        <div style={styles.scheduleDayHeader}>{label}</div>
+        <button onClick={() => setExamOpen(!examOpen)} style={styles.examToggle}>
+          {examOpen ? "Скрыть" : "+ Экзамен или олимпиада"}
+        </button>
+      </div>
+
+      <Collapsible open={examOpen}>
+        <AddExamForm
+          onAdd={(entry) => {
+            onAdd({ ...entry, kind: "exam" });
+            setExamOpen(false);
+            setExamNote(examAddedNote(entry));
+          }}
+        />
+      </Collapsible>
+      <Collapsible open={!!examNote}>
+        <div style={styles.examNote}>{examNote}</div>
+      </Collapsible>
+
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
       {entries.map((e) => (
         <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} />
@@ -2443,19 +2725,114 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   );
 }
 
+// Экзамен или олимпиада — разные вещи, и в расписании это видно сразу.
+function ExamKindPicker({ value, onChange }) {
+  const current = value === "olympiad" ? "olympiad" : "exam";
+  return (
+    <div style={styles.examKindPicker}>
+      {EXAM_KINDS.map((k) => (
+        <button
+          key={k.value}
+          onClick={() => onChange(k.value)}
+          style={k.value === current ? styles.examKindOn : styles.examKindOff}
+        >
+          {k.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Экзамен живёт в том же расписании, но описывается иначе: важно не «кабинет и
+// преподаватель», а место проведения и ссылка на регистрацию или задания.
+function AddExamForm({ onAdd }) {
+  const [subjectName, setSubjectName] = useState("");
+  const [examKind, setExamKind] = useState("exam");
+  const [date, setDate] = useState("");
+  const [start, setStart] = useState("10:00");
+  const [end, setEnd] = useState("13:00");
+  const [place, setPlace] = useState("");
+  const [url, setUrl] = useState("");
+
+  function submit() {
+    if (!subjectName.trim()) return;
+    onAdd({ subjectName, examKind, date, start, end, place, url });
+    setSubjectName("");
+    setPlace("");
+    setUrl("");
+    setDate("");
+  }
+
+  return (
+    <div style={styles.examForm}>
+      <ExamKindPicker value={examKind} onChange={setExamKind} />
+      <AutoGrow
+        placeholder="Например: региональный этап по праву"
+        value={subjectName}
+        onChange={(e) => setSubjectName(e.target.value)}
+        onEnter={submit}
+        style={styles.scheduleSubjectInput}
+      />
+      <div style={styles.scheduleTimeRow}>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.scheduleSelect} title="Дата" />
+      </div>
+      <div style={styles.mutedSmall}>
+        День недели берётся из даты, так что ошибиться днём нельзя. В расписании запись появится за неделю до даты,
+        отсчёт до неё — сразу в событиях наверху.
+      </div>
+      <div style={styles.scheduleTimeRow}>
+        <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
+        <span style={styles.mutedSmall}>–</span>
+        <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={styles.scheduleTimeInput} />
+      </div>
+      <AutoGrow
+        placeholder="Место проведения"
+        value={place}
+        onChange={(e) => setPlace(e.target.value)}
+        onEnter={submit}
+        style={styles.scheduleRoomInput}
+      />
+      <input
+        type="url"
+        placeholder="Ссылка: регистрация, задания"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        style={styles.scheduleRoomInput}
+      />
+      <button onClick={submit} style={styles.addBtnSmall} disabled={!subjectName.trim()}>
+        + Добавить
+      </button>
+    </div>
+  );
+}
+
 function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
+  const isExam = entry.kind === "exam";
+
   return (
     <div
       style={{
         ...styles.scheduleEntry,
         borderLeftColor: priorityInfo(entry.priority).strong,
         background: priorityInfo(entry.priority).tint,
+        ...(isExam ? styles.scheduleExam : null),
       }}
     >
+      {isExam && (
+        <div style={styles.examRow}>
+          <ExamKindPicker value={entry.examKind} onChange={(v) => onUpdate(entry.id, { examKind: v })} />
+          <input
+            type="date"
+            value={entry.date || ""}
+            onChange={(e) => onUpdate(entry.id, { date: e.target.value })}
+            style={styles.examDateInput}
+            title="Дата — по ней же считается день недели"
+          />
+        </div>
+      )}
       <div style={styles.scheduleSubjectRow}>
-        <input
-          type="text"
-          placeholder="Предмет"
+        <AutoGrow
+          placeholder={isExam ? "Название" : "Предмет"}
           value={entry.subjectName}
           onChange={(e) => onUpdate(entry.id, { subjectName: e.target.value })}
           style={styles.scheduleSubjectInput}
@@ -2467,32 +2844,57 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
         <span style={styles.mutedSmall}>–</span>
         <input type="time" value={entry.end} onChange={(e) => onUpdate(entry.id, { end: e.target.value })} style={styles.scheduleTimeInput} />
       </div>
-      <input
-        type="text"
-        placeholder="Кабинет"
-        value={entry.room}
-        onChange={(e) => onUpdate(entry.id, { room: e.target.value })}
-        style={styles.scheduleRoomInput}
-      />
-      <input
-        type="text"
-        placeholder="Преподаватель"
-        value={entry.teacher}
-        onChange={(e) => onUpdate(entry.id, { teacher: e.target.value })}
-        style={styles.scheduleTeacherInput}
-      />
-      <select
-        value={entry.level || "base"}
-        onChange={(e) => onUpdate(entry.id, { level: e.target.value })}
-        style={{ ...styles.scheduleSelect, color: levelInfo(entry.level).color, fontWeight: 600 }}
-        title="Насколько важен этот урок"
-      >
-        {LESSON_LEVELS.map((l) => (
-          <option key={l.value} value={l.value}>
-            {l.label}
-          </option>
-        ))}
-      </select>
+      {isExam ? (
+        <>
+          <AutoGrow
+            placeholder="Место проведения"
+            value={entry.place || ""}
+            onChange={(e) => onUpdate(entry.id, { place: e.target.value })}
+            style={styles.scheduleRoomInput}
+          />
+          <input
+            type="url"
+            placeholder="Ссылка: регистрация, задания"
+            value={entry.url || ""}
+            onChange={(e) => onUpdate(entry.id, { url: e.target.value })}
+            style={styles.scheduleRoomInput}
+          />
+          {entry.url && (
+            <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
+              Открыть ссылку
+            </a>
+          )}
+        </>
+      ) : (
+        <>
+          <input
+            type="text"
+            placeholder="Кабинет"
+            value={entry.room}
+            onChange={(e) => onUpdate(entry.id, { room: e.target.value })}
+            style={styles.scheduleRoomInput}
+          />
+          <input
+            type="text"
+            placeholder="Преподаватель"
+            value={entry.teacher}
+            onChange={(e) => onUpdate(entry.id, { teacher: e.target.value })}
+            style={styles.scheduleTeacherInput}
+          />
+          <select
+            value={entry.level || "base"}
+            onChange={(e) => onUpdate(entry.id, { level: e.target.value })}
+            style={{ ...styles.scheduleSelect, color: levelInfo(entry.level).color, fontWeight: 600 }}
+            title="Тип урока"
+          >
+            {LESSON_LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       <button onClick={onRemove} style={styles.removeBtn}>
         ×
       </button>
@@ -2520,12 +2922,11 @@ function AddScheduleForm({ onAdd }) {
   return (
     <div style={styles.addScheduleRow}>
       <div style={styles.scheduleSubjectRow}>
-        <input
-          type="text"
+        <AutoGrow
           placeholder="Предмет"
           value={subjectName}
           onChange={(e) => setSubjectName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onEnter={submit}
           style={styles.scheduleSubjectInput}
         />
         <PriorityPicker value={priority} onChange={setPriority} />
@@ -2592,7 +2993,7 @@ function HomeworkAddForm({ onAdd, placeholder }) {
   );
 }
 
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onExport }) {
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
   const fileInputRef = useRef(null);
   const reminderMode = hw.reminderDays === "always" ? "always" : !hw.reminderDays || hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -2603,9 +3004,6 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
         <input type="checkbox" checked={!!hw.done} onChange={onToggleDone} />
         <span style={hw.done ? { ...styles.homeworkText, ...styles.topicDone } : styles.homeworkText}>{hw.text}</span>
         {hw.minutes > 0 && <span style={styles.mutedSmall}>{hw.minutes} мин</span>}
-        <button onClick={onExport} style={styles.attachBtn} title="Добавить срок в календарь телефона">
-          📅
-        </button>
         <button onClick={() => fileInputRef.current?.click()} style={styles.attachBtn} title="Прикрепить файл">
           📎
         </button>
@@ -2725,6 +3123,60 @@ const styles = {
   eventName: { fontWeight: 600 },
   eventDate: { color: "#6B6656", fontSize: 12.5 },
   eventLeft: { color: "#8A8370", fontSize: 12.5, marginLeft: "auto" },
+  calendarPanel: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 8 },
+  calendarTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 15, marginBottom: 8 },
+  calendarRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 },
+  calendarLinkInput: {
+    width: "100%",
+    padding: "5px 8px",
+    border: "1px solid #C9C1AC",
+    borderRadius: 4,
+    fontSize: 11.5,
+    background: "#fff",
+    color: "#5A5347",
+  },
+  calendarMsg: { fontSize: 12, color: "#3F6E52", marginTop: 8 },
+  calendarSteps: { margin: "0 0 8px", paddingLeft: 20, fontSize: 12.5, color: "#5A5347", lineHeight: 1.6 },
+  // Ссылка webcal: выглядит и ведёт себя как кнопка рядом с соседями.
+  subscribeLink: {
+    display: "inline-block",
+    border: "none",
+    color: "#fff",
+    background: "#2B2822",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    textDecoration: "none",
+  },
+  subscribeLinkSecondary: {
+    display: "inline-block",
+    border: "1px solid #C9C1AC",
+    background: "#fff",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#2B2822",
+    textDecoration: "none",
+  },
+  secondaryBtnSmall: {
+    border: "1px solid #C9C1AC",
+    background: "#fff",
+    borderRadius: 4,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#2B2822",
+  },
+  linkBtnSmall: {
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 12,
+    color: "#8B4A4A",
+    textDecoration: "underline",
+  },
   eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
   calendarBtn: { background: "none", border: "none", padding: "0 2px", fontSize: 14, lineHeight: 1 },
   eventsToggle: {
@@ -2738,7 +3190,7 @@ const styles = {
     textDecoration: "underline",
   },
   eventsEditor: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 4 },
-  eventEditRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 },
+  eventEditRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap", marginBottom: 8 },
   eventAddRow: {
     display: "flex",
     alignItems: "center",
@@ -2827,6 +3279,7 @@ const styles = {
     marginLeft: 6,
     verticalAlign: "middle",
   },
+  fromScheduleBadge: { fontSize: 10.5, color: "#8B4A4A", border: "1px solid #E0B9B4", borderRadius: 4, padding: "1px 6px" },
   mainBadge: { fontSize: 11, color: "#3F6E52", fontWeight: 600 },
   pastLabel: { fontSize: 11.5, color: "#8A8370", margin: "10px 0 6px" },
   overallBar: { marginBottom: 24 },
@@ -2891,7 +3344,64 @@ const styles = {
     padding: "6px 8px",
     marginBottom: 8,
   },
-  scheduleSubjectRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  scheduleDayTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  examToggle: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "#8C7326",
+    fontWeight: 600,
+    textDecoration: "underline",
+  },
+  examForm: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: "8px 8px 10px",
+    marginBottom: 8,
+    border: "1px dashed #C08A1E",
+    borderRadius: 5,
+    background: "#FBF6E8",
+  },
+  // Экзамен выделяется рамкой: цвет заливки уже занят под важность. Границы заданы
+  // по сторонам, иначе сокращённое `border` сбрасывало бы толстую полосу слева.
+  scheduleExam: {
+    borderTop: "1px solid #B23A3A",
+    borderRight: "1px solid #B23A3A",
+    borderBottom: "1px solid #B23A3A",
+    borderLeftColor: "#B23A3A",
+  },
+  examRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 },
+  examNote: { fontSize: 11.5, color: "#3F6E52", lineHeight: 1.5, marginTop: 6 },
+  examKindPicker: { display: "flex", gap: 4 },
+  examKindOn: {
+    border: "1px solid #B23A3A",
+    background: "#B23A3A",
+    color: "#fff",
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  examKindOff: {
+    // Невыбранное — серое: иначе два значка рядом читаются как две пометки сразу.
+    border: "1px solid #DCD5C4",
+    background: "#FBF9F4",
+    color: "#8A8370",
+    borderRadius: 4,
+    padding: "2px 8px",
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  examDateInput: { padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
+  examLink: { fontSize: 12, color: "#2F4E70" },
+  // Название переносится на несколько строк, значки важности остаются у первой.
+  scheduleSubjectRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" },
   priorityLegend: { fontSize: 11.5, color: "#6B6656", lineHeight: 1.5, marginBottom: 10 },
   scheduleSelect: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", width: "100%" },
   scheduleSubjectInput: {
@@ -3050,6 +3560,7 @@ const styles = {
   saveErr: { fontSize: 12, color: "#8B4A4A", marginTop: 10, lineHeight: 1.6 },
   backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
   pendingBadge: { fontSize: 11.5, color: "#8C7326", fontWeight: 600 },
+  versionRow: { fontSize: 11, color: "#A39B86", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid #DCD5C4" },
   syncBtn: {
     border: "1px solid #C9C1AC",

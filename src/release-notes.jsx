@@ -1,0 +1,97 @@
+import React, { useState } from "react";
+import Collapsible from "./collapsible.jsx";
+
+// Коротко о том, что менялось. Подробная история — в CHANGELOG.md репозитория;
+// здесь по несколько строк на версию, чтобы можно было понять, что нового,
+// не уходя с сайта. Раздел нарочно мельче остальных: он для справки, а не для работы.
+const RELEASES = [
+  {
+    v: "0.4.0",
+    date: "11 сентября",
+    items: [
+      "Экзамены и олимпиады в расписании: время, место, ссылка, выбор одного из двух.",
+      "Экзамен из расписания сам становится событием с отсчётом наверху.",
+      "День недели у экзамена берётся из даты, в сетке он виден за неделю до неё.",
+      "Календарь телефона одной подпиской — события, экзамены и задания обновляются сами.",
+      "Инструкция к подписке своя для iPhone, Android и компьютера.",
+      "Резервная копия — под кнопкой обновления; внизу номер версии и эта история.",
+    ],
+  },
+  {
+    v: "0.3.0",
+    date: "11 сентября",
+    items: [
+      "Правки с двух устройств больше не затирают друг друга.",
+      "Сделанное без сети уходит в облако, как только она появится.",
+      "Название «Ежедневник лицеиста» и описание в шапке.",
+    ],
+  },
+  {
+    v: "0.2.0",
+    date: "10 сентября",
+    items: [
+      "События с приоритетами вместо единственной даты.",
+      "Тетради: блоки, ветки, конспекты с форматированием и файлами.",
+      "Лицей: предметы отдельно от расписания, роли уроков, важность значками.",
+      "Дела без привязки к уроку, график часов, свои цвета предметов.",
+      "Удаление чего угодно с отменой в течение двадцати секунд.",
+    ],
+  },
+  {
+    v: "0.1.0",
+    date: "10 сентября",
+    items: [
+      "Переезд из чата в самостоятельное приложение с установкой на телефон.",
+      "Хранение в облаке вместо памяти браузера, работа без сети.",
+    ],
+  },
+];
+
+const styles = {
+  wrap: { marginTop: 6, textAlign: "center" },
+  toggle: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 11,
+    color: "#8A8370",
+    textDecoration: "underline",
+  },
+  panel: {
+    maxWidth: 520,
+    margin: "8px auto 0",
+    textAlign: "left",
+    borderTop: "1px solid #E4DED0",
+    paddingTop: 8,
+  },
+  release: { marginBottom: 8 },
+  head: { fontSize: 11, fontWeight: 600, color: "#6E6857" },
+  list: { margin: "2px 0 0", paddingLeft: 16, fontSize: 11, lineHeight: 1.5, color: "#8A8370" },
+};
+
+export default function ReleaseNotes() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={styles.wrap}>
+      <button onClick={() => setOpen(!open)} style={styles.toggle}>
+        {open ? "скрыть историю изменений" : "история изменений"}
+      </button>
+      <Collapsible open={open}>
+        <div style={styles.panel}>
+          {RELEASES.map((r) => (
+            <div key={r.v} style={styles.release}>
+              <div style={styles.head}>
+                {r.v} · {r.date}
+              </div>
+              <ul style={styles.list}>
+                {r.items.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Collapsible>
+    </div>
+  );
+}

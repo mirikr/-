@@ -1,33 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { isStandalone, isIOS, isHandheld, isDesktopSafari } from "./device.js";
 
 const HIDDEN_KEY = "planner-install-hint-hidden";
-
-function isStandalone() {
-  if (typeof window === "undefined") return false;
-  return (
-    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
-    window.navigator.standalone === true
-  );
-}
-
-function isIOS() {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  // На iPadOS Safari прикидывается макбуком, поэтому смотрим ещё и на касания.
-  return /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
-}
-
-function isHandheld() {
-  if (typeof window === "undefined") return false;
-  return (window.matchMedia && window.matchMedia("(max-width: 820px)").matches) || navigator.maxTouchPoints > 0;
-}
-
-// Safari на маке ставит приложение в Dock, но про beforeinstallprompt не знает.
-function isDesktopSafari() {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  return /safari/i.test(ua) && !/chrome|chromium|edg\//i.test(ua);
-}
 
 // Кнопка установки и окно с инструкцией — своей для каждого случая: телефон или
 // компьютер, Safari, Chrome или встроенное окно установки. Приложение с иконки

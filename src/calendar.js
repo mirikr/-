@@ -1,4 +1,4 @@
-// Выгрузка дедлайнов в календарь телефона файлом .ics.
+// Сборка календаря .ics для подписки (публикует её src/calendar-feed.js).
 //
 // Это замена push-уведомлениям: напоминает сам Календарь, штатно и даже когда
 // приложение закрыто. Никакого сервера для этого не нужно.
@@ -48,14 +48,25 @@ function fold(line) {
 }
 
 // items: [{ uid, title, date: "YYYY-MM-DD", description, alarmDaysBefore }]
-export function buildIcs(items) {
+// options.name — имя календаря в телефоне; options.refreshHours — как часто
+// подписка просит перечитать файл.
+export function buildIcs(items, options = {}) {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Ежедневник обществоведа//RU",
+    "PRODID:-//Ежедневник лицеиста//RU",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
   ];
+
+  if (options.name) {
+    lines.push(fold(`X-WR-CALNAME:${escapeText(options.name)}`));
+  }
+  if (options.refreshHours) {
+    // Две записи об одном и том же: первую понимает Apple, вторую — остальные.
+    lines.push(`REFRESH-INTERVAL;VALUE=DURATION:PT${options.refreshHours}H`);
+    lines.push(`X-PUBLISHED-TTL:PT${options.refreshHours}H`);
+  }
 
   items.forEach((item) => {
     if (!item.date) return;
@@ -80,45 +91,4 @@ export function buildIcs(items) {
 
   lines.push("END:VCALENDAR");
   return lines.join("\r\n") + "\r\n";
-}
-
-function safeFileName(name) {
-  return (
-    String(name || "события")
-      .replace(/[^\wА-Яа-яЁё\- ]+/g, "")
-      .trim()
-      .slice(0, 40)
-      .replace(/\s+/g, "-") || "события"
-  );
-}
-
-// На iPhone файл уходит в «Поделиться» — оттуда его принимает Календарь.
-// Там, где такого нет, просто скачивается.
-export async function saveIcs(name, ics) {
-  const fileName = safeFileName(name) + ".ics";
-  const file = new File([ics], fileName, { type: "text/calendar" });
-
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: name });
-      return { ok: true, shared: true };
-    } catch (e) {
-      if (e && e.name === "AbortError") return { ok: true, shared: false };
-      // Поделиться не вышло — уходим на обычное скачивание.
-    }
-  }
-
-  try {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-    return { ok: true, shared: false };
-  } catch (e) {
-    return { ok: false, error: (e && e.message) || "не удалось сохранить файл" };
-  }
 }

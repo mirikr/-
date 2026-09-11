@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
@@ -6,8 +7,16 @@ import { VitePWA } from "vite-plugin-pwa";
 // so the base is passed in by whoever builds it (see .github/workflows/deploy.yml).
 const base = process.env.BASE_PATH || "/";
 
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+
 export default defineConfig({
   base,
+  // Версия и дата сборки видны в подвале приложения: иначе «залилось или нет»
+  // проверяется только на глаз.
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     VitePWA({
