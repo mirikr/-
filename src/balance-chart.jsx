@@ -76,6 +76,10 @@ export default function BalanceChart({ items }) {
                   aria-label={s.name}
                   style={{ animationDelay: (0.05 + i * 0.06).toFixed(2) + "s", cursor: "pointer", outline: "none" }}
                   onMouseEnter={() => setActive(s.id)}
+                  // Уход с точки должен закрывать разбор. Одного onMouseLeave на
+                  // всём графике мало: увёл курсор на пустое поле рядом — и окно
+                  // висело, пока не выйдешь за рамку графика целиком.
+                  onMouseLeave={() => setActive(null)}
                   onFocus={() => setActive(s.id)}
                   onBlur={() => setActive(null)}
                   // На телефоне навести нечем, поэтому касание работает как наведение.
@@ -186,7 +190,14 @@ const styles = {
     gap: 8,
     fontSize: 12.5,
     width: "100%",
-    border: "1px solid transparent",
+    // Рамка и фон заданы по отдельным свойствам, а не сокращением `border`:
+    // подсветка меняет только цвет, и React, снимая её, возвращал сокращение
+    // целиком — у кнопки проступала белая рамка по умолчанию, которая так и
+    // оставалась на каждой строке, где побывал курсор.
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "transparent",
+    background: "transparent",
     borderRadius: 8,
     padding: "3px 6px",
     textAlign: "left",
