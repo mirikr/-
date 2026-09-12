@@ -7,6 +7,9 @@ const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const cloudConfigured = Boolean(URL && ANON_KEY);
 
+// Сколько ждать восстановления сессии, прежде чем открыть локальную копию.
+const AUTH_WAIT_MS = 6000;
+
 let client = null;
 let sessionReady = null;
 let session = null;
@@ -18,10 +21,20 @@ export function supabase() {
     client = createClient(URL, ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
     });
-    sessionReady = client.auth.getSession().then(({ data }) => {
-      session = data.session || null;
-      return session;
-    });
+    // Без сети getSession() уходит обновлять протухший токен и либо отваливается
+    // ошибкой, либо висит. Ни то ни другое не должно доходить до чтения данных:
+    // локальная копия важнее облачной, и ждать её незачем. Сессия всё равно
+    // подхватится позже — через onAuthStateChange.
+    sessionReady = Promise.race([
+      client.auth
+        .getSession()
+        .then(({ data }) => {
+          session = data.session || null;
+          return session;
+        })
+        .catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), AUTH_WAIT_MS)),
+    ]);
     client.auth.onAuthStateChange((_event, next) => {
       session = next || null;
       listeners.forEach((fn) => fn(session));
@@ -34,7 +47,11 @@ export function supabase() {
 // for it a signed-in person would silently be served the local copy instead of the cloud one.
 export async function authReady() {
   if (!supabase()) return null;
-  await sessionReady;
+  try {
+    await sessionReady;
+  } catch (e) {
+    // Сессии нет — значит работаем с локальной копией, а не падаем.
+  }
   return session;
 }
 

@@ -1,14 +1,14 @@
 {
   "name": "study-planner",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.6.0",
   "type": "module",
   "description": "Ежедневник обществоведа — планировщик подготовки к экзамену и олимпиаде",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/merge.test.mjs && node tests/calendar.test.mjs",
+    "test": "node tests/merge.test.mjs && node tests/calendar.test.mjs && node tests/schedule.test.mjs",
     "check:render": "node scripts/check-render.mjs"
   },
   "dependencies": {
