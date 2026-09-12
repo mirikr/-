@@ -41,6 +41,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
+        // Снимки прошлых версий — это пара мегабайт ради одного окна истории:
+        // в офлайн-кэш они не нужны, подгрузятся, когда откроют сравнение.
+        globIgnores: ["**/versions/*.png"],
         // The planner must open with no network at all; Supabase calls are never cached,
         // they either reach the server or fall back to the local copy in storage.js.
         navigateFallback: base + "index.html",

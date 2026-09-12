@@ -9,11 +9,21 @@ const SCALES = [
   { value: "years", label: "Годы" },
 ];
 
-const BAR = "#8C7326";
-const TARGET = "#9B8B6A";
-const AXIS = "#C9C1AC";
-const INK = "#5A5347";
-const MUTED = "#8A8370";
+const BAR = "var(--accent)";
+const BAR_DONE = "var(--green)";
+const BAR_DIM = "var(--barDim)";
+
+// Цвет столбца — сразу ответ на вопрос «добрал ли я в этот день до цели»:
+// зелёный — да, приглушённый — день почти пустой, остальное — рабочий цвет.
+function barColor(hours, goal) {
+  if (goal > 0 && hours >= goal) return BAR_DONE;
+  if (goal > 0 && hours <= goal * 0.08) return BAR_DIM;
+  return hours > 0 ? BAR : BAR_DIM;
+}
+const TARGET = "var(--mute)";
+const AXIS = "var(--line)";
+const INK = "var(--ink2)";
+const MUTED = "var(--mute)";
 
 // Деления оси — «круглые» значения: 0,5 ч, 1 ч, 5 ч. Шаг подбирается так, чтобы
 // делений было три-четыре, иначе подписи налезают друг на друга.
@@ -192,10 +202,16 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   const ticks = scaleInfo.ticks;
   const activeBucket = active === null ? null : buckets[active];
 
+  // Коридор цели: у дней цель своя, но в пределах недели она обычно одна и та же,
+  // поэтому полоса рисуется по середине целей периода, а штрих у столбца остаётся
+  // там, где его собственная цель от неё заметно отличается.
+  const goals = buckets.map((b) => b.goal).filter((g) => g > 0).sort((a, b) => a - b);
+  const medianGoal = goals.length ? goals[Math.floor(goals.length / 2)] : 0;
+
   return (
     <div style={styles.wrap}>
       <div style={styles.head}>
-        <div style={styles.title}>Часы занятий по дневнику</div>
+        <div style={styles.title}>{scale === "days" ? "Последние 30 дней" : scale === "months" ? "Последние 12 месяцев" : "По годам"}</div>
         <div style={styles.scaleRow}>
           {SCALES.map((s) => {
             const on = s.value === scale;
@@ -208,9 +224,9 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
                 }}
                 style={{
                   ...styles.scaleBtn,
-                  color: on ? "#fff" : INK,
-                  background: on ? "#2B2822" : "#fff",
-                  borderColor: on ? "#2B2822" : AXIS,
+                  color: on ? "var(--btnInk)" : INK,
+                  background: on ? "var(--btnBg)" : "var(--panel2)",
+                  borderColor: on ? "var(--btnBg)" : AXIS,
                 }}
               >
                 {s.label}
@@ -237,6 +253,21 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
               </g>
             ))}
 
+            {medianGoal > 0 && medianGoal <= maxValue && (
+              <>
+                <rect x={left} y={yOf(medianGoal)} width={plotW} height={top + plotH - yOf(medianGoal)} fill="var(--corridor)" />
+                <line
+                  x1={left}
+                  y1={yOf(medianGoal)}
+                  x2={W - right}
+                  y2={yOf(medianGoal)}
+                  stroke="var(--corridorLine)"
+                  strokeWidth="1"
+                  strokeDasharray="4 3"
+                />
+              </>
+            )}
+
             {buckets.map((b, i) => {
               const x = left + i * step + (step - barW) / 2;
               const y = yOf(b.hours);
@@ -250,11 +281,13 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
                       d={`M${x},${top + plotH} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + barW - r},${y} Q${
                         x + barW
                       },${y} ${x + barW},${y + r} L${x + barW},${top + plotH} Z`}
-                      fill={BAR}
+                      className="ap-bar-svg"
+                      style={{ animationDelay: (i * 0.02).toFixed(2) + "s" }}
+                      fill={barColor(b.hours, b.goal)}
                       opacity={active === null || isActive ? 1 : 0.45}
                     />
                   )}
-                  {b.goal > 0 && b.goal <= maxValue && (
+                  {b.goal > 0 && b.goal <= maxValue && Math.abs(b.goal - medianGoal) > medianGoal * 0.1 && (
                     <line
                       x1={x - 1}
                       y1={yOf(b.goal)}
@@ -358,27 +391,28 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
 }
 
 const styles = {
-  wrap: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 10 },
+  // Рамки нет: график теперь всегда внутри карточки экрана, коробка в коробке ни к чему.
+  wrap: { marginTop: 12 },
   head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" },
-  title: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 15, color: "#2B2822" },
+  title: { fontSize: 13.5, color: "var(--ink3)" },
   scaleRow: { display: "flex", gap: 4 },
-  scaleBtn: { border: "1px solid", borderRadius: 4, padding: "3px 10px", fontSize: 12, fontWeight: 600 },
+  scaleBtn: { border: "1px solid", borderRadius: 7, padding: "5px 12px", fontSize: 12.5, fontWeight: 600 },
   svg: { width: "100%", height: "auto", display: "block", marginTop: 8, touchAction: "manipulation" },
-  empty: { fontSize: 13, color: "#6B6656", lineHeight: 1.55, margin: "10px 0 0" },
-  readout: { fontSize: 12.5, color: "#2B2822", minHeight: 32, lineHeight: 1.45, marginTop: 2 },
-  muted: { color: "#8A8370" },
+  empty: { fontSize: 13, color: "var(--ink3)", lineHeight: 1.55, margin: "10px 0 0" },
+  readout: { fontSize: 12.5, color: "var(--ink)", minHeight: 32, lineHeight: 1.45, marginTop: 2 },
+  muted: { color: "var(--mute)" },
   stats: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10, marginTop: 10 },
-  stat: { borderTop: "2px solid #DCD5C4", paddingTop: 8 },
+  stat: { borderTop: "2px solid var(--line)", paddingTop: 8 },
   statValue: {
     fontFamily: "'PT Serif', Georgia, serif",
     fontSize: 20,
-    color: "#2B2822",
+    color: "var(--ink)",
     lineHeight: 1.1,
     fontVariantNumeric: "tabular-nums",
   },
   statSubject: { fontSize: 15 },
-  statOf: { fontSize: 13, color: "#8A8370" },
-  statLabel: { fontSize: 11.5, color: "#6B6656", marginTop: 3 },
-  statSub: { fontSize: 11, color: "#8A8370", marginTop: 1 },
+  statOf: { fontSize: 13, color: "var(--mute)" },
+  statLabel: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
+  statSub: { fontSize: 11, color: "var(--mute)", marginTop: 1 },
   dot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0, display: "inline-block" },
 };
