@@ -36,13 +36,34 @@ export const THEME_CSS = `
 `;
 
 const MODE_KEY = "planner-theme-mode";
-// Вечер начинается в 20:00 и заканчивается в 7 утра — это про то, когда за
-// ежедневником сидят при выключенном свете, а не про астрономию.
-export const NIGHT_FROM = 20;
-export const NIGHT_TO = 7;
+const WINDOW_KEY = "planner-theme-night-window";
 
-export function isNightHour(hour) {
-  return NIGHT_FROM > NIGHT_TO ? hour >= NIGHT_FROM || hour < NIGHT_TO : hour >= NIGHT_FROM && hour < NIGHT_TO;
+// Границы ночи по умолчанию. Это не про астрономию, а про то, когда за
+// ежедневником сидят при выключенном свете; у каждого это своё время, поэтому
+// границы можно поменять в разделе «Синхронизация».
+export const DEFAULT_NIGHT = { from: 20, to: 7 };
+
+export function isNightHour(hour, window = DEFAULT_NIGHT) {
+  const { from, to } = window;
+  if (from === to) return false;
+  return from > to ? hour >= from || hour < to : hour >= from && hour < to;
+}
+
+function clampHour(value, fallback) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback;
+}
+
+function readWindow() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WINDOW_KEY) || "null");
+    if (saved) {
+      return { from: clampHour(saved.from, DEFAULT_NIGHT.from), to: clampHour(saved.to, DEFAULT_NIGHT.to) };
+    }
+  } catch (e) {
+    /* приватный режим — вернём значения по умолчанию */
+  }
+  return DEFAULT_NIGHT;
 }
 
 function readMode() {
@@ -59,6 +80,7 @@ function readMode() {
 // ноутбук днём в светлой. Поэтому он лежит в localStorage и в облако не едет.
 export function useThemeMode() {
   const [mode, setModeState] = useState(readMode);
+  const [nightWindow, setNightWindowState] = useState(readWindow);
   const [hour, setHour] = useState(() => new Date().getHours());
 
   useEffect(() => {
@@ -75,7 +97,17 @@ export function useThemeMode() {
     }
   }
 
-  const theme = mode === "auto" ? (isNightHour(hour) ? "night" : "light") : mode;
+  function setNightWindow(next) {
+    const value = { from: clampHour(next.from, nightWindow.from), to: clampHour(next.to, nightWindow.to) };
+    setNightWindowState(value);
+    try {
+      localStorage.setItem(WINDOW_KEY, JSON.stringify(value));
+    } catch (e) {
+      /* не сохранилось — переживём до перезагрузки */
+    }
+  }
+
+  const theme = mode === "auto" ? (isNightHour(hour, nightWindow) ? "night" : "light") : mode;
 
   // Атрибут ставится на <html>, а не только на обёртку приложения: иначе фон
   // страницы за её пределами остаётся светлым, а панель входа — без палитры.
@@ -84,5 +116,5 @@ export function useThemeMode() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  return { mode, setMode, theme, night: theme === "night" };
+  return { mode, setMode, theme, night: theme === "night", nightWindow, setNightWindow };
 }

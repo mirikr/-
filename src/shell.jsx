@@ -34,9 +34,10 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
           Авто
         </button>
       </div>
-      <div className="ap-railbody" style={styles.modeLabel}>
+      {/* Подпись ведёт в «Оформление»: там границы ночи и задаются. */}
+      <button className="ap-railbody ap-version" onClick={() => onGo("settings")} style={styles.modeLabel}>
         {modeLabel}
-      </div>
+      </button>
 
       <div className="ap-railbody" style={styles.railHead}>
         <div style={styles.railTitle}>
@@ -172,7 +173,16 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account,
                 Авто
               </button>
             </div>
-            <div style={styles.sheetNote}>{modeLabel}</div>
+            <button
+              onClick={() => {
+                setMore(false);
+                onGo("settings");
+              }}
+              className="ap-version"
+              style={{ ...styles.sheetNote, border: "none", background: "none", textAlign: "left", padding: 0 }}
+            >
+              {modeLabel} · изменить часы
+            </button>
             <button
               onClick={() => {
                 setMore(false);
@@ -269,7 +279,19 @@ const styles = {
   },
   modeSwitch: { display: "flex", alignItems: "center", gap: 4, background: "var(--railActive)", borderRadius: 999, padding: 3 },
   modePill: { flex: 1, minHeight: 32, border: "none", borderRadius: 999, fontSize: 15 },
-  modeLabel: { fontSize: 11.5, color: "var(--railInk2)", marginTop: -12, padding: "0 6px", lineHeight: 1.45, opacity: 0.85 },
+  modeLabel: {
+    display: "block",
+    width: "100%",
+    border: "none",
+    background: "none",
+    textAlign: "left",
+    fontSize: 11.5,
+    color: "var(--railInk2)",
+    marginTop: -12,
+    padding: "0 6px",
+    lineHeight: 1.45,
+    opacity: 0.85,
+  },
   railHead: { padding: "0 6px" },
   railTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 22, lineHeight: 1.15 },
   railToday: { fontSize: 12.5, color: "var(--railInk2)", marginTop: 6 },

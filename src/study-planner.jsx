@@ -14,7 +14,7 @@ import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
 import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js";
-import { THEME_CSS, useThemeMode, NIGHT_FROM, NIGHT_TO } from "./theme.js";
+import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
@@ -174,6 +174,7 @@ const SUBJECT_DEFS = [
 const STORAGE_KEY = "planner-state-v5";
 // Открытый экран и тема живут на устройстве, а не в данных, поэтому у них свои ключи.
 const SCREEN_KEY = "planner-screen";
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 // Встроенные предметы (право, экономика, политология, социология, философия,
 // история) — это подготовка одного человека с его уроками и ссылками на курс.
@@ -499,7 +500,7 @@ export default function StudyPlanner() {
   const [cloudOn, setCloudOn] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
   // Токен подписки хранится вместе с остальными данными: он один на все устройства.
-  const { mode, setMode, theme } = useThemeMode();
+  const { mode, setMode, theme, nightWindow, setNightWindow } = useThemeMode();
   // Какой экран открыт — настройка устройства, как и тема: на телефоне человек
   // сидит в расписании, на ноутбуке в конспектах.
   const [screen, setScreen] = useState(() => {
@@ -1647,7 +1648,7 @@ export default function StudyPlanner() {
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
-    settings: ["Синхронизация и данные", "Облако, резервная копия, установка на устройство и версия"],
+    settings: ["Синхронизация и данные", "Облако, резервная копия, оформление, установка на устройство и версия"],
   };
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
 
@@ -1655,7 +1656,7 @@ export default function StudyPlanner() {
   const pad2 = (n) => String(n).padStart(2, "0") + ":00";
   const modeLabel =
     mode === "auto"
-      ? `Авто · ночная с ${pad2(NIGHT_FROM)} до ${pad2(NIGHT_TO)} · сейчас ${theme === "night" ? "ночная" : "светлая"}`
+      ? `Авто · ночная с ${pad2(nightWindow.from)} до ${pad2(nightWindow.to)} · сейчас ${theme === "night" ? "ночная" : "светлая"}`
       : theme === "night"
       ? "Ночная тема вручную"
       : "Светлая тема вручную";
@@ -2886,6 +2887,64 @@ export default function StudyPlanner() {
                   </p>
                 </>
               )}
+            </section>
+
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Оформление</div>
+              <div style={styles.cardNote}>
+                Тема и границы ночи — настройка устройства: телефон вечером может быть в ночной, а ноутбук днём в
+                светлой. В облако это не уходит.
+              </div>
+              <div style={styles.themeRow}>
+                {[
+                  ["light", "Светлая"],
+                  ["night", "Ночная"],
+                  ["auto", "Авто"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setMode(value)}
+                    style={{
+                      ...styles.themeBtn,
+                      background: mode === value ? "var(--accent)" : "var(--panel2)",
+                      color: mode === value ? "var(--accentInk)" : "var(--ink2)",
+                      borderColor: mode === value ? "var(--accent)" : "var(--line)",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {/* Часы ночи нужны только режиму «Авто» — в остальных они ни на что не влияют. */}
+              <div style={{ ...styles.themeHours, opacity: mode === "auto" ? 1 : 0.5 }}>
+                <span>Ночная тема с</span>
+                <select
+                  value={nightWindow.from}
+                  onChange={(e) => setNightWindow({ ...nightWindow, from: e.target.value })}
+                  style={styles.select}
+                  disabled={mode !== "auto"}
+                >
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>
+                      {pad2(h)}
+                    </option>
+                  ))}
+                </select>
+                <span>до</span>
+                <select
+                  value={nightWindow.to}
+                  onChange={(e) => setNightWindow({ ...nightWindow, to: e.target.value })}
+                  style={styles.select}
+                  disabled={mode !== "auto"}
+                >
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>
+                      {pad2(h)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={styles.mutedSmall}>{modeLabel}</div>
             </section>
 
             <section className="ap-card" style={styles.card}>
@@ -4281,6 +4340,9 @@ const styles = {
   saveErr: { fontSize: 12, color: "var(--red)", marginTop: 10, lineHeight: 1.6 },
   backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
   pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
+  themeRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
+  themeBtn: { border: "1px solid", borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 600 },
+  themeHours: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 8 },
   versionRow: { fontSize: 11, color: "var(--mute)", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid var(--line)" },
   syncBtn: {
