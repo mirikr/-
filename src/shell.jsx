@@ -5,7 +5,7 @@ import React, { useState } from "react";
 // чтобы попасть в дневник, нужно было проскроллить расписание. Теперь разделы —
 // экраны, и между ними переходят отсюда. На телефоне колонка ложится в полосу
 // сверху и прокручивается вбок: место под неё там взять неоткуда.
-export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote, next, main }) {
+export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote, next, main, version, onOpenNotes }) {
   return (
     <aside className="ap-rail" style={styles.rail}>
       <div style={styles.modeSwitch}>
@@ -75,6 +75,10 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
             <span style={{ color: syncNote.ok ? "var(--green)" : "var(--red)" }}>{syncNote.text}</span>
           </>
         ) : null}
+        {/* Номер версии заодно открывает историю изменений: иначе её никто не находит. */}
+        <button onClick={onOpenNotes} className="ap-version" style={styles.version} title="Что изменилось">
+          бета {version}
+        </button>
       </div>
     </aside>
   );
@@ -87,7 +91,7 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
 // темы, которому на телефоне места в шапке нет.
 const PRIMARY_TABS = ["today", "school", "journal", "study"];
 
-export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account }) {
+export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account, version, onOpenNotes }) {
   const [more, setMore] = useState(false);
   const primary = PRIMARY_TABS.map((key) => items.find((i) => i.key === key)).filter(Boolean);
   const rest = items.filter((i) => !PRIMARY_TABS.includes(i.key));
@@ -169,6 +173,16 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account 
               </button>
             </div>
             <div style={styles.sheetNote}>{modeLabel}</div>
+            <button
+              onClick={() => {
+                setMore(false);
+                onOpenNotes();
+              }}
+              className="ap-version"
+              style={{ ...styles.version, marginTop: 10 }}
+            >
+              бета {version} · что изменилось
+            </button>
           </div>
         )}
 
@@ -262,6 +276,17 @@ const styles = {
   nav: { display: "flex", flexDirection: "column", gap: 2 },
   navBtn: { display: "flex", alignItems: "center", gap: 10, fontSize: 14.5, textAlign: "left", whiteSpace: "nowrap" },
   navHint: { marginLeft: "auto", fontSize: 12, color: "var(--railInk2)", paddingLeft: 10, whiteSpace: "nowrap" },
+  version: {
+    display: "block",
+    marginTop: 10,
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "var(--railInk2)",
+    textDecoration: "underline",
+    textAlign: "left",
+  },
   railFoot: {
     marginTop: "auto",
     borderTop: "1px solid var(--railActive)",

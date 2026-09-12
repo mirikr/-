@@ -8,6 +8,10 @@ import React from "react";
 // последние семь дней. Диагональ — линия баланса: точка на ней означает, что
 // план и факт сошлись. Выше линии — предмет забирает больше времени, чем ему
 // отведено, ниже — недобирает. Размер точки — сколько тем по предмету пройдено.
+//
+// Кольцо на диагонали — рекомендация: недельный ресурс, разделённый по остатку
+// работы. Пунктир от точки к кольцу показывает, сколько осталось до неё пройти —
+// и по плану, и по факту сразу.
 const W = 320;
 const H = 268;
 const X0 = 40;
@@ -16,7 +20,7 @@ const Y0 = 226;
 const Y1 = 16;
 
 export default function BalanceChart({ items }) {
-  const max = Math.max(2, ...items.map((s) => Math.max(s.plan, s.fact))) * 1.1;
+  const max = Math.max(2, ...items.map((s) => Math.max(s.plan, s.fact, s.recommended || 0))) * 1.1;
   const px = (v) => X0 + (Math.min(v, max) / max) * (X1 - X0);
   const py = (v) => Y0 - (Math.min(v, max) / max) * (Y0 - Y1);
 
@@ -26,8 +30,9 @@ export default function BalanceChart({ items }) {
         <line x1={X0} y1={Y0} x2={X1} y2={Y0} stroke="var(--line)" strokeWidth="1" />
         <line x1={X0} y1={Y0} x2={X0} y2={Y1} stroke="var(--line)" strokeWidth="1" />
         <line x1={X0} y1={Y0} x2={px(max)} y2={py(max)} stroke="var(--ink3)" strokeWidth="1.5" strokeDasharray="5 4" />
-        <text x={X1} y={py(max) + 14} fontSize="9.5" fill="var(--ink3)" textAnchor="end">
-          линия баланса
+        {/* Подпись слева вверху: у диагонали она наезжала на саму линию. */}
+        <text x={X0 + 6} y={Y1 + 6} fontSize="9.5" fill="var(--ink3)">
+          диагональ — баланс, кольцо — рекомендация
         </text>
         <text x={X0} y={Y0 + 18} fontSize="9.5" fill="var(--mute)">
           0
@@ -42,11 +47,15 @@ export default function BalanceChart({ items }) {
         {items.map((s, i) => {
           const x = px(s.plan);
           const y = py(s.fact);
+          const rec = px(s.recommended || 0);
+          const recY = py(s.recommended || 0);
           const r = 5 + Math.min(s.done, 12) * 0.9;
           return (
             <g key={s.id}>
-              {/* Пунктир от точки к линии баланса показывает размер расхождения. */}
-              <line x1={x} y1={y} x2={x} y2={py(s.plan)} stroke={s.color} strokeWidth="1" strokeDasharray="2 2" opacity="0.55" />
+              {/* Пунктир от точки к рекомендации на диагонали: и есть тот разрыв,
+                  который надо закрыть — по плану вправо-влево, по факту вверх-вниз. */}
+              <line x1={x} y1={y} x2={rec} y2={recY} stroke={s.color} strokeWidth="1" strokeDasharray="2 2" opacity="0.5" />
+              <circle cx={rec} cy={recY} r="5.5" fill="none" stroke={s.color} strokeWidth="1.8" opacity="0.85" />
               <circle
                 cx={x}
                 cy={y}
@@ -73,6 +82,7 @@ export default function BalanceChart({ items }) {
             <span style={styles.name}>{s.name}</span>
             <span style={styles.tail}>
               {String(s.fact).replace(".", ",")} / {s.plan} ч
+              <span style={styles.rec}> · рек. {String(s.recommended || 0).replace(".", ",")}</span>
             </span>
             <span style={{ ...styles.drift, color: driftColor(s.fact - s.plan) }}>{driftLabel(s.fact - s.plan)}</span>
           </div>
@@ -101,6 +111,7 @@ const styles = {
   legendRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 },
   dot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
   name: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  tail: { color: "var(--ink3)" },
+  tail: { color: "var(--ink3)", whiteSpace: "nowrap" },
+  rec: { color: "var(--mute)" },
   drift: { fontWeight: 600, minWidth: 56, textAlign: "right" },
 };

@@ -15,7 +15,7 @@ import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
 import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js";
 import { THEME_CSS, useThemeMode, NIGHT_FROM, NIGHT_TO } from "./theme.js";
-import ReleaseNotes from "./release-notes.jsx";
+import ReleaseNotesDialog from "./release-notes.jsx";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 
@@ -174,6 +174,15 @@ const SUBJECT_DEFS = [
 const STORAGE_KEY = "planner-state-v5";
 // Открытый экран и тема живут на устройстве, а не в данных, поэтому у них свои ключи.
 const SCREEN_KEY = "planner-screen";
+
+// Встроенные предметы (право, экономика, политология, социология, философия,
+// история) — это подготовка одного человека с его уроками и ссылками на курс.
+// Всем остальным они ни к чему: пустой ежедневник честнее чужого плана.
+const OWNER_EMAIL = "reuttmir@gmail.com";
+
+function isOwnerEmail(email) {
+  return String(email || "").trim().toLowerCase() === OWNER_EMAIL;
+}
 
 function levelInfo(value) {
   return LESSON_LEVELS.find((l) => l.value === value) || LESSON_LEVELS[0];
@@ -447,14 +456,30 @@ export default function StudyPlanner() {
   const firstLoad = useRef(true);
   const loadingRef = useRef(false);
 
+  // Готовый курс по обществознанию — личная подготовка автора приложения, а не
+  // его содержимое: чужому человеку он достался бы как чей-то чужой конспект.
+  // Поэтому встроенные предметы видит только владелец, остальные заводят свои.
+  const builtinsVisible = !cloudConfigured || !accountReady || isOwnerEmail(accountEmail);
+
+  // Если предмет, выбранный в форме дневника, пропал из списка — переключаемся на
+  // первый доступный, иначе запись ушла бы в невидимый предмет.
+
   const ALL_SUBJECTS = useMemo(
-    () =>
-      [...SUBJECT_DEFS.filter((s) => !hiddenSubjects.includes(s.id)), ...customSubjects].map((s) => ({
+    () => {
+      const builtin = builtinsVisible ? SUBJECT_DEFS.filter((s) => !hiddenSubjects.includes(s.id)) : [];
+      return [...builtin, ...customSubjects].map((s) => ({
         ...s,
         color: subjectColors[s.id] || s.color,
-      })),
-    [customSubjects, hiddenSubjects, subjectColors]
+      }));
+    },
+    [customSubjects, hiddenSubjects, subjectColors, builtinsVisible]
   );
+
+  useEffect(() => {
+    if (!ALL_SUBJECTS.length) return;
+    if (ALL_SUBJECTS.some((s) => s.id === jForm.subjectId)) return;
+    setJForm((prev) => ({ ...prev, subjectId: ALL_SUBJECTS[0].id }));
+  }, [ALL_SUBJECTS, jForm.subjectId]);
 
   // Предметы лицея живут не списком, а названиями в расписании, поэтому цвет ищем по имени.
   const lyceumColorOf = useCallback(
@@ -486,6 +511,8 @@ export default function StudyPlanner() {
   });
   const [notebookOwner, setNotebookOwner] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountReady, setAccountReady] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [calendarToken, setCalendarToken] = useState("");
   // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
   const [devicePlatform] = useState(detectPlatform);
@@ -1386,6 +1413,52 @@ export default function StudyPlanner() {
     );
   }
 
+  // Пульс занятий: сколько записано сегодня, сколько дней подряд идут занятия и
+  // сколько прошло с последней записи. Нужен для короткого напоминания на
+  // «Сегодня» — без укоров, просто «вернитесь, это недолго».
+  const studyPulse = useMemo(() => {
+    const byDate = {};
+    journal.forEach((e) => {
+      byDate[e.date] = (byDate[e.date] || 0) + (Number(e.hours) || 0);
+    });
+    const dates = Object.keys(byDate).filter((d) => byDate[d] > 0).sort();
+    const todayHours = Math.round((byDate[todayStr()] || 0) * 10) / 10;
+    if (!dates.length) return { todayHours, daysSince: null, streak: 0 };
+
+    const last = dates[dates.length - 1];
+    const daysSince = Math.max(0, -daysUntilDate(last));
+
+    // Серия считается назад от последнего дня с записями: пропуск её обрывает.
+    let streak = 0;
+    const cursor = new Date(last + "T00:00:00");
+    while (byDate[ymd(cursor)] > 0) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return { todayHours, daysSince, streak };
+  }, [journal]);
+
+  // Рекомендация: недельный ресурс делится между предметами по тому, сколько на
+  // каждом осталось работы. Это не «правильный» план, а точка отсчёта — от неё
+  // видно, где вы сознательно отошли от равномерного темпа.
+  const recommendedHours = useMemo(() => {
+    const remaining = {};
+    let total = 0;
+    ALL_SUBJECTS.forEach((s) => {
+      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const hours = list.filter((t) => !t.done).reduce((sum, t) => sum + (Number(t.duration) || D) / 60, 0);
+      remaining[s.id] = hours;
+      total += hours;
+    });
+    const budgetHours = weeklyBudgetHours(budget);
+    const map = {};
+    ALL_SUBJECTS.forEach((s) => {
+      // Округление до получаса: «3,7 ч в неделю» — не та точность, которой стоит верить.
+      map[s.id] = total > 0 ? Math.round(((remaining[s.id] / total) * budgetHours) * 2) / 2 : 0;
+    });
+    return map;
+  }, [data, budget, ALL_SUBJECTS]);
+
   // Факт для баланса — часы за последние семь дней: план задан на неделю, значит
   // и сравнивать надо с неделей, иначе к маю любой предмет «перевыполнен».
   const balanceItems = useMemo(() => {
@@ -1400,9 +1473,10 @@ export default function StudyPlanner() {
       color: s.color,
       plan: Number(budget.alloc[s.id]) || 0,
       fact: Math.round((factBySubject[s.id] || 0) * 10) / 10,
+      recommended: recommendedHours[s.id] || 0,
       done: (stats.perSubject[s.id] || { done: 0 }).done,
     }));
-  }, [journal, budget, ALL_SUBJECTS, stats]);
+  }, [journal, budget, ALL_SUBJECTS, stats, recommendedHours]);
 
   const weeklyJournalHours = useMemo(() => {
     const now = new Date();
@@ -1564,7 +1638,11 @@ export default function StudyPlanner() {
   const SCREEN_TEXT = {
     today: ["Сегодня", "Что сегодня в лицее, сколько времени уже записано и что горит по срокам"],
     events: ["События", "Приоритет решает, до какого события считается план"],
-    budget: ["Распределение времени", "Время — ограниченный ресурс: сначала бюджет дня, потом предметы"],
+    budget: [
+      "Распределение времени (КПВ)",
+      "КПВ — и кривая производственных возможностей из экономики, и коэффициент полезного времени: " +
+        "сначала бюджет дня, потом предметы",
+    ],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
@@ -1590,6 +1668,7 @@ export default function StudyPlanner() {
       if (!alive) return;
       const user = currentUser();
       setAccountEmail(user ? user.email || "" : "");
+      setAccountReady(true);
     });
     const off = onAuthChange((session) => {
       setAccountEmail(session && session.user ? session.user.email || "" : "");
@@ -1688,6 +1767,8 @@ export default function StudyPlanner() {
         .ap-pill { background: transparent; color: var(--railInk2); transition: background .22s ease, color .22s ease; }
         .ap-pill:hover { background: var(--railActive); color: var(--railInk); }
         .ap-pill.is-on { background: var(--accent); color: var(--accentInk); }
+        .ap-version { transition: color .2s ease; }
+        .ap-version:hover { color: var(--accent); }
         .ap-row { transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; }
         .ap-row:hover { box-shadow: var(--shadow); }
         /* Полоса прогресса выезжает от левого края, столбик графика вырастает снизу. */
@@ -1704,11 +1785,12 @@ export default function StudyPlanner() {
         }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
            min-width: 0 применяется, а flex — нет, и название вылезает поверх полей. */
-        .topic-row > label { flex: 1 1 auto; min-width: 0; }
-        @media (max-width: 560px) {
-          .topic-row { flex-wrap: wrap; }
-          .topic-row > label { flex-basis: 100%; }
-        }
+        .topic-row > label { flex: 1 1 160px; min-width: 0; }
+        /* Карточка предмета бывает узкой и на широком экране — сетка кладёт их по
+           три в ряд, — поэтому название переносится на свою строку по ширине
+           самой строки, а не экрана. */
+        @container (max-width: 380px) { .topic-row > label { flex-basis: 100%; } }
+        @media (max-width: 560px) { .topic-row > label { flex-basis: 100%; } }
         /* На телефоне навигация уходит вниз, как в обычных приложениях: до полосы
            внизу большой палец дотягивается, до колонки слева — нет. */
         .ap-tabbar, .ap-only-mobile { display: none; }
@@ -1733,6 +1815,8 @@ export default function StudyPlanner() {
         syncNote={syncNote}
         next={nextCountdown}
         main={mainCountdown}
+        version={__APP_VERSION__}
+        onOpenNotes={() => setNotesOpen(true)}
       />
 
       <TabBar
@@ -1743,6 +1827,8 @@ export default function StudyPlanner() {
         setMode={setMode}
         modeLabel={modeLabel}
         account={account}
+        version={__APP_VERSION__}
+        onOpenNotes={() => setNotesOpen(true)}
       />
 
       <main className="ap-main" style={styles.main}>
@@ -1828,6 +1914,19 @@ export default function StudyPlanner() {
               <div style={styles.quickLog}>
                 <div style={styles.cardTitle}>Записать занятие</div>
                 <div style={styles.cardNote}>Запись попадёт в дневник за сегодня</div>
+                <div style={{ ...styles.pulseNote, ...(studyPulse.daysSince >= 1 ? styles.pulseWarm : null) }}>
+                  {studyPulse.todayHours > 0
+                    ? `Сегодня записано ${String(studyPulse.todayHours).replace(".", ",")} ч${
+                        studyPulse.streak > 1 ? ` · ${studyPulse.streak} ${daysWord(studyPulse.streak)} подряд` : ""
+                      }`
+                    : studyPulse.daysSince === null
+                    ? "Первая запись — самая трудная. Полчаса тоже считается."
+                    : studyPulse.daysSince === 0
+                    ? "Сегодня ещё ничего не записано."
+                    : studyPulse.daysSince === 1
+                    ? "Вчера был последний раз. Запишите хотя бы полчаса — серия не оборвётся."
+                    : `Занятий не было ${studyPulse.daysSince} ${daysWord(studyPulse.daysSince)}. Начните с одного урока — этого хватит, чтобы вернуться.`}
+                </div>
                 <div style={styles.quickRow}>
                   <select
                     value={jForm.subjectId}
@@ -1896,6 +1995,21 @@ export default function StudyPlanner() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {/* Тот же вердикт, что и в «Распределении»: ради этого ответа и считаются часы. */}
+              {mainEvent && (
+                <div
+                  style={{
+                    ...styles.verdictLine,
+                    color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
+                  }}
+                >
+                  {capacity.feasible === null
+                    ? "Часы на неделю не заданы — темп считать не от чего."
+                    : capacity.feasible
+                    ? `При таком темпе времени хватит: нужно ${capacity.neededHours} ч, до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`
+                    : `При таком темпе может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
                 </div>
               )}
               <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
@@ -2125,28 +2239,47 @@ export default function StudyPlanner() {
             </div>
 
             <div style={styles.allocGrid}>
-              {ALL_SUBJECTS.map((s) => (
-                <div key={s.id} style={styles.allocRow}>
-                  <span style={{ ...styles.dot, background: s.color }} />
-                  <span style={styles.allocName}>{s.name}</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    value={budget.alloc[s.id]}
-                    onChange={(e) => setAlloc(s.id, e.target.value)}
-                    style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    value={budget.alloc[s.id]}
-                    onChange={(e) => setAlloc(s.id, e.target.value)}
-                    style={styles.smallNumInput}
-                  />
-                  <span style={styles.hUnit}>ч/нед</span>
-                </div>
-              ))}
+              {ALL_SUBJECTS.map((s) => {
+                const plan = Number(budget.alloc[s.id]) || 0;
+                const rec = recommendedHours[s.id] || 0;
+                const scale = (v) => Math.min(100, (v / 20) * 100);
+                return (
+                  <div key={s.id} style={styles.allocBlock}>
+                    <div style={styles.allocRow}>
+                      <span style={{ ...styles.dot, background: s.color }} />
+                      <span style={styles.allocName}>{s.name}</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="20"
+                        value={budget.alloc[s.id]}
+                        onChange={(e) => setAlloc(s.id, e.target.value)}
+                        style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={budget.alloc[s.id]}
+                        onChange={(e) => setAlloc(s.id, e.target.value)}
+                        style={styles.smallNumInput}
+                      />
+                      <span style={styles.hUnit}>ч/нед</span>
+                    </div>
+                    {/* Вторая полоска — рекомендация: сколько вышло бы, раздели мы
+                        недельный ресурс по остатку работы на каждом предмете. */}
+                    <div style={styles.recTrack}>
+                      <div className="ap-fill" style={{ ...styles.recPlan, width: scale(plan) + "%", background: s.color }} />
+                      <div style={{ ...styles.recMark, left: scale(rec) + "%" }} />
+                    </div>
+                    <div style={styles.recLabels}>
+                      <span>план {plan} ч</span>
+                      <span style={{ color: Math.abs(plan - rec) >= 1 ? "var(--gold)" : "var(--ink3)" }}>
+                        рекомендую {String(rec).replace(".", ",")} ч
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div style={{ ...styles.capacityBox, borderColor: capacity.overBudget ? "var(--red)" : "var(--green)" }}>
@@ -2204,6 +2337,12 @@ export default function StudyPlanner() {
 
         {screen === "study" && (
           <section style={styles.plainBlock}>
+            {ALL_SUBJECTS.length === 0 && (
+              <p style={styles.muted}>
+                Предметов пока нет. Заведите свои — например «Обществознание» или «Математика для олимпиад»: у каждого
+                будут уроки с длительностью и ссылкой, заметки с затраченным временем и тетрадь.
+              </p>
+            )}
             <div style={styles.subjGrid}>
               {ALL_SUBJECTS.map((s) => {
                 const st = stats.perSubject[s.id];
@@ -2761,12 +2900,16 @@ export default function StudyPlanner() {
                 {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
                 {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
               </div>
-              <ReleaseNotes />
+              <button onClick={() => setNotesOpen(true)} style={styles.eventsToggle}>
+                История изменений
+              </button>
             </section>
           </div>
         )}
         </div>
       </main>
+
+      <ReleaseNotesDialog open={notesOpen} onClose={() => setNotesOpen(false)} />
 
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
@@ -2947,15 +3090,18 @@ function TopicItem({
             <span style={topic.done ? styles.topicDone : undefined}>{topic.name}</span>
           )}
         </label>
-        <input
-          type="number"
-          min="5"
-          value={topic.duration}
-          onChange={(e) => onDurationChange(e.target.value)}
-          style={styles.durationInput}
-          title="Длительность урока, минут"
-        />
-        <span style={styles.hUnit}>мин</span>
+        {/* Поле и «мин» — один блок: при переносе строки они разъезжались по разным. */}
+        <span style={styles.durationBox}>
+          <input
+            type="number"
+            min="5"
+            value={topic.duration}
+            onChange={(e) => onDurationChange(e.target.value)}
+            style={styles.durationInput}
+            title="Длительность урока, минут"
+          />
+          <span style={styles.hUnit}>мин</span>
+        </span>
         <button onClick={onToggleLink} style={styles.notesToggle} title="Добавить или изменить ссылку">
           {topic.url ? "ссылка ✓" : "+ ссылка"}
         </button>
@@ -3560,6 +3706,16 @@ const styles = {
   todayName: { fontSize: 13.5, fontWeight: 600, flex: "1 1 120px", minWidth: 0 },
   todayMeta: { fontSize: 12, color: "var(--ink3)" },
   quickLog: { borderTop: "1px solid var(--line2)", paddingTop: 10, marginTop: 4 },
+  pulseNote: { fontSize: 12.5, color: "var(--ink3)", lineHeight: 1.5, marginBottom: 8 },
+  // Пропущенный день подсвечивается тёплым — это напоминание, а не выговор.
+  pulseWarm: {
+    background: "var(--warmBg)",
+    border: "1px solid var(--warmLine)",
+    color: "var(--warmInk)",
+    borderRadius: 9,
+    padding: "8px 10px",
+  },
+  verdictLine: { fontSize: 12.5, lineHeight: 1.5, marginBottom: 8 },
   quickRow: { display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6, flexWrap: "wrap" },
   taskRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, flexWrap: "wrap" },
   taskText: { flex: "1 1 140px", minWidth: 0 },
@@ -3832,7 +3988,12 @@ const styles = {
   dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, textAlign: "center", background: "var(--panel2)" },
   dailyGoalHours: { fontSize: 11, color: "var(--ink3)" },
   allocGrid: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 },
+  allocBlock: { marginBottom: 4 },
   allocRow: { display: "flex", alignItems: "center", gap: 10 },
+  recTrack: { position: "relative", height: 6, borderRadius: 999, background: "var(--line)", margin: "6px 0 3px" },
+  recPlan: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 999 },
+  recMark: { position: "absolute", top: -3, bottom: -3, width: 2, background: "var(--gold)", borderRadius: 999 },
+  recLabels: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--ink3)" },
   dot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0, display: "inline-block" },
   allocName: { fontSize: 13.5, width: 120, flexShrink: 0 },
   smallNumInput: { width: 52, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
@@ -3860,8 +4021,19 @@ const styles = {
   ppfControls: { flex: "1 1 220px", minWidth: 220 },
   select: { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
   svg: { flex: "1 1 280px", maxWidth: 320, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 9 },
-  subjGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 },
-  subjCard: { background: "var(--panel2)", border: "1px solid", borderRadius: 11, padding: "16px 18px", transition: "transform 0.15s ease" },
+  // alignItems: start — иначе короткая карточка тянется под высоту соседней
+  // по строке сетки и кажется раскрытой и пустой.
+  subjGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14, alignItems: "start" },
+  subjCard: {
+    background: "var(--panel2)",
+    border: "1px solid",
+    borderRadius: 11,
+    padding: "16px 18px",
+    transition: "transform 0.15s ease",
+    // Карточка объявлена контейнером: строка урока переносится по её ширине,
+    // а не по ширине экрана — в сетке из трёх колонок это разные вещи.
+    containerType: "inline-size",
+  },
   subjHeader: { display: "flex", alignItems: "center", gap: 8, flex: 1, background: "none", border: "none", padding: 0, textAlign: "left" },
   subjHeaderRow: { display: "flex", alignItems: "center", gap: 4 },
   addSubjectRow: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" },
@@ -3961,9 +4133,10 @@ const styles = {
   miniFill: { height: "100%", borderRadius: 999 },
   topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 5, maxHeight: 420, overflowY: "auto" },
   topicBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 5 },
-  topicRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "8px 10px", borderRadius: 9, border: "1px solid transparent" },
-  topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
+  topicRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "8px 10px", borderRadius: 9, border: "1px solid transparent", flexWrap: "wrap" },
+  topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "1 1 160px", minWidth: 0 },
   topicDone: { textDecoration: "line-through", color: "var(--mute)" },
+  durationBox: { display: "inline-flex", alignItems: "center", gap: 4 },
   durationInput: { width: 44, padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
   notesToggle: { background: "none", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, padding: "3px 7px", color: "var(--ink2)" },
   colorPick: {
