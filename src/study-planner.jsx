@@ -1083,13 +1083,86 @@ export default function StudyPlanner() {
     }
   }
 
+  // Пульс занятий: сколько записано сегодня, сколько дней подряд идут занятия и
+  // сколько прошло с последней записи. Нужен для короткого напоминания на
+  // «Сегодня» — без укоров, просто «вернитесь, это недолго».
+  const studyPulse = useMemo(() => {
+    const byDate = {};
+    journal.forEach((e) => {
+      byDate[e.date] = (byDate[e.date] || 0) + (Number(e.hours) || 0);
+    });
+    const dates = Object.keys(byDate).filter((d) => byDate[d] > 0).sort();
+    const todayHours = Math.round((byDate[todayStr()] || 0) * 10) / 10;
+    if (!dates.length) return { todayHours, daysSince: null, streak: 0 };
+
+    const last = dates[dates.length - 1];
+    const daysSince = Math.max(0, -daysUntilDate(last));
+
+    // Серия считается назад от последнего дня с записями: пропуск её обрывает.
+    let streak = 0;
+    const cursor = new Date(last + "T00:00:00");
+    while (byDate[ymd(cursor)] > 0) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return { todayHours, daysSince, streak };
+  }, [journal]);
+
+  // Напоминание о занятиях: одно и то же и в приложении, и в календаре телефона —
+  // чтобы оно доходило и тогда, когда ежедневник не открывали.
+  const STUDY_REMINDER_HOUR = "19:00";
+  const studyReminder = useMemo(() => {
+    const { todayHours, daysSince, streak } = studyPulse;
+    if (todayHours > 0) {
+      return {
+        tone: "ok",
+        title: `Сегодня записано ${String(todayHours).replace(".", ",")} ч`,
+        text: streak > 1 ? `Серия идёт ${streak} ${daysWord(streak)} подряд — не прерывайте её.` : "Так держать.",
+      };
+    }
+    if (daysSince === null) {
+      return {
+        tone: "soft",
+        title: "Начните с первого занятия",
+        text: "Отметьте урок пройденным или запишите полчаса — дальше пойдёт само.",
+      };
+    }
+    if (daysSince === 0) {
+      return { tone: "soft", title: "Сегодня ещё ничего не записано", text: "Полчаса тоже считается." };
+    }
+    if (daysSince === 1) {
+      return {
+        tone: "warn",
+        title: "Вчера был последний раз",
+        text: "Запишите сегодня хотя бы полчаса — серия не оборвётся, а завтра будет легче начать.",
+      };
+    }
+    return {
+      tone: "warn",
+      title: `Занятий не было ${daysSince} ${daysWord(daysSince)}`,
+      text: "Начните с одного урока: вернуться проще, чем кажется, и день сразу перестанет быть пустым.",
+    };
+  }, [studyPulse]);
+
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
   // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
   const calendarIcs = useMemo(() => {
     const items = allEvents.map(eventIcsItem);
     homework.filter((h) => h.date).forEach((h) => items.push(homeworkIcsItem(h)));
+    // Пропущенный день превращается в напоминание на сегодняшний вечер: телефон
+    // скажет о нём сам, даже если ежедневник сегодня не открывали.
+    if (studyReminder.tone === "warn") {
+      items.push({
+        uid: "study-" + todayStr(),
+        title: "Позаниматься · " + studyReminder.title,
+        date: todayStr(),
+        time: STUDY_REMINDER_HOUR,
+        minutes: 60,
+        description: studyReminder.text,
+      });
+    }
     return buildIcs(items, { name: "Ежедневник лицеиста", refreshHours: 1 });
-  }, [allEvents, homework]);
+  }, [allEvents, homework, studyReminder]);
 
   async function enableCalendarFeed() {
     setCalendarBusy(true);
@@ -1414,30 +1487,7 @@ export default function StudyPlanner() {
     );
   }
 
-  // Пульс занятий: сколько записано сегодня, сколько дней подряд идут занятия и
-  // сколько прошло с последней записи. Нужен для короткого напоминания на
-  // «Сегодня» — без укоров, просто «вернитесь, это недолго».
-  const studyPulse = useMemo(() => {
-    const byDate = {};
-    journal.forEach((e) => {
-      byDate[e.date] = (byDate[e.date] || 0) + (Number(e.hours) || 0);
-    });
-    const dates = Object.keys(byDate).filter((d) => byDate[d] > 0).sort();
-    const todayHours = Math.round((byDate[todayStr()] || 0) * 10) / 10;
-    if (!dates.length) return { todayHours, daysSince: null, streak: 0 };
 
-    const last = dates[dates.length - 1];
-    const daysSince = Math.max(0, -daysUntilDate(last));
-
-    // Серия считается назад от последнего дня с записями: пропуск её обрывает.
-    let streak = 0;
-    const cursor = new Date(last + "T00:00:00");
-    while (byDate[ymd(cursor)] > 0) {
-      streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    return { todayHours, daysSince, streak };
-  }, [journal]);
 
   // Рекомендация: недельный ресурс делится между предметами по тому, сколько на
   // каждом осталось работы. Это не «правильный» план, а точка отсчёта — от неё
@@ -1868,6 +1918,33 @@ export default function StudyPlanner() {
 
         {screen === "today" && (
           <>
+            {/* Напоминание крупным планом: строчкой внизу карточки его не замечали. */}
+            <section
+              className="ap-card"
+              style={{
+                ...styles.card,
+                ...(studyReminder.tone === "warn" ? styles.reminderWarn : null),
+                ...(studyReminder.tone === "ok" ? styles.reminderOk : null),
+              }}
+            >
+              <div style={styles.reminderRow}>
+                <div style={styles.reminderMark} aria-hidden="true">
+                  {studyReminder.tone === "ok" ? "✓" : studyReminder.tone === "warn" ? "!" : "·"}
+                </div>
+                <div style={styles.reminderBody}>
+                  <div style={styles.reminderTitle}>{studyReminder.title}</div>
+                  <div style={styles.reminderText}>{studyReminder.text}</div>
+                </div>
+                {/* Серия показывается, только пока она идёт: после пропуска «4 дня подряд»
+                    рядом с «занятий не было два дня» звучало издевательски. */}
+                {studyPulse.streak > 1 && studyPulse.daysSince === 0 && (
+                  <div style={styles.streakBox}>
+                    <div style={styles.streakNum}>{studyPulse.streak}</div>
+                    <div style={styles.streakWord}>{daysWord(studyPulse.streak)} подряд</div>
+                  </div>
+                )}
+              </div>
+            </section>
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Часы занятий</div>
@@ -1915,19 +1992,7 @@ export default function StudyPlanner() {
               <div style={styles.quickLog}>
                 <div style={styles.cardTitle}>Записать занятие</div>
                 <div style={styles.cardNote}>Запись попадёт в дневник за сегодня</div>
-                <div style={{ ...styles.pulseNote, ...(studyPulse.daysSince >= 1 ? styles.pulseWarm : null) }}>
-                  {studyPulse.todayHours > 0
-                    ? `Сегодня записано ${String(studyPulse.todayHours).replace(".", ",")} ч${
-                        studyPulse.streak > 1 ? ` · ${studyPulse.streak} ${daysWord(studyPulse.streak)} подряд` : ""
-                      }`
-                    : studyPulse.daysSince === null
-                    ? "Первая запись — самая трудная. Полчаса тоже считается."
-                    : studyPulse.daysSince === 0
-                    ? "Сегодня ещё ничего не записано."
-                    : studyPulse.daysSince === 1
-                    ? "Вчера был последний раз. Запишите хотя бы полчаса — серия не оборвётся."
-                    : `Занятий не было ${studyPulse.daysSince} ${daysWord(studyPulse.daysSince)}. Начните с одного урока — этого хватит, чтобы вернуться.`}
-                </div>
+
                 <div style={styles.quickRow}>
                   <select
                     value={jForm.subjectId}
@@ -2339,10 +2404,39 @@ export default function StudyPlanner() {
         {screen === "study" && (
           <section style={styles.plainBlock}>
             {ALL_SUBJECTS.length === 0 && (
-              <p style={styles.muted}>
-                Предметов пока нет. Заведите свои — например «Обществознание» или «Математика для олимпиад»: у каждого
-                будут уроки с длительностью и ссылкой, заметки с затраченным временем и тетрадь.
-              </p>
+              <section className="ap-card" style={styles.card}>
+                <div style={styles.cardTitle}>Здесь живёт подготовка вне лицея</div>
+                <p style={styles.muted}>
+                  Курсы, олимпиадная подготовка, любой предмет, который вы учите сами. Раздел отвечает на два вопроса:
+                  что осталось пройти и сколько времени на это ушло.
+                </p>
+                <ul style={styles.emptyList}>
+                  <li>
+                    <b>Уроки.</b> Свой список тем: у каждой длительность и ссылка — с ней название урока становится
+                    кликабельным, и занятие открывается в один тап.
+                  </li>
+                  <li>
+                    <b>Отметка «пройдено».</b> Галочка сама пишет занятие в дневник на его длительность — руками
+                    дублировать не нужно.
+                  </li>
+                  <li>
+                    <b>Заметки к уроку.</b> Короткая подпись и потраченное время; время тоже уходит в дневник и в
+                    график часов.
+                  </li>
+                  <li>
+                    <b>Тетрадь.</b> Блоки и ветки с конспектом, форматированием и файлами — то же, что на экране
+                    «Тетради».
+                  </li>
+                  <li>
+                    <b>Учёт времени.</b> Часы по предмету попадают в «Распределение»: там видно, укладываетесь ли вы в
+                    неделю и хватит ли времени до ближайшего экзамена.
+                  </li>
+                </ul>
+                <p style={styles.muted}>
+                  Начните с одного предмета — например «Обществознание» или «Математика для олимпиад». Цвет выбирается
+                  рядом с названием, его же будет носить предмет в дневнике и на графиках.
+                </p>
+              </section>
             )}
             <div style={styles.subjGrid}>
               {ALL_SUBJECTS.map((s) => {
@@ -3765,7 +3859,24 @@ const styles = {
   todayName: { fontSize: 13.5, fontWeight: 600, flex: "1 1 120px", minWidth: 0 },
   todayMeta: { fontSize: 12, color: "var(--ink3)" },
   quickLog: { borderTop: "1px solid var(--line2)", paddingTop: 10, marginTop: 4 },
-  pulseNote: { fontSize: 12.5, color: "var(--ink3)", lineHeight: 1.5, marginBottom: 8 },
+  reminderWarn: { background: "var(--warmBg)", borderColor: "var(--warmLine)" },
+  reminderOk: { borderColor: "var(--green)" },
+  reminderRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  reminderMark: {
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 30,
+    lineHeight: 1,
+    width: 34,
+    textAlign: "center",
+    color: "var(--accent)",
+    flexShrink: 0,
+  },
+  reminderBody: { flex: "1 1 240px", minWidth: 0 },
+  reminderTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 4 },
+  reminderText: { fontSize: 13.5, color: "var(--ink2)", lineHeight: 1.5 },
+  streakBox: { textAlign: "center", minWidth: 78 },
+  streakNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, lineHeight: 1, color: "var(--green)" },
+  streakWord: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
   // Пропущенный день подсвечивается тёплым — это напоминание, а не выговор.
   pulseWarm: {
     background: "var(--warmBg)",
@@ -4082,6 +4193,7 @@ const styles = {
   svg: { flex: "1 1 280px", maxWidth: 320, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 9 },
   // alignItems: start — иначе короткая карточка тянется под высоту соседней
   // по строке сетки и кажется раскрытой и пустой.
+  emptyList: { margin: "0 0 12px", paddingLeft: 20, fontSize: 13.5, lineHeight: 1.7, color: "var(--ink2)" },
   subjGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14, alignItems: "start" },
   subjCard: {
     background: "var(--panel2)",

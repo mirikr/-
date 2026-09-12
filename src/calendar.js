@@ -26,6 +26,19 @@ function nextDay(dateStr) {
   return dateOnly(d.toISOString().slice(0, 10));
 }
 
+// Время без зоны: календарь показывает его как местное — ровно то, что нужно
+// напоминанию «позаниматься в семь вечера» в любой поездке.
+function localStamp(dateStr, time, addMinutes = 0) {
+  const [h, m] = String(time).split(":").map(Number);
+  const d = new Date(dateStr + "T00:00:00");
+  d.setHours(h, m + addMinutes, 0, 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T` +
+    `${pad(d.getHours())}${pad(d.getMinutes())}00`
+  );
+}
+
 function stamp() {
   return new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 }
@@ -71,17 +84,23 @@ export function buildIcs(items, options = {}) {
   items.forEach((item) => {
     if (!item.date) return;
     const days = Number.isFinite(Number(item.alarmDaysBefore)) ? Math.max(0, Number(item.alarmDaysBefore)) : 1;
+    // У события со временем есть час, у экзамена и задания — только дата.
+    const timed = /^\d{1,2}:\d{2}$/.test(String(item.time || ""));
+    const when = timed
+      ? [`DTSTART:${localStamp(item.date, item.time)}`, `DTEND:${localStamp(item.date, item.time, item.minutes || 60)}`]
+      : [`DTSTART;VALUE=DATE:${dateOnly(item.date)}`, `DTEND;VALUE=DATE:${nextDay(item.date)}`];
+
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeText(item.uid)}@planner`,
       `DTSTAMP:${stamp()}`,
       // Событие на весь день: DTEND по стандарту указывает на следующий день.
-      `DTSTART;VALUE=DATE:${dateOnly(item.date)}`,
-      `DTEND;VALUE=DATE:${nextDay(item.date)}`,
+      ...when,
       fold(`SUMMARY:${escapeText(item.title)}`),
       ...(item.description ? [fold(`DESCRIPTION:${escapeText(stripHtml(item.description))}`)] : []),
       "BEGIN:VALARM",
-      `TRIGGER:-P${days}D`,
+      // У напоминания со временем будильник звонит в его час, а не за сутки.
+      timed ? "TRIGGER:-PT0M" : `TRIGGER:-P${days}D`,
       "ACTION:DISPLAY",
       fold(`DESCRIPTION:${escapeText(item.title)}`),
       "END:VALARM",
