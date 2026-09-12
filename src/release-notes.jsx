@@ -1,7 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 // Коротко о том, что менялось. Подробная история — в CHANGELOG.md репозитория;
 // здесь по несколько строк на версию, чтобы понять, что нового, не уходя с сайта.
+// Снимок версии лежит в public/versions. В предпросмотре, где приложение живёт
+// одной страницей без файлов рядом, снимки подкладываются в window сборщиком.
+const shotUrl = (version) => {
+  const inlined = typeof window !== "undefined" && window.__PLANNER_SHOTS__;
+  return (inlined && inlined[version]) || `${import.meta.env.BASE_URL}versions/${version}.png`;
+};
+
 const RELEASES = [
   {
     v: "0.5.0",
@@ -20,7 +27,7 @@ const RELEASES = [
       "Новая иконка приложения: кривая возможностей вместо столбиков.",
       "Напоминание о занятиях и счёт дней подряд, вердикт о темпе рядом с главным событием.",
       "Пропущенный день попадает в календарь телефона напоминанием на вечер.",
-      "История изменений открывается окном, внутри — сравнение версий «было → стало».",
+      "История изменений открывается окном, внутри — сравнение версий шторкой по снимкам и словами.",
       "Починено: подписка на календарь со второго устройства, тёмное уведомление об удалении, рамка выбранного дня.",
     ],
     changes: [
@@ -99,6 +106,66 @@ const RELEASES = [
 // обновления и как стало после. Список «что нового» отвечает на вопрос «что
 // добавили», а это — на вопрос «чем теперь иначе», и на больших обновлениях
 // второй вопрос интереснее.
+// Шторка «было / стало»: слева кусок старой версии, справа новой, между ними
+// ручка. Так сравнивают карты в обзорах игр — и здесь это честнее любого
+// описания: видно саму разницу, а не рассказ о ней.
+function Wipe({ before, after, beforeLabel, afterLabel }) {
+  const [pos, setPos] = useState(50);
+  const boxRef = useRef(null);
+  const dragging = useRef(false);
+
+  function setFromEvent(e) {
+    const box = boxRef.current;
+    if (!box) return;
+    const rect = box.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    setPos(Math.max(0, Math.min(100, x)));
+  }
+
+  return (
+    <div
+      ref={boxRef}
+      style={styles.wipe}
+      onPointerDown={(e) => {
+        dragging.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setFromEvent(e);
+      }}
+      onPointerMove={(e) => dragging.current && setFromEvent(e)}
+      onPointerUp={() => (dragging.current = false)}
+      onPointerCancel={() => (dragging.current = false)}
+    >
+      <img src={after} alt={afterLabel} style={styles.wipeImg} draggable="false" />
+      {/* Старая версия лежит сверху и обрезается ручкой — двигая её влево,
+          вы «стираете» прошлое и видите нынешнее. */}
+      <div style={{ ...styles.wipeClip, clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
+        <img src={before} alt={beforeLabel} style={styles.wipeImg} draggable="false" />
+      </div>
+
+      <div style={{ ...styles.wipeLine, left: pos + "%" }}>
+        <div
+          style={styles.wipeGrip}
+          tabIndex={0}
+          role="slider"
+          aria-label="Сравнение версий"
+          aria-valuenow={Math.round(pos)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") setPos((p) => Math.max(0, p - 4));
+            if (e.key === "ArrowRight") setPos((p) => Math.min(100, p + 4));
+          }}
+        >
+          ‹ ›
+        </div>
+      </div>
+
+      <div style={{ ...styles.wipeTag, left: 8, opacity: pos > 12 ? 1 : 0 }}>{beforeLabel}</div>
+      <div style={{ ...styles.wipeTag, right: 8, opacity: pos < 88 ? 1 : 0 }}>{afterLabel}</div>
+    </div>
+  );
+}
+
 function Compare({ onBack }) {
   const ordered = [...RELEASES].reverse();
   const [index, setIndex] = useState(ordered.length - 1);
@@ -138,6 +205,16 @@ function Compare({ onBack }) {
           </button>
         ))}
       </div>
+
+      {/* Картинки сняты из истории репозитория скриптом scripts/make-version-shots.mjs. */}
+      {previous && (
+        <Wipe
+          before={shotUrl(previous.v)}
+          after={shotUrl(release.v)}
+          beforeLabel={previous.v}
+          afterLabel={release.v}
+        />
+      )}
 
       <div style={styles.compareBody}>
         {(release.changes || []).map((pair, i) => (
@@ -179,7 +256,7 @@ export default function ReleaseNotesDialog({ open, onClose }) {
     <div style={styles.overlay} onClick={onClose}>
       <div
         className="ap-dialog"
-        style={styles.dialog}
+        style={{ ...styles.dialog, maxWidth: compare ? 760 : 520 }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="История изменений"
@@ -285,6 +362,51 @@ const styles = {
   slider: { width: "100%", accentColor: "var(--accent)" },
   scaleRow: { display: "flex", justifyContent: "space-between", marginBottom: 14 },
   scaleMark: { border: "none", background: "none", padding: 0, fontSize: 11, fontWeight: 600 },
+  wipe: {
+    position: "relative",
+    width: "100%",
+    aspectRatio: "1180 / 820",
+    borderRadius: 10,
+    overflow: "hidden",
+    border: "1px solid var(--line)",
+    background: "var(--neutralBg)",
+    marginBottom: 14,
+    touchAction: "none",
+    cursor: "ew-resize",
+    userSelect: "none",
+  },
+  wipeImg: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left" },
+  wipeClip: { position: "absolute", inset: 0 },
+  wipeLine: { position: "absolute", top: 0, bottom: 0, width: 2, background: "var(--accent)", transform: "translateX(-1px)" },
+  wipeGrip: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    width: 34,
+    height: 34,
+    borderRadius: "50%",
+    background: "var(--accent)",
+    color: "var(--accentInk)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: 1,
+    boxShadow: "0 2px 10px rgba(0,0,0,.25)",
+  },
+  wipeTag: {
+    position: "absolute",
+    top: 8,
+    fontSize: 11,
+    fontWeight: 600,
+    padding: "3px 8px",
+    borderRadius: 999,
+    background: "rgba(18,17,14,.65)",
+    color: "#EDE7D8",
+    transition: "opacity .15s ease",
+  },
   compareBody: { display: "flex", flexDirection: "column", gap: 10 },
   pair: { display: "flex", alignItems: "stretch", gap: 8, flexWrap: "wrap" },
   before: {
