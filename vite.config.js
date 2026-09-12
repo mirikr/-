@@ -11,6 +11,7 @@ const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), 
 
 export default defineConfig({
   base,
+  build: { sourcemap: true },
   // Версия и дата сборки видны в подвале приложения: иначе «залилось или нет»
   // проверяется только на глаз.
   define: {
