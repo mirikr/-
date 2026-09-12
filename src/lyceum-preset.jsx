@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import Collapsible from "./collapsible.jsx";
-import { SCHOOLS, SPECS, variantsForSchool, buildSchedule } from "./lyceum-schedule-10.js";
+import { SCHOOLS, SPECS, variantsForSchool, buildSchedule, tierOfOption } from "./lyceum-schedule-10.js";
 
 // Готовое расписание лицея вместо ручного ввода сорока уроков.
 //
@@ -11,7 +11,7 @@ import { SCHOOLS, SPECS, variantsForSchool, buildSchedule } from "./lyceum-sched
 //
 // Собранные уроки помечаются меткой набора, и «Применить» заменяет только их:
 // то, что вы завели руками, остаётся на месте.
-export default function SchedulePreset({ choices, onChoices, onApply, onClear, appliedCount }) {
+export default function SchedulePreset({ choices, onChoices, onApply, onClear, appliedCount, locked, onSignIn }) {
   const [open, setOpen] = useState(false);
   const school = choices.school || "";
   const groups = choices.groups || {};
@@ -31,7 +31,11 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     allowed.forEach((k) => {
       if (groups[k]) kept[k] = groups[k];
     });
-    onChoices({ ...choices, school: id, groups: kept });
+    const tiers = {};
+    Object.keys(choices.tiers || {}).forEach((k) => {
+      if (allowed.includes(k)) tiers[k] = choices.tiers[k];
+    });
+    onChoices({ ...choices, school: id, groups: kept, tiers });
   }
 
   function pickGroup(variantId, optionId) {
@@ -39,6 +43,22 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     if (next[variantId] === optionId) delete next[variantId];
     else next[variantId] = optionId;
     onChoices({ ...choices, groups: next });
+  }
+
+  // Уровень английского запоминается отдельно: он выбирается раньше
+  // преподавателя, и список групп зависит от него.
+  function pickTier(variant, tierId) {
+    const next = { ...(choices.tiers || {}) };
+    const groupsNext = { ...groups };
+    if (next[variant.id] === tierId) {
+      delete next[variant.id];
+      delete groupsNext[variant.id];
+    } else {
+      next[variant.id] = tierId;
+      // Преподаватель из другого уровня больше не подходит.
+      if (tierOfOption(variant, groupsNext[variant.id]) !== tierId) delete groupsNext[variant.id];
+    }
+    onChoices({ ...choices, tiers: next, groups: groupsNext });
   }
 
   function toggleSpec(id) {
@@ -56,11 +76,29 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
           Готовое расписание лицея
         </button>
         <span style={styles.mutedSmall}>
-          {appliedCount > 0 ? `в расписании ${appliedCount} уроков из набора` : "3 курс · 10 класс · 1-е полугодие"}
+          {locked
+            ? "нужен вход в аккаунт"
+            : appliedCount > 0
+            ? `в расписании ${appliedCount} уроков из набора`
+            : "3 курс · 10 класс · 1-е полугодие"}
         </span>
       </div>
 
       <Collapsible open={open}>
+        {locked ? (
+          <div style={styles.body}>
+            <p style={styles.muted}>
+              Готовое расписание привязано к аккаунту, а не к устройству: войдите — и выбранная школа с группами
+              останутся при вас на телефоне и на компьютере. Без входа записи живут только в памяти этого браузера
+              и пропадут вместе с ней.
+            </p>
+            <div style={styles.actions}>
+              <button onClick={onSignIn} style={styles.apply}>
+                Войти или зарегистрироваться
+              </button>
+            </div>
+          </div>
+        ) : (
         <div style={styles.body}>
           <p style={styles.muted}>
             Выберите свою академическую школу и группы — уроки расставятся сами, по звонкам и кабинетам.
@@ -84,22 +122,43 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
 
           {school && (
             <>
-              {variants.map((v) => (
-                <div key={v.id} style={styles.field}>
-                  <div style={styles.label}>{v.name}</div>
-                  <div style={styles.pills}>
-                    {v.options.map((o) => (
-                      <button
-                        key={o.id}
-                        onClick={() => pickGroup(v.id, o.id)}
-                        style={groups[v.id] === o.id ? styles.pillOn : styles.pill}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
+              {variants.map((v) => {
+                const tier = v.tiers ? (choices.tiers || {})[v.id] || tierOfOption(v, groups[v.id]) : null;
+                const options = v.tiers ? (v.tiers.find((t) => t.id === tier) || { options: [] }).options : v.options;
+                return (
+                  <div key={v.id} style={styles.field}>
+                    <div style={styles.label}>{v.name}</div>
+                    {v.tiers && (
+                      <div style={styles.pills}>
+                        {v.tiers.map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={() => pickTier(v, t.id)}
+                            style={tier === t.id ? styles.pillOn : styles.pill}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {v.tiers && !tier ? (
+                      <div style={styles.hint}>Сначала уровень — от него зависит, какие группы и сколько уроков в неделю.</div>
+                    ) : (
+                      <div style={styles.pills}>
+                        {options.map((o) => (
+                          <button
+                            key={o.id}
+                            onClick={() => pickGroup(v.id, o.id)}
+                            style={groups[v.id] === o.id ? styles.pillOn : styles.pill}
+                          >
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               <div style={styles.field}>
                 <div style={styles.label}>Спецкурсы</div>
@@ -135,6 +194,7 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
             </>
           )}
         </div>
+        )}
       </Collapsible>
     </div>
   );

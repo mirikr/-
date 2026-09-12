@@ -474,6 +474,11 @@ export default function StudyPlanner() {
   // Поэтому встроенные предметы видит только владелец, остальные заводят свои.
   const builtinsVisible = !cloudConfigured || !accountReady || isOwnerEmail(accountEmail);
 
+  // Готовое расписание лицея — для тех, кто вошёл: оно привязано к человеку, а
+  // не к устройству, и без входа сотрётся вместе с памятью браузера. В сборке
+  // без облака входа не существует вовсе, поэтому там оно доступно всем.
+  const presetLocked = cloudConfigured && accountReady && !accountEmail;
+
   // Если предмет, выбранный в форме дневника, пропал из списка — переключаемся на
   // первый доступный, иначе запись ушла бы в невидимый предмет.
 
@@ -2631,6 +2636,8 @@ export default function StudyPlanner() {
               onApply={applyPreset}
               onClear={clearPreset}
               appliedCount={presetLessons}
+              locked={presetLocked}
+              onSignIn={() => goScreen("settings")}
             />
             <div style={styles.sundayRow}>
               <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
