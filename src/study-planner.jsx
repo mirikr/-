@@ -4216,7 +4216,15 @@ const styles = {
   subjHeaderRow: { display: "flex", alignItems: "center", gap: 4 },
   addSubjectRow: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" },
   addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, background: "var(--panel2)" },
-  scheduleGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12, marginTop: 16 },
+  // alignItems: start — иначе день без уроков вытягивается под высоту дня с
+  // экзаменом и выглядит пустой коробкой во весь столбец.
+  scheduleGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))",
+    gap: 12,
+    marginTop: 16,
+    alignItems: "start",
+  },
   scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 11, padding: "14px 16px" },
   scheduleDayHeader: { fontSize: 13.5, fontWeight: 700, marginBottom: 8 },
   mutedSmall: { fontSize: 12, color: "var(--mute)" },
