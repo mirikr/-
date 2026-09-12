@@ -2,6 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 
 // Коротко о том, что менялось. Подробная история — в CHANGELOG.md репозитория;
 // здесь по несколько строк на версию, чтобы понять, что нового, не уходя с сайта.
+// Снимки храним только для последнего перехода: между 0.4.0 и 0.5.0 разница
+// видна с первого взгляда, а у ранних версий менялось содержимое разделов —
+// на картинке это почти одна и та же страница, и полтора мегабайта ради этого
+// не стоят. Остальные шаги сравниваются словами.
+const SHOT_VERSIONS = ["0.4.0", "0.5.0"];
+
 // Снимок версии лежит в public/versions. В предпросмотре, где приложение живёт
 // одной страницей без файлов рядом, снимки подкладываются в window сборщиком.
 const shotUrl = (version) => {
@@ -27,7 +33,7 @@ const RELEASES = [
       "Новая иконка приложения: кривая возможностей вместо столбиков.",
       "Напоминание о занятиях и счёт дней подряд, вердикт о темпе рядом с главным событием.",
       "Пропущенный день попадает в календарь телефона напоминанием на вечер.",
-      "История изменений открывается окном, внутри — сравнение версий шторкой по снимкам и словами.",
+      "История изменений открывается окном, внутри — сравнение версий словами и шторкой по снимкам 0.4.0 → 0.5.0.",
       "Починено: подписка на календарь со второго устройства, тёмное уведомление об удалении, рамка выбранного дня.",
     ],
     changes: [
@@ -171,6 +177,7 @@ function Compare({ onBack }) {
   const [index, setIndex] = useState(ordered.length - 1);
   const release = ordered[index];
   const previous = index > 0 ? ordered[index - 1] : null;
+  const hasShots = previous && SHOT_VERSIONS.includes(previous.v) && SHOT_VERSIONS.includes(release.v);
 
   return (
     <>
@@ -207,13 +214,18 @@ function Compare({ onBack }) {
       </div>
 
       {/* Картинки сняты из истории репозитория скриптом scripts/make-version-shots.mjs. */}
-      {previous && (
+      {hasShots ? (
         <Wipe
           before={shotUrl(previous.v)}
           after={shotUrl(release.v)}
           beforeLabel={previous.v}
           afterLabel={release.v}
         />
+      ) : (
+        <div style={styles.noShots}>
+          Снимками показан переход {SHOT_VERSIONS[0]} → {SHOT_VERSIONS[1]}: там разница видна с первого взгляда.
+          Этот шаг — словами.
+        </div>
       )}
 
       <div style={styles.compareBody}>
@@ -406,6 +418,15 @@ const styles = {
     background: "rgba(18,17,14,.65)",
     color: "#EDE7D8",
     transition: "opacity .15s ease",
+  },
+  noShots: {
+    fontSize: 12,
+    color: "var(--mute)",
+    lineHeight: 1.5,
+    padding: "8px 10px",
+    border: "1px dashed var(--line)",
+    borderRadius: 9,
+    marginBottom: 14,
   },
   compareBody: { display: "flex", flexDirection: "column", gap: 10 },
   pair: { display: "flex", alignItems: "stretch", gap: 8, flexWrap: "wrap" },
