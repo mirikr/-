@@ -1,6 +1,14 @@
 import React, { useMemo, useState } from "react";
 import Collapsible from "./collapsible.jsx";
-import { SCHOOLS, SPECS, variantsForSchool, buildSchedule, tierOfOption } from "./lyceum-schedule-10.js";
+import {
+  SCHOOLS,
+  SPECS,
+  variantsForSchool,
+  buildSchedule,
+  tierOfOption,
+  tiersForSchool,
+  variantVisible,
+} from "./lyceum-schedule-10.js";
 
 // Готовое расписание лицея вместо ручного ввода сорока уроков.
 //
@@ -17,7 +25,11 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
   const groups = choices.groups || {};
   const specs = choices.specs || [];
 
-  const variants = useMemo(() => variantsForSchool(school), [school]);
+  const tiers = choices.tiers || {};
+  const variants = useMemo(
+    () => variantsForSchool(school).filter((v) => variantVisible(v, tiers)),
+    [school, tiers]
+  );
   const preview = useMemo(
     () => (school ? buildSchedule({ school, groups, specs }) : []),
     [school, groups, specs]
@@ -31,11 +43,16 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     allowed.forEach((k) => {
       if (groups[k]) kept[k] = groups[k];
     });
-    const tiers = {};
-    Object.keys(choices.tiers || {}).forEach((k) => {
-      if (allowed.includes(k)) tiers[k] = choices.tiers[k];
+    // Профильной математики у юристов нет — уровень от прежней школы не переносим.
+    const nextTiers = {};
+    variantsForSchool(id).forEach((v) => {
+      const was = tiers[v.id];
+      if (was && tiersForSchool(v, id).some((t) => t.id === was)) nextTiers[v.id] = was;
     });
-    onChoices({ ...choices, school: id, groups: kept, tiers });
+    variantsForSchool(id).forEach((v) => {
+      if (!variantVisible(v, nextTiers)) delete kept[v.id];
+    });
+    onChoices({ ...choices, school: id, groups: kept, tiers: nextTiers });
   }
 
   function pickGroup(variantId, optionId) {
@@ -58,6 +75,11 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
       // Преподаватель из другого уровня больше не подходит.
       if (tierOfOption(variant, groupsNext[variant.id]) !== tierId) delete groupsNext[variant.id];
     }
+    // Уровень решает, какие группы вообще спрашиваются: выбор по спрятанной
+    // строке ушёл бы в расписание незаметно для человека.
+    variantsForSchool(school).forEach((v) => {
+      if (!variantVisible(v, next)) delete groupsNext[v.id];
+    });
     onChoices({ ...choices, tiers: next, groups: groupsNext });
   }
 
@@ -66,7 +88,16 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     onChoices({ ...choices, specs: next });
   }
 
-  const missing = variants.filter((v) => !groups[v.id]).map((v) => v.name);
+  // Уровень без своих групп (профильная математика) закрывается алгеброй и
+  // геометрией — отдельными строками ниже, так что сам он не «невыбранный».
+  const missing = variants
+    .filter((v) => {
+      if (groups[v.id]) return false;
+      if (!v.tiers) return true;
+      const tier = tiers[v.id];
+      return !tier || (v.tiers.find((t) => t.id === tier) || { options: [] }).options.length > 0;
+    })
+    .map((v) => v.name);
 
   return (
     <div style={styles.wrap}>
@@ -123,14 +154,14 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
           {school && (
             <>
               {variants.map((v) => {
-                const tier = v.tiers ? (choices.tiers || {})[v.id] || tierOfOption(v, groups[v.id]) : null;
+                const tier = v.tiers ? tiers[v.id] || tierOfOption(v, groups[v.id]) : null;
                 const options = v.tiers ? (v.tiers.find((t) => t.id === tier) || { options: [] }).options : v.options;
                 return (
                   <div key={v.id} style={styles.field}>
                     <div style={styles.label}>{v.name}</div>
                     {v.tiers && (
                       <div style={styles.pills}>
-                        {v.tiers.map((t) => (
+                        {tiersForSchool(v, school).map((t) => (
                           <button
                             key={t.id}
                             onClick={() => pickTier(v, t.id)}
@@ -143,7 +174,7 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
                     )}
                     {v.tiers && !tier ? (
                       <div style={styles.hint}>Сначала уровень — от него зависит, какие группы и сколько уроков в неделю.</div>
-                    ) : (
+                    ) : options.length === 0 ? null : (
                       <div style={styles.pills}>
                         {options.map((o) => (
                           <button

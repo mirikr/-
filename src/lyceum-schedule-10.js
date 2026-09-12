@@ -46,9 +46,21 @@ export const VARIANTS = [
     ],
   },
   {
+    id: "math",
+    name: "Математика",
+    // Базовая математика — один урок на всех у одного преподавателя;
+    // профильная — это алгебра и геометрия по группам, и спрашиваются они
+    // только после того, как выбран уровень.
+    tiers: [
+      { id: "base", label: "Базовая", options: [{ id: "andropova", label: "Андропова С.Е." }] },
+      { id: "prof", label: "Профильная", schools: ["math", "biz", "med"], options: [] },
+    ],
+  },
+  {
     id: "alg",
     name: "Алгебра",
     schools: ["math", "biz", "med"],
+    requires: { variant: "math", tier: "prof" },
     options: [
       { id: "grankina", label: "Гранкина И.В." },
       { id: "myakotina", label: "Мякотина В.И." },
@@ -59,6 +71,7 @@ export const VARIANTS = [
     id: "geom",
     name: "Геометрия",
     schools: ["math", "biz", "med"],
+    requires: { variant: "math", tier: "prof" },
     options: [
       { id: "grankina", label: "Гранкина И.В." },
       { id: "mikhailova", label: "Михайлова И.А." },
@@ -180,7 +193,7 @@ export const SLOTS = [
   L("wed", 1, "Алгебра", "Гранкина И.В.", "каб. 502 (ОБ)", { sch: ["math", "biz", "med"], v: "alg", o: "grankina" }),
   L("wed", 1, "Алгебра", "Мякотина В.И.", "каб. 403 (ИН/ИНФ)", { sch: ["math", "biz", "med"], v: "alg", o: "myakotina" }),
   L("wed", 1, "Алгебра", "Неклюдова Т.А.", "каб. 402", { sch: ["math", "biz", "med"], v: "alg", o: "neklyudova" }),
-  L("wed", 1, "Математика", "Андропова С.Е.", "каб. 503 (МАТ)"),
+  L("wed", 1, "Математика", "Андропова С.Е.", "каб. 503 (МАТ)", { v: "math", o: "andropova" }),
   L("wed", 2, "Алгебра", "Гранкина И.В.", "каб. 401", { sch: ["math", "biz", "med"], v: "alg", o: "grankina" }),
   L("wed", 2, "Алгебра", "Мякотина В.И.", "каб. 503 (МАТ)", { sch: ["math", "biz", "med"], v: "alg", o: "myakotina" }),
   L("wed", 2, "Алгебра", "Неклюдова Т.А.", "каб. 402", { sch: ["math", "biz", "med"], v: "alg", o: "neklyudova" }),
@@ -213,7 +226,7 @@ export const SLOTS = [
   L("thu", 2, "Геометрия", "Гранкина И.В.", "каб. 503 (МАТ)", { sch: ["math", "biz", "med"], v: "geom", o: "grankina" }),
   L("thu", 2, "Геометрия", "Михайлова И.А.", "каб. 501 (РЯ)", { sch: ["math", "biz", "med"], v: "geom", o: "mikhailova" }),
   L("thu", 2, "Геометрия", "Победоносцева Е.А.", "каб. 402", { sch: ["math", "biz", "med"], v: "geom", o: "pobedonostseva" }),
-  L("thu", 2, "Математика", "Андропова С.Е.", "каб. 401"),
+  L("thu", 2, "Математика", "Андропова С.Е.", "каб. 401", { v: "math", o: "andropova" }),
   L("thu", 3, "Всеобщая география", "Саркисян О.А.", "каб. 401"),
   L("thu", 4, "Биология", "Дмитриева Л.С.", "каб. 306 (БИО)", { sch: ["med"] }),
   L("thu", 4, "Естественные науки", "Булахова Л.Ю.", "каб. 401"),
@@ -298,6 +311,17 @@ export const SLOTS = [
 VARIANTS.forEach((v) => {
   if (v.tiers) v.options = v.tiers.flatMap((t) => t.options);
 });
+
+// Уровень может быть не для всех школ: профильной математики у юристов нет.
+export function tiersForSchool(variant, school) {
+  return (variant.tiers || []).filter((t) => !t.schools || t.schools.includes(school));
+}
+
+// Алгебру и геометрию спрашивать незачем, пока не выбрана профильная математика.
+export function variantVisible(variant, tiers) {
+  const need = variant.requires;
+  return !need || (tiers || {})[need.variant] === need.tier;
+}
 
 export function tierOfOption(variant, optionId) {
   if (!variant.tiers) return null;

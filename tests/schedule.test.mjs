@@ -33,7 +33,7 @@ check("школьный предмет перебивает общий", () => {
   const math = buildSchedule(mathStudent);
   // Среда, 1 урок: у математиков алгебра, а «Математика» — у остальных школ.
   assert.deepEqual(at(math, "wed", "08:30").map((e) => e.subjectName), ["Алгебра"]);
-  const law = buildSchedule({ school: "law", groups: { eng: "ivanova", rus: "timoshkova" }, specs: [] });
+  const law = buildSchedule({ school: "law", groups: { eng: "ivanova", rus: "timoshkova", math: "andropova" }, specs: [] });
   assert.deepEqual(at(law, "wed", "08:30").map((e) => e.subjectName), ["Математика"]);
   // Пятый урок понедельника: геометрия у математиков, история у юристов.
   assert.deepEqual(at(law, "mon", "12:20").map((e) => e.subjectName), ["История"]);
@@ -98,6 +98,16 @@ check("общая пара идёт обоим спецкурсам и не за
   // Экономический практикум — только у экономистов.
   assert.ok(econ.includes("Экономический практикум"));
   assert.ok(!soc.includes("Экономический практикум"));
+});
+
+check("математика: базовая у одного преподавателя, профильная по группам", () => {
+  const base = buildSchedule({ school: "biz", groups: { math: "andropova" }, specs: [] }).map((e) => e.subjectName);
+  assert.equal(base.filter((n) => n === "Математика").length, 2);
+  assert.ok(!base.includes("Алгебра") && !base.includes("Геометрия"));
+  const prof = buildSchedule({ school: "biz", groups: { alg: "myakotina", geom: "mikhailova" }, specs: [] }).map((e) => e.subjectName);
+  assert.ok(!prof.includes("Математика"));
+  assert.equal(prof.filter((n) => n === "Алгебра").length, 4);
+  assert.equal(prof.filter((n) => n === "Геометрия").length, 2);
 });
 
 console.log(`\nвсе проверки расписания прошли (${passed})`);
