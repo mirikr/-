@@ -40,11 +40,18 @@ function localRemove(key) {
   }
 }
 
+// Никогда не бросает: сломанное облако означает «работаем локально», а не
+// «читать нечего». Когда эта функция падала, чтение состояния падало вместе с
+// ней — и приложение открывалось пустым поверх целых данных на устройстве.
 async function cloudUserId() {
   if (!cloudConfigured) return null;
-  await authReady();
-  const user = currentUser();
-  return user ? user.id : null;
+  try {
+    await authReady();
+    const user = currentUser();
+    return user ? user.id : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 export async function cloudAvailable() {

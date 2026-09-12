@@ -577,51 +577,46 @@ export default function StudyPlanner() {
         if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
       }
     }
-    if (lastError) setSyncDebug("ошибка чтения: " + lastError);
+    if (lastError) setSyncDebug("не удалось прочитать записи: " + lastError);
     loadingRef.current = false;
     setSyncing(false);
+    // Неудачное чтение — не то же самое, что «записей нет». Пока оно не
+    // удалось, сохранять нельзя: пустое состояние затёрло бы целые данные
+    // на устройстве. Ровно так они и пропадали при запуске без сети.
+    return !lastError;
   }
 
-  useEffect(() => {
-    (async () => {
-      await loadFromStorage();
-      setLoaded(true);
-    })();
+  const tryLoad = useCallback(async () => {
+    if (await loadFromStorage()) setLoaded(true);
   }, []);
+
+  useEffect(() => {
+    tryLoad();
+  }, [tryLoad]);
 
   // Cross-device sync: an already-open tab only reads storage once on mount, so if you
   // change something on another device while this one stays open, it would never notice.
   // Re-pull the latest saved state whenever the person comes back to this tab/app.
-  useEffect(() => {
-    if (!loaded) return;
-    return onAuthChange(() => {
-      loadFromStorage();
-    });
-  }, [loaded]);
+  useEffect(() => onAuthChange(tryLoad), [tryLoad]);
 
   // Раньше правки, сделанные без сети, уходили в облако только при следующем
   // сохранении или возврате в приложение. Теперь — сразу, как связь появилась.
   useEffect(() => {
-    if (!loaded) return;
-    function handleOnline() {
-      loadFromStorage();
-    }
-    window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
-  }, [loaded]);
+    window.addEventListener("online", tryLoad);
+    return () => window.removeEventListener("online", tryLoad);
+  }, [tryLoad]);
 
   useEffect(() => {
     let alive = true;
-    cloudAvailable().then((on) => alive && setCloudOn(on));
-    return onAuthChange(() => {
-      cloudAvailable().then((on) => alive && setCloudOn(on));
-    });
+    // Облако может быть недоступно — это состояние интерфейса, а не сбой.
+    const check = () => cloudAvailable().then((on) => alive && setCloudOn(on)).catch(() => alive && setCloudOn(false));
+    check();
+    return onAuthChange(check);
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
     function handleWake() {
-      if (document.visibilityState === "visible") loadFromStorage();
+      if (document.visibilityState === "visible") tryLoad();
     }
     document.addEventListener("visibilitychange", handleWake);
     window.addEventListener("focus", handleWake);
@@ -629,7 +624,7 @@ export default function StudyPlanner() {
       document.removeEventListener("visibilitychange", handleWake);
       window.removeEventListener("focus", handleWake);
     };
-  }, [loaded]);
+  }, [tryLoad]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -2666,7 +2661,7 @@ export default function StudyPlanner() {
                   label={WEEKDAY_LABELS[day]}
                   entries={lyceumSchedule
                     .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
-                    .sort((a, b) => a.start.localeCompare(b.start))}
+                    .sort(byExamFirst)}
                   onAdd={(entry) => addScheduleEntry(day, entry)}
                   onUpdate={updateScheduleEntry}
                   onRemove={removeScheduleEntry}
@@ -3564,6 +3559,15 @@ function StreakFlame() {
       />
     </svg>
   );
+}
+
+// Экзамен в дне важнее урока: ради него день и смотрят, поэтому он стоит
+// первым, а уроки за ним — по времени, как обычно.
+function byExamFirst(a, b) {
+  const examA = a.kind === "exam" ? 0 : 1;
+  const examB = b.kind === "exam" ? 0 : 1;
+  if (examA !== examB) return examA - examB;
+  return String(a.start).localeCompare(String(b.start));
 }
 
 // Экзамен или олимпиада — разные вещи, и в расписании это видно сразу.
