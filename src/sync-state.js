@@ -14,7 +14,7 @@ const TOMBSTONES = "__deleted";
 const SCALAR_STAMPS = "__scalars";
 
 // Поля, которые меняются целиком и не разбиваются на элементы.
-const SCALAR_FIELDS = ["budget", "subjectColors", "showSunday", "hiddenSubjects", "presetChoices"];
+const SCALAR_FIELDS = ["budget", "subjectColors", "showSunday", "hiddenSubjects", "presetChoices", "examPicks"];
 
 // Настройки интерфейса у каждого устройства свои — их не сливаем, берём локальные.
 const LOCAL_ONLY_FIELDS = ["openSections"];

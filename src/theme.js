@@ -34,6 +34,16 @@ html, body { background: var(--bg); color: var(--ink); }
   --shadow:0 10px 26px rgba(0,0,0,.4);
   color-scheme:dark;
 }
+.ap-balance-tip { position: absolute; }
+/* На телефоне накладка перекрыла бы весь график, поэтому разбор встаёт под ним. */
+@media (max-width: 700px) {
+  .ap-balance-tip {
+    position: static !important;
+    width: auto !important;
+    margin: 10px 0 0 !important;
+    box-shadow: none !important;
+  }
+}
 `;
 
 const MODE_KEY = "planner-theme-mode";

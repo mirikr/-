@@ -16,9 +16,12 @@ import CloudPanel from "./cloud-panel.jsx";
 import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js";
 import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
+import IntroDialog from "./intro-dialog.jsx";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import SchedulePreset from "./lyceum-preset.jsx";
+import ExamPreset from "./lyceum-exams-panel.jsx";
+import { KT_PRESET_ID, DEFAULT_KT } from "./lyceum-exams-10.js";
 import { PRESET_ID } from "./lyceum-schedule-10.js";
 
 // Duration is stored in minutes for each lesson.
@@ -176,6 +179,12 @@ const SUBJECT_DEFS = [
 const STORAGE_KEY = "planner-state-v5";
 // Открытый экран и тема живут на устройстве, а не в данных, поэтому у них свои ключи.
 const SCREEN_KEY = "planner-screen";
+// Разовое окно об обновлении: помним последнюю версию, о которой рассказали.
+// Ключ свой на каждом устройстве — апдейт и приходит на каждое отдельно.
+const INTRO_KEY = "planner-intro-version";
+// Про что именно рассказываем. Привязка к номеру приложения всплывала бы с
+// каждым обновлением, а рассказ один и тот же.
+const INTRO_VERSION = "0.6.0-schedule";
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 // Встроенные предметы (право, экономика, политология, социология, философия,
@@ -454,6 +463,11 @@ export default function StudyPlanner() {
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
   // Какую школу и группы выбрал ученик: по ним собирается готовое расписание лицея.
   const [presetChoices, setPresetChoices] = useState({ school: "", groups: {}, specs: [] });
+  // Какие контрольные тесты человек сдаёт: даты общие, предметы у каждого свои.
+  const [examPicks, setExamPicks] = useState(DEFAULT_KT);
+  // Событие, по которому считается план. Пусто — берётся самое приоритетное:
+  // так было всегда, и для большинства этого достаточно.
+  const [mainEventId, setMainEventId] = useState("");
   const [homework, setHomework] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
@@ -528,6 +542,7 @@ export default function StudyPlanner() {
     }
   });
   const [notesOpen, setNotesOpen] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
   const [calendarToken, setCalendarToken] = useState("");
   // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
   const [devicePlatform] = useState(detectPlatform);
@@ -565,6 +580,8 @@ export default function StudyPlanner() {
           if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
+          if (parsed.examPicks) setExamPicks(parsed.examPicks);
+          if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
         }
@@ -593,6 +610,27 @@ export default function StudyPlanner() {
   useEffect(() => {
     tryLoad();
   }, [tryLoad]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    let seen = null;
+    try {
+      seen = localStorage.getItem(INTRO_KEY);
+    } catch (e) {
+      seen = null;
+    }
+    if (seen === INTRO_VERSION) return;
+    // Тому, кто расписание уже собрал, рассказывать нечего — просто
+    // запоминаем версию, чтобы окно не всплыло позже.
+    const already = lyceumSchedule.some((e) => e.preset === PRESET_ID);
+    if (!already) setIntroOpen(true);
+    try {
+      localStorage.setItem(INTRO_KEY, INTRO_VERSION);
+    } catch (e) {
+      /* приватный режим — покажем ещё раз, не страшно */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // Cross-device sync: an already-open tab only reads storage once on mount, so if you
   // change something on another device while this one stays open, it would never notice.
@@ -655,6 +693,8 @@ export default function StudyPlanner() {
           calendarToken,
           lyceumSchedule,
           presetChoices,
+          examPicks,
+          mainEventId,
           openSections,
           homework,
         });
@@ -682,7 +722,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -740,8 +780,12 @@ export default function StudyPlanner() {
   // Equal priorities fall back to the nearest date, since the list is already sorted by it.
   const mainEvent = useMemo(() => {
     if (!upcomingEvents.length) return null;
+    // Выбранное вручную важнее приоритета, но только пока событие впереди:
+    // прошедший экзамен считать не по чему.
+    const picked = mainEventId && upcomingEvents.find((e) => e.id === mainEventId);
+    if (picked) return picked;
     return upcomingEvents.reduce((best, e) => (Number(e.priority) > Number(best.priority) ? e : best));
-  }, [upcomingEvents]);
+  }, [upcomingEvents, mainEventId]);
 
   const capacity = useMemo(() => {
     const weeklyTotal = ALL_SUBJECTS.reduce((sum, s) => sum + (Number(budget.alloc[s.id]) || 0), 0);
@@ -1052,7 +1096,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, openSections, homework },
       null,
       2
     );
@@ -1083,6 +1127,8 @@ export default function StudyPlanner() {
       if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
+      if (parsed.examPicks) setExamPicks(parsed.examPicks);
+      if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
       // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
@@ -1389,6 +1435,17 @@ export default function StudyPlanner() {
 
   function clearPreset() {
     setLyceumSchedule((prev) => prev.filter((e) => e.preset !== PRESET_ID));
+  }
+
+  const presetExams = useMemo(() => lyceumSchedule.filter((e) => e.preset === KT_PRESET_ID).length, [lyceumSchedule]);
+
+  function applyExams(entries) {
+    setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== KT_PRESET_ID), ...entries]);
+    if (entries.some((e) => e.day === "sun")) setShowSunday(true);
+  }
+
+  function clearExams() {
+    setLyceumSchedule((prev) => prev.filter((e) => e.preset !== KT_PRESET_ID));
   }
 
   function addScheduleEntry(day, entry) {
@@ -2303,6 +2360,8 @@ export default function StudyPlanner() {
                 upcoming={upcomingEvents}
                 past={pastEvents}
                 mainEventId={mainEvent ? mainEvent.id : null}
+                pickedMainId={mainEventId}
+                onPickMain={setMainEventId}
                 onAdd={addEvent}
                 onUpdate={updateEvent}
                 onRemove={removeEvent}
@@ -2631,6 +2690,15 @@ export default function StudyPlanner() {
               onApply={applyPreset}
               onClear={clearPreset}
               appliedCount={presetLessons}
+              locked={presetLocked}
+              onSignIn={() => goScreen("settings")}
+            />
+            <ExamPreset
+              picked={examPicks}
+              onPicked={setExamPicks}
+              onApply={applyExams}
+              onClear={clearExams}
+              appliedCount={presetExams}
               locked={presetLocked}
               onSignIn={() => goScreen("settings")}
             />
@@ -3111,6 +3179,14 @@ export default function StudyPlanner() {
         </div>
       </main>
 
+      <IntroDialog
+        open={introOpen}
+        onClose={() => setIntroOpen(false)}
+        onGo={() => {
+          setIntroOpen(false);
+          goScreen("school");
+        }}
+      />
       <ReleaseNotesDialog open={notesOpen} onClose={() => setNotesOpen(false)} />
 
       {undoQueue.length > 0 && (
@@ -3171,7 +3247,7 @@ function PriorityPicker({ value, onChange }) {
   );
 }
 
-function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }) {
+function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, onAdd, onUpdate, onRemove }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState(todayStr());
   const [priority, setPriority] = useState(2);
@@ -3207,7 +3283,20 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
         {/* Одна и та же запись: правка здесь меняет её и в расписании. */}
         {e.fromSchedule && <span style={styles.fromScheduleBadge}>{examKindLabel(e.examKind)} из расписания</span>}
-        {e.id === mainEventId && <span style={styles.mainBadge}>по нему считается план</span>}
+        {e.id === mainEventId ? (
+          <span style={styles.mainBadge}>
+            по нему считается план
+            {pickedMainId === e.id && (
+              <button onClick={() => onPickMain("")} style={styles.mainBadgeBtn} title="Считать по самому приоритетному, как раньше">
+                вернуть авто
+              </button>
+            )}
+          </span>
+        ) : (
+          <button onClick={() => onPickMain(e.id)} style={styles.mainPick} title="Считать план до этого события">
+            считать план по нему
+          </button>
+        )}
         {isPast && <span style={styles.mutedSmall}>прошло</span>}
         <button
           onClick={() => onRemove(e.id)}
@@ -3225,7 +3314,8 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
       <p style={styles.muted}>
         Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
         план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
-        приоритет одинаковый, берётся ближайшее. Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
+        приоритет одинаковый, берётся ближайшее. Можно выбрать и вручную — «считать план по нему» у любого события.
+        Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
         это одна и та же запись, и править её можно с любой стороны.
       </p>
 
@@ -4217,6 +4307,25 @@ const styles = {
     verticalAlign: "middle",
   },
   fromScheduleBadge: { fontSize: 10.5, color: "var(--red)", border: "1px solid var(--redLine)", borderRadius: 8, padding: "1px 6px" },
+  mainPick: {
+    border: "1px solid var(--line)",
+    background: "none",
+    borderRadius: 999,
+    padding: "2px 9px",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--ink3)",
+    whiteSpace: "nowrap",
+  },
+  mainBadgeBtn: {
+    border: "none",
+    background: "none",
+    padding: "0 0 0 7px",
+    fontSize: 11,
+    color: "var(--ink3)",
+    fontWeight: 600,
+    textDecoration: "underline",
+  },
   mainBadge: { fontSize: 11, color: "var(--green)", fontWeight: 600 },
   pastLabel: { fontSize: 11.5, color: "var(--mute)", margin: "10px 0 6px" },
   overallBar: { marginBottom: 24 },
