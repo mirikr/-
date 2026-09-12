@@ -457,6 +457,14 @@ export default function StudyPlanner() {
   const firstLoad = useRef(true);
   const loadingRef = useRef(false);
 
+  // Эти три состояния объявлены до ALL_SUBJECTS намеренно: список предметов
+  // зависит от того, кто вошёл. Когда объявление стояло ниже, сборка с облаком
+  // падала белым экраном — без облака проверка обрывалась на первом условии и
+  // до чтения переменных дело не доходило.
+  const [notebookOwner, setNotebookOwner] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountReady, setAccountReady] = useState(false);
+
   // Готовый курс по обществознанию — личная подготовка автора приложения, а не
   // его содержимое: чужому человеку он достался бы как чей-то чужой конспект.
   // Поэтому встроенные предметы видит только владелец, остальные заводят свои.
@@ -510,9 +518,6 @@ export default function StudyPlanner() {
       return "today";
     }
   });
-  const [notebookOwner, setNotebookOwner] = useState("");
-  const [accountEmail, setAccountEmail] = useState("");
-  const [accountReady, setAccountReady] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [calendarToken, setCalendarToken] = useState("");
   // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
