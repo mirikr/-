@@ -18,6 +18,8 @@ import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
+import SchedulePreset from "./lyceum-preset.jsx";
+import { PRESET_ID } from "./lyceum-schedule-10.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -450,6 +452,8 @@ export default function StudyPlanner() {
   // Воскресенье прячется, но его уроки остаются в расписании — вдруг понадобится вернуть.
   const [showSunday, setShowSunday] = useState(false);
   const [lyceumSchedule, setLyceumSchedule] = useState([]);
+  // Какую школу и группы выбрал ученик: по ним собирается готовое расписание лицея.
+  const [presetChoices, setPresetChoices] = useState({ school: "", groups: {}, specs: [] });
   const [homework, setHomework] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
@@ -555,6 +559,7 @@ export default function StudyPlanner() {
           if (parsed.showSunday) setShowSunday(parsed.showSunday);
           if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
+          if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
         }
@@ -649,6 +654,7 @@ export default function StudyPlanner() {
           showSunday,
           calendarToken,
           lyceumSchedule,
+          presetChoices,
           openSections,
           homework,
         });
@@ -676,7 +682,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1046,7 +1052,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, openSections, homework },
       null,
       2
     );
@@ -1076,6 +1082,7 @@ export default function StudyPlanner() {
       if (parsed.showSunday) setShowSunday(parsed.showSunday);
       if (parsed.calendarToken) setCalendarToken(parsed.calendarToken);
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
+      if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
       // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
@@ -1148,6 +1155,10 @@ export default function StudyPlanner() {
       text: "Начните с одного урока: вернуться проще, чем кажется, и день сразу перестанет быть пустым.",
     };
   }, [studyPulse]);
+
+  // Серия идёт, только пока в ней нет пропуска: после него «4 дня подряд» рядом
+  // с «занятий не было два дня» звучало бы издевательски.
+  const studyStreakOn = studyPulse.streak > 1 && studyPulse.daysSince === 0;
 
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
   // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
@@ -1366,6 +1377,20 @@ export default function StudyPlanner() {
 
   // День недели у экзамена не выбирают — его задаёт дата. Ошиблись днём при
   // добавлении, вписали верную дату — запись переедет сама.
+  // Уроки из готового расписания помечены набором, поэтому «Применить» заменяет
+  // только их: экзамены и уроки, заведённые руками, остаются на месте.
+  const presetLessons = useMemo(() => lyceumSchedule.filter((e) => e.preset === PRESET_ID).length, [lyceumSchedule]);
+
+  function applyPreset(entries) {
+    if (!entries.length) return;
+    setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== PRESET_ID), ...entries]);
+    if (entries.some((e) => e.day === "sun")) setShowSunday(true);
+  }
+
+  function clearPreset() {
+    setLyceumSchedule((prev) => prev.filter((e) => e.preset !== PRESET_ID));
+  }
+
   function addScheduleEntry(day, entry) {
     if (!entry.subjectName || !entry.subjectName.trim()) return;
     const id = "sch-" + Date.now() + "-" + Math.round(Math.random() * 1000);
@@ -1936,7 +1961,15 @@ export default function StudyPlanner() {
             >
               <div style={styles.reminderRow}>
                 <div style={styles.reminderMark} aria-hidden="true">
-                  {studyReminder.tone === "ok" ? "✓" : studyReminder.tone === "warn" ? "!" : "·"}
+                  {studyStreakOn ? (
+                    <StreakFlame />
+                  ) : studyReminder.tone === "ok" ? (
+                    "✓"
+                  ) : studyReminder.tone === "warn" ? (
+                    "!"
+                  ) : (
+                    "·"
+                  )}
                 </div>
                 <div style={styles.reminderBody}>
                   <div style={styles.reminderTitle}>{studyReminder.title}</div>
@@ -1944,7 +1977,7 @@ export default function StudyPlanner() {
                 </div>
                 {/* Серия показывается, только пока она идёт: после пропуска «4 дня подряд»
                     рядом с «занятий не было два дня» звучало издевательски. */}
-                {studyPulse.streak > 1 && studyPulse.daysSince === 0 && (
+                {studyStreakOn && (
                   <div style={styles.streakBox}>
                     <div style={styles.streakNum}>{studyPulse.streak}</div>
                     <div style={styles.streakWord}>{daysWord(studyPulse.streak)} подряд</div>
@@ -2592,6 +2625,13 @@ export default function StudyPlanner() {
             )}
 
             <h3 style={styles.subHead}>Расписание</h3>
+            <SchedulePreset
+              choices={presetChoices}
+              onChoices={setPresetChoices}
+              onApply={applyPreset}
+              onClear={clearPreset}
+              appliedCount={presetLessons}
+            />
             <div style={styles.sundayRow}>
               <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
                 {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
@@ -3500,6 +3540,25 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   );
 }
 
+// Серия занятий — огонёк вместо восклицательного знака. Смайлик рядом с
+// шрифтовой засечкой смотрелся чужеродно, поэтому пламя нарисовано теми же
+// цветами, что и остальное приложение: золото снаружи, горячее ядро внутри.
+function StreakFlame() {
+  return (
+    <svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true">
+      <path
+        d="M12 2.2c3.4 3.6 5.6 6.5 5.6 10.2 0 3.5-2.5 6.3-5.6 6.3S6.4 15.9 6.4 12.4c0-2.1.9-3.8 2.1-5.4.3 1.5.9 2.4 1.6 2.9-.2-2.8.6-5.6 1.9-7.7z"
+        fill="var(--gold)"
+      />
+      <path
+        d="M12 17.6c-1.7 0-3-1.4-3-3.3 0-1.6 1-2.7 1.8-4 .5 1 .9 1.5 1.4 1.8.5-1 .8-2 .8-3 1.3 1.7 2 3.1 2 5.2 0 1.9-1.3 3.3-3 3.3z"
+        fill="var(--redStrong)"
+        opacity="0.85"
+      />
+    </svg>
+  );
+}
+
 // Экзамен или олимпиада — разные вещи, и в расписании это видно сразу.
 function ExamKindPicker({ value, onChange }) {
   const current = value === "olympiad" ? "olympiad" : "exam";
@@ -3871,10 +3930,12 @@ const styles = {
   reminderRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
   reminderMark: {
     fontFamily: "'PT Serif', Georgia, serif",
-    fontSize: 30,
+    fontSize: 44,
     lineHeight: 1,
-    width: 34,
-    textAlign: "center",
+    width: 46,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     color: "var(--accent)",
     flexShrink: 0,
   },
