@@ -2642,10 +2642,19 @@ export default function StudyPlanner() {
               с реальными звонками: время, кабинет, преподаватель и роль урока.
             </p>
 
-            <h3 style={styles.subHead}>Предметы</h3>
+            {/* Предметов набирается полтора десятка, и списком они занимали
+                пол-экрана над расписанием — ради которого сюда и заходят. */}
+            <button onClick={() => toggleSection("lyceumSubjects")} style={styles.foldHead}>
+              <span style={styles.sectionChevron}>{openSections.lyceumSubjects ? "▾" : "▸"}</span>
+              <span style={styles.subHeadInline}>Предметы</span>
+              {lyceumSubjectNames.length > 0 && (
+                <span style={styles.mutedSmall}>{lyceumSubjectNames.length} — тетради и цвет</span>
+              )}
+            </button>
             {lyceumSubjectNames.length === 0 ? (
               <p style={styles.muted}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
             ) : (
+              <Collapsible open={!!openSections.lyceumSubjects}>
               <div style={styles.lyceumNotebooks}>
                 {lyceumSubjectNames.map((name) => {
                   const key = "lyceum:" + name;
@@ -2681,6 +2690,7 @@ export default function StudyPlanner() {
                   );
                 })}
               </div>
+              </Collapsible>
             )}
 
             <h3 style={styles.subHead}>Расписание</h3>
@@ -4231,6 +4241,18 @@ const styles = {
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
   tabBtn: { border: "1px solid", borderRadius: 8, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
   subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 18, margin: "22px 0 10px" },
+  subHeadInline: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 18 },
+  foldHead: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+    border: "none",
+    background: "none",
+    padding: 0,
+    margin: "22px 0 10px",
+    color: "var(--ink)",
+    textAlign: "left",
+  },
   lyceumSubjectRow: { display: "flex", alignItems: "center", gap: 8 },
   sundayRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 },
   sundayBtn: {
