@@ -9,10 +9,11 @@ import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
-import { Rail, ScreenHead, TabBar } from "./shell.jsx";
+import { Rail, ScreenHead, TabBar, Countdowns } from "./shell.jsx";
 import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
+import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js";
 import { THEME_CSS, useThemeMode, NIGHT_FROM, NIGHT_TO } from "./theme.js";
 import ReleaseNotes from "./release-notes.jsx";
 import { platform as detectPlatform } from "./device.js";
@@ -360,12 +361,25 @@ function ymd(date) {
 }
 
 // Interpolates from red (missed/under target) to green (target reached) as ratio goes 0 -> 1.
-// Клетка календаря: три ступени вместо плавного градиента от красного к зелёному.
-// Градиент было не с чем сравнить — оттенок ничего не сообщал сам по себе.
-function cellColor(ratio) {
-  if (ratio >= 0.95) return "var(--cellFull)";
-  if (ratio >= 0.4) return "var(--cellMid)";
-  return "var(--cellLow)";
+// Клетка календаря: высота заливки — доля выполненной цели, и цвет идёт следом,
+// плавно от красноватого к зелёному. Ступеньки «пусто — средне — цель» врали на
+// границах: 39 % и 41 % выглядели как разные миры.
+const CELL_SCALE = {
+  light: { low: [226, 185, 180], mid: [230, 215, 154], full: [182, 207, 188] },
+  night: { low: [110, 58, 52], mid: [122, 101, 40], full: [58, 92, 68] },
+};
+
+function mixRgb(a, b, t) {
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
+function cellColor(ratio, theme) {
+  const scale = CELL_SCALE[theme === "night" ? "night" : "light"];
+  const clamped = Math.max(0, Math.min(1, ratio));
+  return clamped <= 0.5
+    ? mixRgb(scale.low, scale.mid, clamped / 0.5)
+    : mixRgb(scale.mid, scale.full, (clamped - 0.5) / 0.5);
 }
 
 
@@ -471,6 +485,7 @@ export default function StudyPlanner() {
     }
   });
   const [notebookOwner, setNotebookOwner] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
   const [calendarToken, setCalendarToken] = useState("");
   // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
   const [devicePlatform] = useState(detectPlatform);
@@ -1567,6 +1582,40 @@ export default function StudyPlanner() {
       ? "Ночная тема вручную"
       : "Светлая тема вручную";
 
+  // Почта вошедшего нужна только для подписи в листе «Ещё» на телефоне.
+  useEffect(() => {
+    if (!cloudConfigured) return;
+    let alive = true;
+    authReady().then(() => {
+      if (!alive) return;
+      const user = currentUser();
+      setAccountEmail(user ? user.email || "" : "");
+    });
+    const off = onAuthChange((session) => {
+      setAccountEmail(session && session.user ? session.user.email || "" : "");
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+
+  const account = {
+    signedIn: cloudOn,
+    email: accountEmail,
+    onSignOut: () => signOut(),
+    onOpen: () => goScreen("settings"),
+  };
+
+  // Отсчёты для колонки и шапки: ближайшее событие и то, по которому считается план.
+  const countdownOf = (event) => {
+    if (!event) return null;
+    const days = daysUntilDate(event.date);
+    return { id: event.id, days, word: daysWord(days), name: event.name };
+  };
+  const nextCountdown = countdownOf(nextEvent);
+  const mainCountdown = countdownOf(mainEvent);
+
   const syncLine = lastSyncedAt
     ? `Синхронизировано ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
     : "Ещё не синхронизировано";
@@ -1604,7 +1653,13 @@ export default function StudyPlanner() {
         @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
         /* Карточка приподнимается под курсором — так видно, что с ней можно работать,
            и мягко появляется при переходе на экран: иначе смена раздела выглядит рывком. */
-        .ap-card { transition: box-shadow .22s ease, border-color .22s ease; animation: ap-rise .3s ease both; }
+        .ap-screen { animation: ap-screen-in .24s cubic-bezier(.2,.8,.3,1) both; }
+        @keyframes ap-screen-in { from { opacity: .4; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .ap-card { transition: box-shadow .22s ease, border-color .22s ease; animation: ap-rise .26s ease both; }
+        /* Карточки входят по очереди — так переход читается как движение, а не как вспышка. */
+        .ap-screen > .ap-card:nth-child(2), .ap-screen > * > .ap-card:nth-child(2) { animation-delay: .04s; }
+        .ap-screen > .ap-card:nth-child(3), .ap-screen > * > .ap-card:nth-child(3) { animation-delay: .08s; }
+        .ap-screen > .ap-card:nth-child(4), .ap-screen > * > .ap-card:nth-child(4) { animation-delay: .12s; }
         .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
         /* Состояния навигации описаны здесь целиком: инлайновый стиль перебивал :hover,
            и подсветка под курсором не появлялась. */
@@ -1640,11 +1695,11 @@ export default function StudyPlanner() {
         .ap-bar { transform-origin: bottom; animation: ap-grow .7s cubic-bezier(.2,.8,.3,1) both; }
         /* В SVG точка отсчёта трансформации задаётся отдельно, иначе столбец растёт из угла холста. */
         .ap-bar-svg { transform-box: fill-box; transform-origin: bottom; animation: ap-grow .7s cubic-bezier(.2,.8,.3,1) both; }
-        @keyframes ap-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes ap-rise { from { opacity: .35; transform: translateY(6px); } to { opacity: 1; transform: none; } }
         @keyframes ap-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
         @keyframes ap-grow { from { transform: scaleY(.02); } to { transform: scaleY(1); } }
         @media (prefers-reduced-motion: reduce) {
-          .ap-card, .ap-nav, .ap-row, .ap-tab, .ap-pill, .ap-tab-mark { transition: none; animation: none; }
+          .ap-card, .ap-nav, .ap-row, .ap-tab, .ap-pill, .ap-tab-mark, .ap-screen { transition: none; animation: none; }
           .ap-fill, .ap-bar, .ap-bar-svg { animation: none; }
         }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
@@ -1656,11 +1711,11 @@ export default function StudyPlanner() {
         }
         /* На телефоне навигация уходит вниз, как в обычных приложениях: до полосы
            внизу большой палец дотягивается, до колонки слева — нет. */
-        .ap-tabbar { display: none; }
+        .ap-tabbar, .ap-only-mobile { display: none; }
         @media (max-width: 900px) {
           .ap-shell { flex-direction: column; }
           .ap-rail { display: none !important; }
-          .ap-tabbar { display: block; }
+          .ap-tabbar, .ap-only-mobile { display: block; }
           .ap-main { padding: 16px 14px 96px !important; }
           .ap-grid2, .ap-grid3 { grid-template-columns: 1fr !important; }
         }
@@ -1676,9 +1731,19 @@ export default function StudyPlanner() {
         todayLabel={todayLabel}
         syncLine={syncLine}
         syncNote={syncNote}
+        next={nextCountdown}
+        main={mainCountdown}
       />
 
-      <TabBar items={navItems} screen={screen} onGo={goScreen} mode={mode} setMode={setMode} modeLabel={modeLabel} />
+      <TabBar
+        items={navItems}
+        screen={screen}
+        onGo={goScreen}
+        mode={mode}
+        setMode={setMode}
+        modeLabel={modeLabel}
+        account={account}
+      />
 
       <main className="ap-main" style={styles.main}>
         {homeworkReminders.length > 0 && (
@@ -1704,7 +1769,15 @@ export default function StudyPlanner() {
           </div>
         )}
 
-        <ScreenHead title={screenInfo.title} note={screenInfo.note} />
+        <ScreenHead title={screenInfo.title} note={screenInfo.note}>
+          <div className="ap-only-mobile">
+            <Countdowns next={nextCountdown} main={mainCountdown} />
+          </div>
+        </ScreenHead>
+
+        {/* key={screen} заставляет React пересобрать содержимое при переходе — иначе
+            анимация входа проигрывалась бы один раз за всё время работы. */}
+        <div key={screen} className="ap-screen">
 
         {screen === "today" && (
           <>
@@ -2368,8 +2441,9 @@ export default function StudyPlanner() {
                       style={{
                         ...styles.calCell,
                         opacity: inMonth ? 1 : 0.4,
-                        outline: selected ? "2px solid var(--ink)" : "none",
-                        outlineOffset: "-2px",
+                        // Кольцо внутри клетки: outline со смещением рисовался поверх
+                        // границы, и заливка выглядывала из-под него полоской.
+                        boxShadow: selected ? "inset 0 0 0 2px var(--ink)" : "none",
                       }}
                     >
                       {/* Клетка заливается снизу вверх на долю выполненной цели: так видно
@@ -2377,7 +2451,7 @@ export default function StudyPlanner() {
                       {!isFuture && ratio > 0 && (
                         <span
                           className="ap-fill-up"
-                          style={{ ...styles.calFill, height: Math.round(ratio * 100) + "%", background: cellColor(ratio) }}
+                          style={{ ...styles.calFill, height: Math.round(ratio * 100) + "%", background: cellColor(ratio, theme) }}
                         />
                       )}
                       {lessonDots.length > 0 && (
@@ -2394,18 +2468,14 @@ export default function StudyPlanner() {
                 })}
               </div>
               <div style={styles.calLegend}>
-                <span style={styles.calLegendItem}>
-                  <span style={{ ...styles.calLegendBox, background: "var(--cellFull)" }} />
-                  цель выполнена
-                </span>
-                <span style={styles.calLegendItem}>
-                  <span style={{ ...styles.calLegendBox, background: "var(--cellMid)" }} />
-                  частично
-                </span>
-                <span style={styles.calLegendItem}>
-                  <span style={{ ...styles.calLegendBox, background: "var(--cellLow)" }} />
-                  почти пусто
-                </span>
+                <span style={styles.calLegendItem}>0</span>
+                <span
+                  style={{
+                    ...styles.calLegendScale,
+                    backgroundImage: `linear-gradient(to right, ${cellColor(0, theme)}, ${cellColor(0.5, theme)}, ${cellColor(1, theme)})`,
+                  }}
+                />
+                <span style={styles.calLegendItem}>цель</span>
               </div>
               <p style={styles.mutedSmall}>
                 Высота заливки — доля дневной цели, а цель на каждый день недели задаётся в «Распределении».
@@ -2694,6 +2764,7 @@ export default function StudyPlanner() {
             </section>
           </div>
         )}
+        </div>
       </main>
 
       {undoQueue.length > 0 && (
@@ -2783,6 +2854,7 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
         {/* Сколько осталось — крупно и слева: ради этого числа список и открывают. */}
         <span style={{ ...styles.eventDays, color: isPast ? "var(--mute)" : info.strong }}>
           {isPast ? "—" : left}
+          {!isPast && <span style={styles.eventDaysWord}>{daysWord(left)}</span>}
         </span>
         <AutoGrow value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
         <input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} style={styles.eventDateInput} />
@@ -3536,7 +3608,7 @@ const styles = {
   countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 8, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
-  dateInput: { border: "1px solid var(--railActive)", background: "transparent", color: "inherit", borderRadius: 7, padding: "4px 6px", fontSize: 12, width: "100%" },
+  dateInput: { border: "1px solid var(--line)", background: "var(--panel2)", color: "inherit", borderRadius: 8, padding: "7px 9px", fontSize: 12.5, width: "100%" },
   countdownEvent: { fontSize: 16, fontWeight: 700, marginTop: 8, lineHeight: 1.3 },
   countdownDate: { fontSize: 12, opacity: 0.7, marginTop: 3 },
   countdownRest: {
@@ -3636,7 +3708,17 @@ const styles = {
     borderRadius: "0 9px 9px 0",
     padding: "10px 12px",
   },
-  eventDays: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 22, lineHeight: 1.1, minWidth: 30, textAlign: "right" },
+  eventDays: {
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 22,
+    lineHeight: 1.1,
+    minWidth: 42,
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  },
+  eventDaysWord: { fontFamily: "Inter, system-ui, sans-serif", fontSize: 10.5, fontWeight: 600, opacity: 0.85, marginTop: 2 },
   eventAddRow: {
     display: "flex",
     alignItems: "center",
@@ -3695,8 +3777,11 @@ const styles = {
     width: "100%",
     maxWidth: 560,
     pointerEvents: "auto",
-    background: "var(--btnBg)",
+    // Тёмная плашка в обеих темах: при переводе цветов в токены фон уехал на
+    // цвет кнопки, а он в ночной теме золотой — светлый текст на нём пропадал.
+    background: "var(--rail)",
     color: "var(--railInk)",
+    border: "1px solid var(--railActive)",
     borderRadius: 10,
     boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
     overflow: "hidden",
@@ -3707,14 +3792,14 @@ const styles = {
   undoRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" },
   undoText: { flex: 1, fontSize: 12.5, lineHeight: 1.45 },
   undoCancel: {
-    border: "1px solid var(--mute)",
+    border: "1px solid var(--railInk2)",
     background: "transparent",
     color: "var(--railInk)",
     borderRadius: 8,
     padding: "4px 10px",
     fontSize: 13,
   },
-  undoConfirm: { border: "none", background: "var(--green)", color: "var(--btnInk)", borderRadius: 8, padding: "4px 10px", fontSize: 13 },
+  undoConfirm: { border: "none", background: "var(--green)", color: "#fff", borderRadius: 8, padding: "4px 10px", fontSize: 13 },
   dayPriority: { fontSize: 11, fontWeight: 700, marginLeft: 6 },
   levelChip: {
     border: "1px solid",
@@ -3940,9 +4025,10 @@ const styles = {
   },
   calFill: { position: "absolute", left: 0, right: 0, bottom: 0 },
   calDayNum: { position: "relative" },
-  calLegend: { display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--ink3)", margin: "12px 0 8px" },
+  calLegend: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, color: "var(--ink3)", margin: "12px 0 8px" },
   calLegendItem: { display: "flex", alignItems: "center", gap: 5 },
   calLegendBox: { width: 12, height: 12, borderRadius: 3 },
+  calLegendScale: { flex: "1 1 120px", height: 10, borderRadius: 999, minWidth: 80 },
   hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "var(--accent)", zIndex: 1 },
   // Точки сидят над заливкой, поэтому подложка им больше не нужна.
   lessonDots: { position: "absolute", top: 3, display: "flex", gap: 2, alignItems: "center", zIndex: 1 },

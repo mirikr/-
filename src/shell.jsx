@@ -5,7 +5,7 @@ import React, { useState } from "react";
 // чтобы попасть в дневник, нужно было проскроллить расписание. Теперь разделы —
 // экраны, и между ними переходят отсюда. На телефоне колонка ложится в полосу
 // сверху и прокручивается вбок: место под неё там взять неоткуда.
-export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote }) {
+export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote, next, main }) {
   return (
     <aside className="ap-rail" style={styles.rail}>
       <div style={styles.modeSwitch}>
@@ -45,6 +45,7 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
           лицеиста
         </div>
         <div style={styles.railToday}>{todayLabel}</div>
+        <Countdowns next={next} main={main} tone="rail" />
       </div>
 
       <nav style={styles.nav}>
@@ -86,7 +87,7 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
 // темы, которому на телефоне места в шапке нет.
 const PRIMARY_TABS = ["today", "school", "journal", "study"];
 
-export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
+export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account }) {
   const [more, setMore] = useState(false);
   const primary = PRIMARY_TABS.map((key) => items.find((i) => i.key === key)).filter(Boolean);
   const rest = items.filter((i) => !PRIMARY_TABS.includes(i.key));
@@ -103,6 +104,32 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
       <div className="ap-tabbar" style={styles.tabbar}>
         {more && (
           <div style={styles.sheet}>
+            {/* Состояние аккаунта — первым делом: на телефоне колонки с ним нет,
+                а знать, ушли ли записи в облако, важнее всего именно здесь. */}
+            {account && (
+              <div style={styles.sheetAccount}>
+                <span style={{ ...styles.sheetDot, background: account.signedIn ? "var(--green)" : "var(--railInk2)" }} />
+                <span style={styles.sheetAccountText}>
+                  {account.signedIn ? account.email || "вход выполнен" : "Вход не выполнен — записи только на этом устройстве"}
+                </span>
+                {account.signedIn ? (
+                  <button onClick={account.onSignOut} className="ap-nav" style={styles.sheetAccountBtn}>
+                    Выйти
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setMore(false);
+                      account.onOpen();
+                    }}
+                    className="ap-nav"
+                    style={styles.sheetAccountBtn}
+                  >
+                    Войти
+                  </button>
+                )}
+              </div>
+            )}
             <div style={styles.sheetGrid}>
               {rest.map((item) => (
                 <button
@@ -174,6 +201,34 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
   );
 }
 
+
+// Два отсчёта: до ближайшего события и до того, по которому считается план.
+// Обычно это одно и то же событие, и тогда карточка одна — вторая появляется,
+// когда впереди что-то мелкое, а план считается до большого экзамена дальше.
+export function Countdowns({ next, main, tone }) {
+  if (!next) return null;
+  const rail = tone === "rail";
+  const same = main && main.id === next.id;
+  const card = rail ? styles.cdCardRail : styles.cdCard;
+
+  return (
+    <div style={styles.cdRow}>
+      <div className={rail ? undefined : "ap-card"} style={card}>
+        <div style={styles.cdNum}>{next.days}</div>
+        <div style={styles.cdLabel}>{next.word} {same ? "· план" : "до ближайшего"}</div>
+        <div style={styles.cdName}>{next.name}</div>
+      </div>
+      {!same && main && (
+        <div className={rail ? undefined : "ap-card"} style={{ ...card, borderColor: "var(--warmLine)" }}>
+          <div style={{ ...styles.cdNum, color: "var(--gold)" }}>{main.days}</div>
+          <div style={styles.cdLabel}>{main.word} · план</div>
+          <div style={styles.cdName}>{main.name}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Шапка экрана: где мы и что здесь делают.
 export function ScreenHead({ title, note, children }) {
   return (
@@ -231,10 +286,45 @@ const styles = {
   tabMark: { width: 22, height: 3, borderRadius: 999 },
   sheetBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 29 },
   sheet: { borderBottom: "1px solid var(--railActive)", padding: "12px 12px 10px" },
+  sheetAccount: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 10px",
+    marginBottom: 10,
+    borderRadius: 9,
+    background: "var(--railActive)",
+    fontSize: 12.5,
+    color: "var(--railInk2)",
+  },
+  sheetDot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
+  sheetAccountText: { flex: 1, minWidth: 0, lineHeight: 1.35 },
+  sheetAccountBtn: { fontSize: 12.5, fontWeight: 600, flexShrink: 0 },
   sheetGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 },
   sheetBtn: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, textAlign: "left" },
   sheetModes: { display: "flex", alignItems: "center", gap: 4, background: "var(--railActive)", borderRadius: 999, padding: 3 },
   sheetNote: { fontSize: 11.5, color: "var(--railInk2)", marginTop: 8, lineHeight: 1.45 },
+  cdRow: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
+  cdCard: {
+    background: "var(--panel)",
+    border: "1px solid var(--line)",
+    borderRadius: 11,
+    padding: "10px 14px",
+    textAlign: "center",
+    minWidth: 112,
+  },
+  cdCardRail: {
+    background: "var(--railActive)",
+    border: "1px solid transparent",
+    borderRadius: 11,
+    padding: "9px 10px",
+    textAlign: "center",
+    flex: "1 1 96px",
+    minWidth: 0,
+  },
+  cdNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 26, lineHeight: 1 },
+  cdLabel: { fontSize: 10.5, opacity: 0.75, marginTop: 3, whiteSpace: "nowrap" },
+  cdName: { fontSize: 11.5, marginTop: 4, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis" },
   head: {
     display: "flex",
     alignItems: "flex-start",
