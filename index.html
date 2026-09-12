@@ -22,14 +22,49 @@
       /* Приложение нарисовано в светлой палитре. Без color-scheme браузер в тёмной
          теме системы перекрашивает служебные цвета: текст кнопок, поля дат, чекбоксы. */
       html { color-scheme: light; }
+      html[data-theme="night"] { color-scheme: dark; }
       /* Стартовый цвет до загрузки темы; дальше его перекрывает палитра из theme.js. */
       html, body { margin: 0; background: #EFEBE1; color: #2B2822; }
+      html[data-theme="night"], html[data-theme="night"] body { background: #171612; color: #EDE7D8; }
       body { font-family: Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
       /* Home-screen PWA on iPhone: keep content clear of the notch and the home indicator. */
       #root { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
     </style>
   </head>
   <body>
+    <!--
+      Тема ставится до первой отрисовки, а не после загрузки приложения. Полоса
+      прокрутки красится из color-scheme, и Chrome решает её цвет один раз при
+      первом показе страницы: когда ночная тема приходила вместе с бандлом,
+      полоса оставалась белой до тех пор, пока тему не переключишь руками.
+      Логика та же, что в src/theme.js, — здесь только начальное значение.
+    -->
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem("planner-theme-mode") || "auto";
+          var night = { from: 20, to: 7 };
+          var saved = JSON.parse(localStorage.getItem("planner-theme-night-window") || "null");
+          if (saved) {
+            if (saved.from >= 0 && saved.from <= 23) night.from = Math.round(saved.from);
+            if (saved.to >= 0 && saved.to <= 23) night.to = Math.round(saved.to);
+          }
+          var h = new Date().getHours();
+          var isNight =
+            night.from === night.to
+              ? false
+              : night.from > night.to
+              ? h >= night.from || h < night.to
+              : h >= night.from && h < night.to;
+          var theme = mode === "auto" ? (isNight ? "night" : "light") : mode;
+          document.documentElement.setAttribute("data-theme", theme);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", theme === "night" ? "#171612" : "#EFEBE1");
+        } catch (e) {
+          /* приватный режим — останемся на светлой до загрузки приложения */
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

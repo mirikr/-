@@ -1289,6 +1289,14 @@ export default function StudyPlanner() {
 
   const scheduleDays = useMemo(() => (showSunday ? [...LYCEUM_DAYS, "sun"] : LYCEUM_DAYS), [showSunday]);
 
+  const dayEntries = useCallback(
+    (day) =>
+      lyceumSchedule
+        .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
+        .sort(byExamFirst),
+    [lyceumSchedule]
+  );
+
   const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
   // Экзамен — не предмет: тетрадь и цвет ему ни к чему, он живёт только в расписании.
@@ -1478,9 +1486,21 @@ export default function StudyPlanner() {
   }
 
   function updateScheduleEntry(id, patch) {
-    setLyceumSchedule((prev) =>
-      prev.map((e) => {
-        if (e.id !== id) return e;
+    setLyceumSchedule((prev) => {
+      // Роль — свойство предмета, а не одного урока: алгебра профильная и в
+      // среду, и в пятницу. Проставлять её в каждой карточке отдельно значило
+      // бы шесть раз повторить одно и то же, а забытый урок потом врал бы в
+      // подсчётах.
+      const source = prev.find((e) => e.id === id);
+      const spread =
+        patch.level !== undefined && source && source.kind !== "exam" ? String(source.subjectName || "").trim() : null;
+      return prev.map((e) => {
+        if (e.id !== id) {
+          if (spread && e.kind !== "exam" && String(e.subjectName || "").trim() === spread) {
+            return { ...e, level: patch.level };
+          }
+          return e;
+        }
         const next = { ...e, ...patch };
         if (next.kind === "exam" && patch.date !== undefined) {
           // Дата — единственный источник правды о дне недели для экзамена.
@@ -1488,8 +1508,8 @@ export default function StudyPlanner() {
           if (day) next.day = day;
         }
         return next;
-      })
-    );
+      });
+    });
     // Экзамен, переехавший на воскресенье, не должен пропасть вместе со скрытым днём.
     if (patch.date !== undefined && weekdayKeyFromDate(patch.date) === "sun") setShowSunday(true);
   }
@@ -2644,17 +2664,20 @@ export default function StudyPlanner() {
 
             {/* Предметов набирается полтора десятка, и списком они занимали
                 пол-экрана над расписанием — ради которого сюда и заходят. */}
-            <button onClick={() => toggleSection("lyceumSubjects")} style={styles.foldHead}>
-              <span style={styles.sectionChevron}>{openSections.lyceumSubjects ? "▾" : "▸"}</span>
-              <span style={styles.subHeadInline}>Предметы</span>
-              {lyceumSubjectNames.length > 0 && (
-                <span style={styles.mutedSmall}>{lyceumSubjectNames.length} — тетради и цвет</span>
-              )}
-            </button>
-            {lyceumSubjectNames.length === 0 ? (
-              <p style={styles.muted}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
-            ) : (
+            <div style={styles.foldCard}>
+              <button onClick={() => toggleSection("lyceumSubjects")} style={styles.foldCardHead}>
+                <span style={styles.sectionChevron}>{openSections.lyceumSubjects ? "▾" : "▸"}</span>
+                <span style={styles.foldCardTitle}>Предметы</span>
+                <span style={styles.mutedSmall}>
+                  {lyceumSubjectNames.length > 0
+                    ? lyceumSubjectNames.length + " — тетради и цвет"
+                    : "появятся из расписания"}
+                </span>
+              </button>
               <Collapsible open={!!openSections.lyceumSubjects}>
+                {lyceumSubjectNames.length === 0 ? (
+                  <p style={styles.foldCardEmpty}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
+                ) : (
               <div style={styles.lyceumNotebooks}>
                 {lyceumSubjectNames.map((name) => {
                   const key = "lyceum:" + name;
@@ -2690,8 +2713,9 @@ export default function StudyPlanner() {
                   );
                 })}
               </div>
+                )}
               </Collapsible>
-            )}
+            </div>
 
             <h3 style={styles.subHead}>Расписание</h3>
             <SchedulePreset
@@ -2729,22 +2753,53 @@ export default function StudyPlanner() {
                   <span style={{ color: p.strong, fontWeight: 700 }}>{p.mark}</span> {p.label}
                 </span>
               ))}
+              <br />
+              Роль урока — свойство предмета: меняете в одной карточке — меняется во всех его уроках.
             </div>
 
-            <div style={styles.scheduleGrid}>
-              {scheduleDays.map((day) => (
+            {/* Чаще всего от расписания нужен один день — сегодняшний. Он и
+                стоит первым, отдельной карточкой; неделя целиком разворачивается
+                по кнопке, когда нужно что-то переставить или посмотреть вперёд. */}
+            {scheduleDays.includes(todayKey) ? (
+              <div style={styles.todayDayWrap}>
                 <ScheduleDay
-                  key={day}
-                  day={day}
-                  label={WEEKDAY_LABELS[day]}
-                  entries={lyceumSchedule
-                    .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
-                    .sort(byExamFirst)}
-                  onAdd={(entry) => addScheduleEntry(day, entry)}
+                  day={todayKey}
+                  label={WEEKDAY_LABELS[todayKey]}
+                  today
+                  entries={dayEntries(todayKey)}
+                  onAdd={(entry) => addScheduleEntry(todayKey, entry)}
                   onUpdate={updateScheduleEntry}
                   onRemove={removeScheduleEntry}
                 />
-              ))}
+              </div>
+            ) : (
+              <p style={styles.mutedSmall}>
+                Сегодня воскресенье — день скрыт. Включите его кнопкой выше, если занятия есть и в воскресенье.
+              </p>
+            )}
+
+            <div style={styles.foldCard}>
+              <button onClick={() => toggleSection("scheduleWeek")} style={styles.foldCardHead}>
+                <span style={styles.sectionChevron}>{openSections.scheduleWeek ? "▾" : "▸"}</span>
+                <span style={styles.foldCardTitle}>Вся неделя</span>
+                <span style={styles.mutedSmall}>{scheduleDays.length} дней</span>
+              </button>
+              <Collapsible open={!!openSections.scheduleWeek}>
+              <div style={styles.scheduleGrid}>
+                {scheduleDays.map((day) => (
+                  <ScheduleDay
+                    key={day}
+                    day={day}
+                    label={WEEKDAY_LABELS[day]}
+                    today={day === todayKey}
+                    entries={dayEntries(day)}
+                    onAdd={(entry) => addScheduleEntry(day, entry)}
+                    onUpdate={updateScheduleEntry}
+                    onRemove={removeScheduleEntry}
+                  />
+                ))}
+              </div>
+              </Collapsible>
             </div>
           </section>
         )}
@@ -3586,7 +3641,7 @@ function AddSubjectForm({ onAdd, placeholder }) {
   );
 }
 
-function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
+function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove }) {
   const [examOpen, setExamOpen] = useState(false);
   const [examNote, setExamNote] = useState("");
   // Форма урока — шесть полей; развёрнутая в каждом дне, она делала неделю
@@ -3600,9 +3655,12 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   }, [examNote]);
 
   return (
-    <div className="ap-card" style={styles.scheduleDayBlock}>
+    <div className="ap-card" style={{ ...styles.scheduleDayBlock, ...(today ? styles.scheduleDayToday : null) }}>
       <div style={styles.scheduleDayTop}>
-        <div style={styles.scheduleDayHeader}>{label}</div>
+        <div style={styles.scheduleDayHeader}>
+          {label}
+          {today && <span style={styles.todayMark}>сегодня</span>}
+        </div>
         <div style={styles.scheduleDayActions}>
           <button onClick={() => setAddOpen(!addOpen)} style={styles.examToggle}>
             {addOpen ? "Скрыть урок" : "+ Урок"}
@@ -3627,9 +3685,13 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
       </Collapsible>
 
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
-      {entries.map((e) => (
-        <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} />
-      ))}
+      {/* В колонке недели урок за уроком читается нормально, а у отдельного дня
+          столбец из семи карточек пришлось бы листать — там они идут сеткой. */}
+      <div style={today ? styles.dayEntriesWide : undefined}>
+        {entries.map((e) => (
+          <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} compact={today} />
+        ))}
+      </div>
       <Collapsible open={addOpen}>
         <AddScheduleForm
           onAdd={(entry) => {
@@ -3751,7 +3813,7 @@ function AddExamForm({ onAdd }) {
   );
 }
 
-function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
+function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
   const isExam = entry.kind === "exam";
 
   return (
@@ -3761,6 +3823,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove }) {
         borderLeftColor: priorityInfo(entry.priority).strong,
         background: priorityInfo(entry.priority).tint,
         ...(isExam ? styles.scheduleExam : null),
+        ...(compact ? styles.scheduleEntryCompact : null),
       }}
     >
       {isExam && (
@@ -4241,18 +4304,29 @@ const styles = {
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
   tabBtn: { border: "1px solid", borderRadius: 8, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
   subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 18, margin: "22px 0 10px" },
-  subHeadInline: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 18 },
-  foldHead: {
+  // Сворачиваемые блоки раздела выглядят одинаково — что «Предметы», что
+  // «Готовое расписание»: одна рамка, один заголовок, один шеврон.
+  foldCard: {
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    borderRadius: 11,
+    padding: "10px 14px",
+    marginBottom: 12,
+  },
+  foldCardHead: {
     display: "flex",
-    alignItems: "baseline",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    width: "100%",
     border: "none",
     background: "none",
     padding: 0,
-    margin: "22px 0 10px",
     color: "var(--ink)",
     textAlign: "left",
   },
+  foldCardTitle: { fontSize: 13.5, fontWeight: 700 },
+  foldCardEmpty: { fontSize: 12.5, color: "var(--ink3)", lineHeight: 1.55, margin: "10px 0 0" },
   lyceumSubjectRow: { display: "flex", alignItems: "center", gap: 8 },
   sundayRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 },
   sundayBtn: {
@@ -4430,6 +4504,23 @@ const styles = {
   },
   scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 11, padding: "14px 16px" },
   scheduleDayHeader: { fontSize: 13.5, fontWeight: 700, marginBottom: 8 },
+  // Сегодняшний день видно и в общей сетке: искать его глазами по датам не нужно.
+  scheduleDayToday: { borderColor: "var(--accent)", boxShadow: "inset 0 0 0 1px var(--accent)" },
+  todayMark: {
+    marginLeft: 7,
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    color: "var(--accent)",
+  },
+  todayDayWrap: { marginBottom: 16 },
+  dayEntriesWide: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))",
+    gap: 8,
+    alignItems: "start",
+  },
   mutedSmall: { fontSize: 12, color: "var(--mute)" },
   scheduleEntry: {
     display: "flex",
@@ -4440,6 +4531,8 @@ const styles = {
     padding: "6px 8px",
     marginBottom: 8,
   },
+  // В сетке карточка сама себе строка, поэтому нижний отступ лишний.
+  scheduleEntryCompact: { marginBottom: 0, gap: 3, padding: "5px 8px" },
   scheduleDayTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   scheduleDayActions: { display: "flex", gap: 10, flexWrap: "wrap" },
   examToggle: {
