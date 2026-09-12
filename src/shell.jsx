@@ -12,21 +12,24 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
         <button
           onClick={() => setMode("light")}
           title="Светлая тема"
-          style={{ ...styles.modePill, ...(mode === "light" ? styles.modePillOn : null) }}
+          className={"ap-pill" + (mode === "light" ? " is-on" : "")}
+          style={styles.modePill}
         >
           ☀
         </button>
         <button
           onClick={() => setMode("night")}
           title="Ночная тема"
-          style={{ ...styles.modePill, ...(mode === "night" ? styles.modePillOn : null) }}
+          className={"ap-pill" + (mode === "night" ? " is-on" : "")}
+          style={styles.modePill}
         >
           ☾
         </button>
         <button
           onClick={() => setMode("auto")}
           title="Ночная тема вечером и ночью"
-          style={{ ...styles.modePill, flex: 1.6, fontSize: 12.5, fontWeight: 600, ...(mode === "auto" ? styles.modePillOn : null) }}
+          className={"ap-pill" + (mode === "auto" ? " is-on" : "")}
+          style={{ ...styles.modePill, flex: 1.6, fontSize: 12.5, fontWeight: 600 }}
         >
           Авто
         </button>
@@ -50,15 +53,11 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
           return (
             <button
               key={item.key}
-              className="ap-nav"
+              // Цвет и подложка — в таблице стилей: инлайновый стиль перебивал :hover,
+              // и подсветка под курсором не появлялась вовсе.
+              className={"ap-nav" + (on ? " is-on" : "")}
               onClick={() => onGo(item.key)}
-              style={{
-                ...styles.navBtn,
-                borderLeftColor: on ? "var(--accent)" : "transparent",
-                background: on ? "var(--railActive)" : "transparent",
-                color: on ? "var(--railInk)" : "var(--railInk2)",
-                fontWeight: on ? 600 : 400,
-              }}
+              style={styles.navBtn}
             >
               {item.label}
               {item.hint ? <span style={styles.navHint}>{item.hint}</span> : null}
@@ -108,12 +107,9 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
               {rest.map((item) => (
                 <button
                   key={item.key}
+                  className={"ap-nav" + (item.key === screen ? " is-on" : "")}
                   onClick={() => go(item.key)}
-                  style={{
-                    ...styles.sheetBtn,
-                    background: item.key === screen ? "var(--railActive)" : "transparent",
-                    color: item.key === screen ? "var(--railInk)" : "var(--railInk2)",
-                  }}
+                  style={styles.sheetBtn}
                 >
                   {item.label}
                   {item.hint ? <span style={styles.navHint}>{item.hint}</span> : null}
@@ -123,21 +119,24 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
             <div style={styles.sheetModes}>
               <button
                 onClick={() => setMode("light")}
-                style={{ ...styles.modePill, ...(mode === "light" ? styles.modePillOn : null) }}
+                className={"ap-pill" + (mode === "light" ? " is-on" : "")}
+                style={styles.modePill}
                 title="Светлая тема"
               >
                 ☀
               </button>
               <button
                 onClick={() => setMode("night")}
-                style={{ ...styles.modePill, ...(mode === "night" ? styles.modePillOn : null) }}
+                className={"ap-pill" + (mode === "night" ? " is-on" : "")}
+                style={styles.modePill}
                 title="Ночная тема"
               >
                 ☾
               </button>
               <button
                 onClick={() => setMode("auto")}
-                style={{ ...styles.modePill, flex: 1.6, fontSize: 12.5, fontWeight: 600, ...(mode === "auto" ? styles.modePillOn : null) }}
+                className={"ap-pill" + (mode === "auto" ? " is-on" : "")}
+                style={{ ...styles.modePill, flex: 1.6, fontSize: 12.5, fontWeight: 600 }}
               >
                 Авто
               </button>
@@ -152,29 +151,21 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
             return (
               <button
                 key={item.key}
+                className={"ap-tab" + (on ? " is-on" : "")}
                 onClick={() => go(item.key)}
-                style={{
-                  ...styles.tab,
-                  background: on ? "var(--railActive)" : "transparent",
-                  color: on ? "var(--railInk)" : "var(--railInk2)",
-                  fontWeight: on ? 600 : 400,
-                }}
+                style={styles.tab}
               >
-                <span style={{ ...styles.tabMark, background: on ? "var(--accent)" : "transparent" }} />
+                <span className="ap-tab-mark" style={styles.tabMark} />
                 {item.short || item.label}
               </button>
             );
           })}
           <button
+            className={"ap-tab" + (more || restActive ? " is-on" : "")}
             onClick={() => setMore(!more)}
-            style={{
-              ...styles.tab,
-              background: more || restActive ? "var(--railActive)" : "transparent",
-              color: more || restActive ? "var(--railInk)" : "var(--railInk2)",
-              fontWeight: more || restActive ? 600 : 400,
-            }}
+            style={styles.tab}
           >
-            <span style={{ ...styles.tabMark, background: more || restActive ? "var(--accent)" : "transparent" }} />
+            <span className="ap-tab-mark" style={styles.tabMark} />
             Ещё
           </button>
         </div>
@@ -208,33 +199,13 @@ const styles = {
     gap: 18,
   },
   modeSwitch: { display: "flex", alignItems: "center", gap: 4, background: "var(--railActive)", borderRadius: 999, padding: 3 },
-  modePill: {
-    flex: 1,
-    minHeight: 32,
-    border: "none",
-    borderRadius: 999,
-    background: "transparent",
-    color: "var(--railInk2)",
-    fontSize: 15,
-  },
-  modePillOn: { background: "var(--accent)", color: "var(--accentInk)" },
+  modePill: { flex: 1, minHeight: 32, border: "none", borderRadius: 999, fontSize: 15 },
   modeLabel: { fontSize: 11.5, color: "var(--railInk2)", marginTop: -12, padding: "0 6px", lineHeight: 1.45, opacity: 0.85 },
   railHead: { padding: "0 6px" },
   railTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 22, lineHeight: 1.15 },
   railToday: { fontSize: 12.5, color: "var(--railInk2)", marginTop: 6 },
   nav: { display: "flex", flexDirection: "column", gap: 2 },
-  navBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "none",
-    borderLeft: "3px solid transparent",
-    fontSize: 14.5,
-    textAlign: "left",
-    whiteSpace: "nowrap",
-  },
+  navBtn: { display: "flex", alignItems: "center", gap: 10, fontSize: 14.5, textAlign: "left", whiteSpace: "nowrap" },
   navHint: { marginLeft: "auto", fontSize: 12, color: "var(--railInk2)", paddingLeft: 10, whiteSpace: "nowrap" },
   railFoot: {
     marginTop: "auto",
@@ -256,33 +227,12 @@ const styles = {
     paddingBottom: "env(safe-area-inset-bottom)",
   },
   tabRow: { display: "flex" },
-  tab: {
-    flex: 1,
-    minWidth: 0,
-    border: "none",
-    background: "none",
-    padding: "10px 4px 12px",
-    fontSize: 12,
-    lineHeight: 1.2,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 6,
-  },
+  tab: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 1.2, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 },
   tabMark: { width: 22, height: 3, borderRadius: 999 },
   sheetBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 29 },
   sheet: { borderBottom: "1px solid var(--railActive)", padding: "12px 12px 10px" },
   sheetGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 },
-  sheetBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    border: "none",
-    borderRadius: 8,
-    padding: "10px 12px",
-    fontSize: 14,
-    textAlign: "left",
-  },
+  sheetBtn: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, textAlign: "left" },
   sheetModes: { display: "flex", alignItems: "center", gap: 4, background: "var(--railActive)", borderRadius: 999, padding: 3 },
   sheetNote: { fontSize: 11.5, color: "var(--railInk2)", marginTop: 8, lineHeight: 1.45 },
   head: {

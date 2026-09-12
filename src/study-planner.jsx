@@ -1606,8 +1606,33 @@ export default function StudyPlanner() {
            и мягко появляется при переходе на экран: иначе смена раздела выглядит рывком. */
         .ap-card { transition: box-shadow .22s ease, border-color .22s ease; animation: ap-rise .3s ease both; }
         .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
-        .ap-nav { transition: background .16s ease, padding-left .16s ease; }
-        .ap-nav:hover { padding-left: 16px; background: var(--railActive); }
+        /* Состояния навигации описаны здесь целиком: инлайновый стиль перебивал :hover,
+           и подсветка под курсором не появлялась. */
+        .ap-nav {
+          padding: 10px 12px;
+          border: none;
+          border-left: 3px solid transparent;
+          border-radius: 8px;
+          background: transparent;
+          color: var(--railInk2);
+          transition: background .22s ease, color .22s ease, border-color .22s ease, padding-left .22s ease;
+        }
+        .ap-nav:hover { background: var(--railActive); color: var(--railInk); padding-left: 16px; }
+        .ap-nav.is-on { background: var(--railActive); color: var(--railInk); border-left-color: var(--accent); font-weight: 600; }
+        .ap-tab {
+          border: none;
+          background: transparent;
+          color: var(--railInk2);
+          padding: 10px 4px 12px;
+          transition: background .22s ease, color .22s ease;
+        }
+        .ap-tab:hover { background: var(--railActive); color: var(--railInk); }
+        .ap-tab.is-on { background: var(--railActive); color: var(--railInk); font-weight: 600; }
+        .ap-tab-mark { background: transparent; transition: background .22s ease; }
+        .ap-tab.is-on .ap-tab-mark, .ap-tab:hover .ap-tab-mark { background: var(--accent); }
+        .ap-pill { background: transparent; color: var(--railInk2); transition: background .22s ease, color .22s ease; }
+        .ap-pill:hover { background: var(--railActive); color: var(--railInk); }
+        .ap-pill.is-on { background: var(--accent); color: var(--accentInk); }
         .ap-row { transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; }
         .ap-row:hover { box-shadow: var(--shadow); }
         /* Полоса прогресса выезжает от левого края, столбик графика вырастает снизу. */
@@ -1619,7 +1644,7 @@ export default function StudyPlanner() {
         @keyframes ap-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
         @keyframes ap-grow { from { transform: scaleY(.02); } to { transform: scaleY(1); } }
         @media (prefers-reduced-motion: reduce) {
-          .ap-card, .ap-nav, .ap-row { transition: none; animation: none; }
+          .ap-card, .ap-nav, .ap-row, .ap-tab, .ap-pill, .ap-tab-mark { transition: none; animation: none; }
           .ap-fill, .ap-bar, .ap-bar-svg { animation: none; }
         }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
