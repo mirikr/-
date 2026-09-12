@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 // каждую строку. Теперь цвет называется по смыслу — «фон», «линия», «текст
 // послабее» — а какой он на самом деле, решает атрибут data-theme на обёртке.
 export const THEME_CSS = `
+html, body { background: var(--bg); color: var(--ink); }
 [data-theme]{
   --bg:#EFEBE1;--panel:#FBF9F3;--panel2:#FFFDF8;--line:#DCD5C4;--line2:#E4DECD;
   --ink:#2B2822;--ink2:#5A5347;--ink3:#6B6656;--mute:#8A8370;
@@ -114,6 +115,10 @@ export function useThemeMode() {
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.setAttribute("data-theme", theme);
+    // Цвет строки браузера и полосы состояния на телефоне: без него сверху
+    // оставалась светлая полоса, даже когда всё приложение тёмное.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", theme === "night" ? "#171612" : "#EFEBE1");
   }, [theme]);
 
   return { mode, setMode, theme, night: theme === "night", nightWindow, setNightWindow };

@@ -7,7 +7,8 @@
     <meta name="description" content="Ежедневник лицеиста: расписание, конспекты, дедлайны и учёт времени на подготовку" />
     <meta name="theme-color" content="#EFEBE1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- Полоса состояния красится фоном страницы, а не белым: приложение бывает тёмным. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Ежедневник" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="icon-192.png" />
@@ -21,6 +22,7 @@
       /* Приложение нарисовано в светлой палитре. Без color-scheme браузер в тёмной
          теме системы перекрашивает служебные цвета: текст кнопок, поля дат, чекбоксы. */
       html { color-scheme: light; }
+      /* Стартовый цвет до загрузки темы; дальше его перекрывает палитра из theme.js. */
       html, body { margin: 0; background: #EFEBE1; color: #2B2822; }
       body { font-family: Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
       /* Home-screen PWA on iPhone: keep content clear of the notch and the home indicator. */
