@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import SkebobNote from "./skebob.jsx";
 
 // Левая колонка: переключатель темы, навигация по экранам и строка о синхронизации.
 // Раньше всё приложение было одной длинной страницей со сворачиваемыми разделами:
@@ -76,6 +77,7 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
             <span style={{ color: syncNote.ok ? "var(--green)" : "var(--red)" }}>{syncNote.text}</span>
           </>
         ) : null}
+        <SkebobNote />
         {/* Номер версии заодно открывает историю изменений: иначе её никто не находит. */}
         <button onClick={onOpenNotes} className="ap-version" style={styles.version} title="Что изменилось">
           бета {version}
@@ -183,6 +185,7 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account,
             >
               {modeLabel} · изменить часы
             </button>
+            <SkebobNote />
             <button
               onClick={() => {
                 setMore(false);
