@@ -6,6 +6,17 @@ import Collapsible from "./collapsible.jsx";
 // не уходя с сайта. Раздел нарочно мельче остальных: он для справки, а не для работы.
 const RELEASES = [
   {
+    v: "0.5.0",
+    date: "12 сентября",
+    items: [
+      "Разделы стали экранами: слева колонка навигации, на телефоне — полоса сверху.",
+      "Новый экран «Сегодня»: уроки дня, быстрая запись занятия, сроки и прогресс.",
+      "Ночная тема, «Авто» включает её с 20:00 до 07:00.",
+      "Тетради всех предметов — на отдельном экране.",
+      "Дневник: календарь и выбранный день рядом, а не одно под другим.",
+    ],
+  },
+  {
     v: "0.4.0",
     date: "11 сентября",
     items: [
@@ -54,19 +65,19 @@ const styles = {
     border: "none",
     padding: 0,
     fontSize: 11,
-    color: "#8A8370",
+    color: "var(--mute)",
     textDecoration: "underline",
   },
   panel: {
     maxWidth: 520,
     margin: "8px auto 0",
     textAlign: "left",
-    borderTop: "1px solid #E4DED0",
+    borderTop: "1px solid var(--line2)",
     paddingTop: 8,
   },
   release: { marginBottom: 8 },
-  head: { fontSize: 11, fontWeight: 600, color: "#6E6857" },
-  list: { margin: "2px 0 0", paddingLeft: 16, fontSize: 11, lineHeight: 1.5, color: "#8A8370" },
+  head: { fontSize: 11, fontWeight: 600, color: "var(--ink3)" },
+  list: { margin: "2px 0 0", paddingLeft: 16, fontSize: 11, lineHeight: 1.5, color: "var(--mute)" },
 };
 
 export default function ReleaseNotes() {

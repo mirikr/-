@@ -9,6 +9,10 @@ import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
+import { Rail, ScreenHead } from "./shell.jsx";
+import InstallHint from "./install-hint.jsx";
+import CloudPanel from "./cloud-panel.jsx";
+import { THEME_CSS, useThemeMode, NIGHT_FROM, NIGHT_TO } from "./theme.js";
 import ReleaseNotes from "./release-notes.jsx";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
@@ -26,9 +30,9 @@ const DOW_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]; // Date.ge
 // the number is what the schedule maths sorts by.
 const EVENT_PRIORITIES = [
   // strong и tint — для карточек расписания: тонкая полоска сбоку читалась плохо.
-  { value: 1, mark: "!", label: "не особо важно", color: "#8A8370", onDark: "#B9B2A0", strong: "#6E6857", tint: "#F1EEE4" },
-  { value: 2, mark: "⚡", label: "важно", color: "#8C7326", onDark: "#D9BE6A", strong: "#C08A1E", tint: "#FBF0D2" },
-  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "#8B4A4A", onDark: "#D98A8A", strong: "#B23A3A", tint: "#F9E2DF" },
+  { value: 1, mark: "!", label: "не особо важно", color: "var(--mute)", onDark: "#B9B2A0", strong: "var(--ink3)", tint: "var(--neutralBg)" },
+  { value: 2, mark: "⚡", label: "важно", color: "var(--accent)", onDark: "#D9BE6A", strong: "var(--gold)", tint: "var(--warmBg)" },
+  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "var(--red)", onDark: "#D98A8A", strong: "var(--redStrong)", tint: "var(--redBg)" },
 ];
 
 // Weight of a lyceum lesson. Order matters: later entries outrank earlier ones when the same
@@ -36,10 +40,10 @@ const EVENT_PRIORITIES = [
 // Тип урока — это про программу, а не про важность: важность ученик ставит сам,
 // значками рядом с названием предмета.
 const LESSON_LEVELS = [
-  { value: "base", short: "база", label: "база", color: "#8A8370" },
-  { value: "prof", short: "проф", label: "проф", color: "#2F4E70" },
-  { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс", color: "#8B4A4A" },
-  { value: "outside", short: "вне лицея", label: "урок вне лицея", color: "#5C4A80" },
+  { value: "base", short: "база", label: "база", color: "var(--mute)" },
+  { value: "prof", short: "проф", label: "проф", color: "var(--blue)" },
+  { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс", color: "var(--red)" },
+  { value: "outside", short: "вне лицея", label: "урок вне лицея", color: "var(--purple)" },
 ];
 
 const SUBJECT_COLOR_PALETTE = ["#4A6B6B", "#7A5233", "#5C4A80", "#8C7326", "#2F4E70", "#8B4A4A", "#3F6E52", "#6B4A6B"];
@@ -48,7 +52,7 @@ const SUBJECT_DEFS = [
   {
     id: "law",
     name: "Право",
-    color: "#8B4A4A",
+    color: "var(--red)",
     topics: [
       L("Право: теория государства и права", "4cd7aac1-677e-4709-a56f-932dd967c64f"),
       L("Право: ТГП 2 часть + Конституция", "0b2136b2-2260-40ab-b61a-3b765dd3d443"),
@@ -66,7 +70,7 @@ const SUBJECT_DEFS = [
   {
     id: "econ",
     name: "Экономика",
-    color: "#3F6E52",
+    color: "var(--green)",
     topics: [
       L("Экономика: альтернативные издержки, КПВ, международная торговля", "962f40a8-e853-47e8-bd47-7c31a9da9506"),
       L("Экономика: спрос и предложение, рыночное равновесие", "db3288e2-4bdf-46cb-ad95-98bf33c592d9"),
@@ -87,7 +91,7 @@ const SUBJECT_DEFS = [
   {
     id: "polit",
     name: "Политология",
-    color: "#2F4E70",
+    color: "var(--blue)",
     topics: [
       L("Политология: понятие власти, часть 1", "e7b22612-39f6-440d-b735-3004f7be07e1"),
       L("Политология: понятие власти, часть 2", "9bdb588c-1b78-4e03-b785-eafba6d11552"),
@@ -116,7 +120,7 @@ const SUBJECT_DEFS = [
   {
     id: "soc",
     name: "Социология",
-    color: "#8C7326",
+    color: "var(--accent)",
     topics: [
       L("Социология как наука", "750ed92b-9ed1-4e2b-b1bf-f1a7c9a9a503"),
       L("Социология правил", "2064c31d-7144-482d-a506-6c8ca2504a8a"),
@@ -143,7 +147,7 @@ const SUBJECT_DEFS = [
   {
     id: "phil",
     name: "Философия",
-    color: "#5C4A80",
+    color: "var(--purple)",
     topics: [
       L("Досократическая философия", "d7eae7d4-f3e7-4b19-bb28-3ea4d44fba2b"),
       L("Философия Сократа, Платона и Аристотеля", "23aac4fe-7409-4561-92e4-f43eab0e4b2c"),
@@ -166,6 +170,8 @@ const SUBJECT_DEFS = [
 // IMPORTANT: never change this key in future edits — doing so orphans everything the person
 // already saved. New fields are added defensively in the load effect below instead.
 const STORAGE_KEY = "planner-state-v5";
+// Открытый экран и тема живут на устройстве, а не в данных, поэтому у них свои ключи.
+const SCREEN_KEY = "planner-screen";
 
 function levelInfo(value) {
   return LESSON_LEVELS.find((l) => l.value === value) || LESSON_LEVELS[0];
@@ -252,6 +258,26 @@ function homeworkIcsItem(hw) {
     description: hw.minutes ? `Примерно ${hw.minutes} мин` : "",
     alarmDaysBefore: days,
   };
+}
+
+// Встроенные предметы окрашены токенами палитры, чтобы в ночной теме читаться
+// так же, как днём. Поле выбора цвета токенов не понимает — ему нужен обычный
+// hex, поэтому для него токен разворачивается в дневной цвет.
+const TOKEN_HEX = {
+  "var(--red)": "#8B4A4A",
+  "var(--green)": "#3F6E52",
+  "var(--blue)": "#2F4E70",
+  "var(--accent)": "#8C7326",
+  "var(--purple)": "#5C4A80",
+  "var(--gold)": "#C9A227",
+  "var(--mute)": "#8A8370",
+  "var(--ink)": "#2B2822",
+};
+
+function hexOf(color) {
+  const value = String(color || "");
+  if (TOKEN_HEX[value]) return TOKEN_HEX[value];
+  return /^#[0-9A-Fa-f]{3,8}$/.test(value) ? value : "#8C7326";
 }
 
 function priorityInfo(value) {
@@ -430,6 +456,17 @@ export default function StudyPlanner() {
   const [cloudOn, setCloudOn] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
   // Токен подписки хранится вместе с остальными данными: он один на все устройства.
+  const { mode, setMode, theme } = useThemeMode();
+  // Какой экран открыт — настройка устройства, как и тема: на телефоне человек
+  // сидит в расписании, на ноутбуке в конспектах.
+  const [screen, setScreen] = useState(() => {
+    try {
+      return localStorage.getItem(SCREEN_KEY) || "today";
+    } catch (e) {
+      return "today";
+    }
+  });
+  const [notebookOwner, setNotebookOwner] = useState("");
   const [calendarToken, setCalendarToken] = useState("");
   // Инструкция к подписке зависит от системы: см. src/calendar-howto.jsx.
   const [devicePlatform] = useState(detectPlatform);
@@ -883,9 +920,14 @@ export default function StudyPlanner() {
     );
   }
 
-  function addJournalEntry() {
+  function addJournalEntry(dateOverride) {
     if (!jForm.note.trim() && Number(jForm.hours) <= 0) return;
-    const entry = { id: Date.now(), ...jForm, hours: Number(jForm.hours) || 0 };
+    // Дата приходит аргументом: на экране «Сегодня» запись всегда за сегодня,
+    // даже если в дневнике открыт другой день.
+    // Кнопка в дневнике зовёт функцию напрямую, и первым аргументом прилетает
+    // событие клика — дату принимаем только строкой.
+    const date = typeof dateOverride === "string" ? dateOverride : jForm.date;
+    const entry = { id: Date.now(), ...jForm, date, hours: Number(jForm.hours) || 0 };
     setJournal((prev) => [entry, ...prev]);
     setJForm({ ...jForm, note: "", hours: "1" });
   }
@@ -1470,36 +1512,122 @@ export default function StudyPlanner() {
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }, [homework, todayDateOnly]);
 
+  function goScreen(key) {
+    setScreen(key);
+    try {
+      localStorage.setItem(SCREEN_KEY, key);
+    } catch (e) {
+      /* приватный режим — экран просто не запомнится */
+    }
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Уроки на сегодня: те же правила, что и в расписании, включая экзамены,
+  // которые показываются только за неделю до даты.
+  const todayKey = DOW_TO_KEY[new Date().getDay()];
+  const todayLessons = useMemo(
+    () =>
+      activeSchedule
+        .filter((e) => e.day === todayKey && (e.kind !== "exam" || examVisibleInSchedule(e)))
+        .sort((a, b) => String(a.start).localeCompare(String(b.start))),
+    [activeSchedule, todayKey]
+  );
+
+  // Дела на виду: несделанные, с ближайшим сроком сверху.
+  const upcomingHomework = useMemo(
+    () =>
+      homework
+        .filter((h) => h.text)
+        .map((h) => ({ ...h, daysUntil: Math.round((new Date(h.date + "T00:00:00") - todayDateOnly) / 86400000) }))
+        .filter((h) => !h.done || h.daysUntil >= 0)
+        .sort((a, b) => Number(a.done) - Number(b.done) || a.daysUntil - b.daysUntil)
+        .slice(0, 6),
+    [homework, todayDateOnly]
+  );
+
+  // Тетради всех предметов в одном месте: свои предметы и предметы лицея.
+  const notebookOwners = useMemo(() => {
+    const own = ALL_SUBJECTS.map((s) => ({ key: "subj:" + s.id, name: s.name, color: s.color }));
+    const lyceum = lyceumSubjectNames.map((name) => ({ key: "lyceum:" + name, name, color: lyceumColorOf(name) }));
+    return own.concat(lyceum);
+  }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors]);
+
+  const currentNotebook = notebookOwners.find((o) => o.key === notebookOwner) || notebookOwners[0] || null;
+
+  const weeklyBudget = weeklyBudgetHours(budget);
+  const navItems = [
+    { key: "today", label: "Сегодня", hint: todayLessons.length ? String(todayLessons.length) : "" },
+    { key: "events", label: "События", hint: upcomingEvents.length ? String(upcomingEvents.length) : "" },
+    { key: "budget", label: "Распределение", hint: Math.round(weeklyBudget) + " ч" },
+    { key: "study", label: "Подготовка", hint: stats.totalAll ? stats.overallPct + "%" : "" },
+    { key: "school", label: "Лицей КЭО", hint: "" },
+    { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
+    { key: "notes", label: "Тетради", hint: "" },
+    { key: "settings", label: "Синхронизация", hint: saveErr ? "!" : "" },
+  ];
+
+  const SCREEN_TEXT = {
+    today: ["Сегодня", "Что сегодня в лицее, сколько времени уже записано и что горит по срокам"],
+    events: ["События", "Приоритет решает, до какого события считается план"],
+    budget: ["Распределение времени", "Время — ограниченный ресурс: сначала бюджет дня, потом предметы"],
+    study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
+    school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
+    journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
+    notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
+    settings: ["Синхронизация и данные", "Облако, резервная копия, установка на устройство и версия"],
+  };
+  const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
+
+  const todayLabel = new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  const pad2 = (n) => String(n).padStart(2, "0") + ":00";
+  const modeLabel =
+    mode === "auto"
+      ? `Авто · ночная с ${pad2(NIGHT_FROM)} до ${pad2(NIGHT_TO)} · сейчас ${theme === "night" ? "ночная" : "светлая"}`
+      : theme === "night"
+      ? "Ночная тема вручную"
+      : "Светлая тема вручную";
+
+  const syncLine = lastSyncedAt
+    ? `Синхронизировано ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
+    : "Ещё не синхронизировано";
+  const syncNote = saveErr
+    ? { ok: false, text: "облако не отвечает" }
+    : cloudPending
+    ? { ok: false, text: "правки ждут связи" }
+    : cloudOn
+    ? { ok: true, text: "облако на связи" }
+    : { ok: false, text: "только на этом устройстве" };
+
   return (
-    <div style={styles.page}>
+    <div data-theme={theme} className="ap-shell" style={styles.shell}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+        ${THEME_CSS}
         * { box-sizing: border-box; }
-        .topic-row:hover { background: #EFEAE0; }
+        .topic-row:hover { background: var(--neutralBg); }
         .subj-card:hover { transform: translateY(-2px); }
         button, input, select, textarea { color: inherit; font-family: inherit; }
         button { cursor: pointer; background-color: transparent; }
         h1, h2, h3 { color: inherit; }
-        a.lesson-link { color: inherit; text-decoration: underline; text-decoration-color: #C9C1AC; text-underline-offset: 2px; }
+        a.lesson-link { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
         a.lesson-link:hover { text-decoration-color: currentColor; }
         /* Chrome reserves room for spinner arrows inside number inputs, which clipped "150" to "15"
            in the narrow per-weekday fields on a phone. The values are typed, not stepped. */
         input[type="number"] { -moz-appearance: textfield; }
         input[type="number"]::-webkit-outer-spin-button,
         input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        /* On a phone the lesson name alone fills the row, so let the controls drop to a second line
-           instead of being pushed off the right edge. */
         .undo-bar { animation: undo-countdown ${UNDO_SECONDS}s linear forwards; }
         .undo-toast { animation: undo-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1); }
         @keyframes undo-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
         @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
         @keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
         @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
-        /* На телефоне пояснение про ресурс времени отодвигало бы отсчёт за край экрана:
-           там оно ни к чему, приложение уже открыто и знакомо. */
-        @media (max-width: 700px) {
-          .lead-extra { display: none; }
-        }
+        /* Карточка приподнимается под курсором — так видно, что с ней можно работать. */
+        .ap-card { transition: box-shadow .22s ease, border-color .22s ease; }
+        .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
+        .ap-nav { transition: background .16s ease, padding-left .16s ease; }
+        .ap-nav:hover { padding-left: 16px; background: var(--railActive); }
+        @media (prefers-reduced-motion: reduce) { .ap-card, .ap-nav { transition: none; } }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
            min-width: 0 применяется, а flex — нет, и название вылезает поверх полей. */
         .topic-row > label { flex: 1 1 auto; min-width: 0; }
@@ -1507,828 +1635,1061 @@ export default function StudyPlanner() {
           .topic-row { flex-wrap: wrap; }
           .topic-row > label { flex-basis: 100%; }
         }
+        /* На телефоне колонка навигации ложится полосой сверху и прокручивается вбок:
+           240 пикселей слева там взять неоткуда. */
+        @media (max-width: 900px) {
+          .ap-shell { flex-direction: column; }
+          .ap-rail { width: auto !important; flex-direction: row !important; align-items: center;
+                     flex-wrap: wrap; gap: 8px !important; padding: 10px !important; }
+          .ap-rail nav { flex-direction: row !important; flex-wrap: wrap; }
+          .ap-rail nav button { padding: 8px 10px !important; }
+          .ap-railbody { display: none !important; }
+          .ap-grid2, .ap-grid3 { grid-template-columns: 1fr !important; }
+        }
       `}</style>
 
-      {homeworkReminders.length > 0 && (
-        <div style={styles.hwBanner}>
-          <div style={styles.hwBannerBody}>
-          <div style={styles.hwBannerTitle}>Скоро сдавать</div>
-          {homeworkReminders.map((h) => (
-            <div key={h.id} style={styles.hwBannerRow}>
-              {h.subjectName && (
-                <>
-                  <span style={{ ...styles.hwBannerSubject, color: lyceumColorOf(h.subjectName) }}>{h.subjectName}:</span>{" "}
-                </>
-              )}
-              <span>{h.text}</span>
-              {h.minutes > 0 && <span style={styles.hwBannerMinutes}> · {h.minutes} мин</span>}
-              <span style={styles.hwBannerDue}> · {relativeDayLabel(h.daysUntil)}</span>
+      <Rail
+        items={navItems}
+        screen={screen}
+        onGo={goScreen}
+        mode={mode}
+        setMode={setMode}
+        modeLabel={modeLabel}
+        todayLabel={todayLabel}
+        syncLine={syncLine}
+        syncNote={syncNote}
+      />
+
+      <main style={styles.main}>
+        {homeworkReminders.length > 0 && (
+          <div style={styles.hwBanner}>
+            <div style={styles.hwBannerBody}>
+            <div style={styles.hwBannerTitle}>Скоро сдавать</div>
+            {homeworkReminders.map((h) => (
+              <div key={h.id} style={styles.hwBannerRow}>
+                {h.subjectName && (
+                  <>
+                    <span style={{ ...styles.hwBannerSubject, color: lyceumColorOf(h.subjectName) }}>{h.subjectName}:</span>{" "}
+                  </>
+                )}
+                <span>{h.text}</span>
+                {h.minutes > 0 && <span style={styles.hwBannerMinutes}> · {h.minutes} мин</span>}
+                <span style={styles.hwBannerDue}> · {relativeDayLabel(h.daysUntil)}</span>
+              </div>
+            ))}
             </div>
-          ))}
+            <div style={styles.hwBannerMark} aria-hidden="true">
+              !
+            </div>
           </div>
-          <div style={styles.hwBannerMark} aria-hidden="true">
-            !
+        )}
+
+        <ScreenHead title={screenInfo.title} note={screenInfo.note} />
+
+        {screen === "today" && (
+          <>
+          <div className="ap-grid2" style={styles.grid2}>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Часы занятий</div>
+              <button onClick={() => toggleSection("chart")} style={styles.overallBtn}>
+                <div style={styles.overallTrack}>
+                  <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
+                </div>
+                <div style={styles.overallText}>
+                  Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
+                  <span style={styles.overallHint}>{openSections.chart ? "▾ свернуть график" : "▸ график часов"}</span>
+                </div>
+              </button>
+              <Collapsible open={openSections.chart}>
+                <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
+              </Collapsible>
+            </section>
+
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Сегодня в лицее</div>
+              <div style={styles.cardNote}>Важность — полосой слева, роль урока — подписью</div>
+              {todayLessons.length === 0 ? (
+                <p style={styles.muted}>На сегодня уроков в расписании нет.</p>
+              ) : (
+                <div style={styles.todayList}>
+                  {todayLessons.map((e) => (
+                    <div
+                      key={e.id}
+                      style={{
+                        ...styles.todayRow,
+                        borderLeftColor: priorityInfo(e.priority).strong,
+                        background: priorityInfo(e.priority).tint,
+                      }}
+                    >
+                      <span style={styles.todayTime}>{e.start}</span>
+                      <span style={styles.todayName}>{e.subjectName}</span>
+                      <span style={styles.todayMeta}>
+                        {e.kind === "exam"
+                          ? examKindLabel(e.examKind) + (e.place ? " · " + e.place : "")
+                          : levelInfo(e.level).label + (e.room ? " · " + e.room : "") + (e.teacher ? " · " + e.teacher : "")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={styles.quickLog}>
+                <div style={styles.cardTitle}>Записать занятие</div>
+                <div style={styles.cardNote}>Запись попадёт в дневник за сегодня</div>
+                <div style={styles.quickRow}>
+                  <select
+                    value={jForm.subjectId}
+                    onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })}
+                    style={styles.select}
+                  >
+                    {ALL_SUBJECTS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={jForm.hours}
+                    onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
+                    style={styles.smallNumInput}
+                    title="Часы"
+                  />
+                </div>
+                <div style={styles.quickRow}>
+                  <AutoGrow
+                    placeholder="Что прошли?"
+                    value={jForm.note}
+                    onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
+                    onEnter={() => {
+                      setJForm({ ...jForm, date: todayStr() });
+                      addJournalEntry();
+                    }}
+                    style={styles.noteInput}
+                  />
+                  <button
+                    onClick={() => {
+                      setJForm({ ...jForm, date: todayStr() });
+                      addJournalEntry();
+                    }}
+                    style={styles.addBtnSmall}
+                  >
+                    + Записать
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-      )}
 
-      <header style={styles.header}>
-        <div>
-          <h1 style={styles.h1}>Ежедневник лицеиста</h1>
-          <p style={styles.lead}>
-            Учёба лицея и самостоятельная подготовка в одном месте: расписание с ролями уроков, конспекты по темам,
-            домашние задания со сроками и дневник занятий.
-          </p>
-          <p className="lead-extra" style={styles.leadMuted}>
-            Время здесь — ограниченный ресурс: приложение считает, сколько его остаётся до ближайшего экзамена или
-            этапа олимпиады, и показывает, на какой предмет оно уходит на самом деле.
-          </p>
-        </div>
-        <div style={styles.countdownBox}>
-          {nextEvent ? (
-            <>
-              <div style={styles.countdownNum}>{daysUntilDate(nextEvent.date)}</div>
-              <div style={styles.countdownLabel}>
-                {daysWord(daysUntilDate(nextEvent.date))} до события
-              </div>
-              <div style={styles.countdownEvent}>
-                <span style={{ color: priorityInfo(nextEvent.priority).onDark }}>
-                  {priorityInfo(nextEvent.priority).mark}
-                </span>{" "}
-                {nextEvent.name}
-              </div>
-              <div style={styles.countdownDate}>
-                {formatEventDate(nextEvent.date)}
-                {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
-              </div>
-
-              {upcomingEvents.length > 1 && (
-                <div style={styles.countdownRest}>
-                  {upcomingEvents.slice(1).map((e) => {
+          <div className="ap-grid3" style={styles.grid3}>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Ближайшие события</div>
+              {upcomingEvents.length === 0 ? (
+                <p style={styles.muted}>Событий пока нет — добавьте экзамен или олимпиаду в разделе «События».</p>
+              ) : (
+                <div style={styles.todayList}>
+                  {upcomingEvents.slice(0, 4).map((e) => {
                     const left = daysUntilDate(e.date);
                     const info = priorityInfo(e.priority);
                     return (
-                      <div key={e.id} style={styles.countdownRestRow}>
-                        <span style={{ color: info.onDark }}>{info.mark}</span>
-                        <span style={styles.countdownRestName}>{e.name}</span>
-                        {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
-                        <span style={styles.countdownRestLeft}>
+                      <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
+                        <span style={{ ...styles.todayTime, color: info.color }}>{info.mark}</span>
+                        <span style={styles.todayName}>{e.name}</span>
+                        <span style={styles.todayMeta}>
                           {left} {daysWord(left)}
+                          {mainEvent && mainEvent.id === e.id ? " · план" : ""}
                         </span>
                       </div>
                     );
                   })}
                 </div>
               )}
-            </>
-          ) : (
-            <div style={styles.countdownEmpty}>
-              Событий пока нет.
-              <br />
-              Добавьте экзамен или олимпиаду ниже.
-            </div>
-          )}
-        </div>
-      </header>
+              <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
+                Все события
+              </button>
+            </section>
 
-      <section style={styles.eventsStrip}>
-        <div style={styles.eventsActions}>
-          <button onClick={() => toggleSection("events")} style={styles.eventsToggle}>
-            {openSections.events ? "Скрыть события" : events.length ? "Изменить события" : "Добавить событие"}
-          </button>
-          <button onClick={() => setCalendarPanel(!calendarPanel)} style={styles.eventsToggle}>
-            {calendarPanel ? "Скрыть календарь" : "Календарь телефона"}
-          </button>
-        </div>
-
-        <Collapsible open={calendarPanel}>
-          <div style={styles.calendarPanel}>
-            <div style={styles.calendarTitle}>Календарь телефона</div>
-            {!cloudOn ? (
-              <p style={styles.muted}>
-                Подписка живёт в облаке — войдите в аккаунт по ссылке в самом верху страницы, и она появится здесь.
-              </p>
-            ) : !calendarToken ? (
-              <>
-                <p style={styles.muted}>
-                  В телефоне появится отдельный календарь «Ежедневник лицеиста»: события, экзамены из расписания и
-                  домашние задания со сроками. Он обновляется сам — поменяли дату здесь, она поменяется и там.
-                </p>
-                <button onClick={enableCalendarFeed} style={styles.addBtnSmall} disabled={calendarBusy}>
-                  {calendarBusy ? "Включаю…" : "Включить подписку"}
-                </button>
-              </>
-            ) : (
-              <>
-                <CalendarHowTo platform={devicePlatform} styles={styles} />
-                <p style={styles.mutedSmall}>
-                  Ссылку никому не давайте: по ней видно всё, что вы внесли в события и задания.
-                </p>
-                <div style={styles.calendarRow}>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard
-                        .writeText(calendarLinks ? calendarLinks.https : "")
-                        .then(() => setCalendarMsg("Ссылка скопирована."))
-                        .catch(() => setCalendarMsg("Скопируйте ссылку из поля ниже вручную."));
-                    }}
-                    style={devicePlatform === "android" ? styles.addBtnSmall : styles.secondaryBtnSmall}
-                  >
-                    Скопировать ссылку
-                  </button>
-                  <a
-                    href={calendarLinks ? calendarLinks.webcal : "#"}
-                    style={devicePlatform === "android" ? styles.subscribeLinkSecondary : styles.subscribeLink}
-                  >
-                    Подписаться
-                  </a>
-                  <button onClick={refreshCalendarFeed} style={styles.secondaryBtnSmall} disabled={calendarBusy}>
-                    {calendarBusy ? "…" : "Обновить"}
-                  </button>
-                  <button onClick={disableCalendarFeed} style={styles.linkBtnSmall}>
-                    Отключить
-                  </button>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Дела и сроки</div>
+              <div style={styles.cardNote}>По сроку, а не по предмету</div>
+              {upcomingHomework.length === 0 ? (
+                <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
+              ) : (
+                <div style={styles.todayList}>
+                  {upcomingHomework.map((h) => (
+                    <label key={h.id} style={styles.taskRow}>
+                      <input
+                        type="checkbox"
+                        checked={!!h.done}
+                        onChange={() => updateHomework(h.id, { done: !h.done })}
+                      />
+                      <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>
+                        {h.text || "без описания"}
+                      </span>
+                      <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
+                        {relativeDayLabel(h.daysUntil)}
+                        {h.subjectName ? " · " + h.subjectName : ""}
+                      </span>
+                    </label>
+                  ))}
                 </div>
-                <input
-                  readOnly
-                  value={calendarLinks ? calendarLinks.https : ""}
-                  onFocus={(e) => e.target.select()}
-                  style={styles.calendarLinkInput}
-                />
-              </>
-            )}
-            {calendarMsg && <div style={styles.calendarMsg}>{calendarMsg}</div>}
-          </div>
-        </Collapsible>
-        <Collapsible open={openSections.events}>
-          <EventsEditor
-            upcoming={upcomingEvents}
-            past={pastEvents}
-            mainEventId={mainEvent ? mainEvent.id : null}
-            onAdd={addEvent}
-            onUpdate={updateEvent}
-            onRemove={removeEvent}
-          />
-        </Collapsible>
-      </section>
+              )}
+              <button onClick={() => goScreen("journal")} style={styles.eventsToggle}>
+                Дневник и задания
+              </button>
+            </section>
 
-      <section style={styles.overallBar}>
-        <button onClick={() => toggleSection("chart")} style={styles.overallBtn}>
-          <div style={styles.overallTrack}>
-            <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
-          </div>
-          <div style={styles.overallText}>
-            Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
-            <span style={styles.overallHint}>{openSections.chart ? "▾ свернуть график" : "▸ график часов"}</span>
-          </div>
-        </button>
-        <Collapsible open={openSections.chart}>
-          <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
-        </Collapsible>
-      </section>
-
-      {/* КПВ block */}
-      <section style={styles.card}>
-        <button onClick={() => toggleSection("kpv")} style={styles.sectionHeaderBtn}>
-          <span style={styles.sectionChevron}>{openSections.kpv ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Распределение времени (КПВ)</h2>
-        </button>
-        <Collapsible open={openSections.kpv}>
-        <p style={styles.muted}>
-          Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут в день вы
-          реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам и проверка, хватит
-          ли этого ресурса на оставшиеся уроки.
-          {mainEvent
-            ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».`
-            : ""}
-        </p>
-
-        <div style={styles.dailyGoalsBlock}>
-          <label style={styles.label}>Сколько минут в день вы можете заниматься</label>
-          <div style={styles.dailyGoalsRow}>
-            {WEEKDAY_KEYS.map((k) => (
-              <div key={k} style={styles.dailyGoalCell}>
-                <div style={styles.dailyGoalLabel}>{WEEKDAY_LABELS[k]}</div>
-                <input
-                  type="number"
-                  min="0"
-                  step="5"
-                  value={budget.daily[k]}
-                  onChange={(e) => setDailyGoal(k, e.target.value)}
-                  style={styles.dailyGoalInput}
-                />
-                <div style={styles.dailyGoalHours}>{Math.round((Number(budget.daily[k]) / 60) * 10) / 10} ч</div>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Подготовка</div>
+              <div style={styles.cardNote}>
+                Пройдено {stats.doneAll} из {stats.totalAll} уроков
               </div>
-            ))}
+              <div style={styles.todayList}>
+                {ALL_SUBJECTS.map((s) => {
+                  const st = stats.perSubject[s.id];
+                  if (!st || !st.total) return null;
+                  return (
+                    <div key={s.id}>
+                      <div style={styles.progressRow}>
+                        <span>{s.name}</span>
+                        <span style={styles.mutedSmall}>
+                          {st.done}/{st.total}
+                        </span>
+                      </div>
+                      <div style={styles.miniTrack}>
+                        <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={() => goScreen("study")} style={styles.eventsToggle}>
+                Открыть подготовку
+              </button>
+            </section>
           </div>
-          <p style={styles.muted}>Итого за неделю: {capacity.weeklyBudget} ч.</p>
-        </div>
+          </>
+        )}
 
-        <div style={styles.allocGrid}>
-          {ALL_SUBJECTS.map((s) => (
-            <div key={s.id} style={styles.allocRow}>
-              <span style={{ ...styles.dot, background: s.color }} />
-              <span style={styles.allocName}>{s.name}</span>
-              <input
-                type="range"
-                min="0"
-                max="20"
-                value={budget.alloc[s.id]}
-                onChange={(e) => setAlloc(s.id, e.target.value)}
-                style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
+        {screen === "events" && (
+          <>
+          <div className="ap-grid2" style={styles.grid2}>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Отсчёт</div>
+              <div style={styles.countdownBox}>
+                {nextEvent ? (
+                  <>
+                    <div style={styles.countdownNum}>{daysUntilDate(nextEvent.date)}</div>
+                    <div style={styles.countdownLabel}>{daysWord(daysUntilDate(nextEvent.date))} до события</div>
+                    <div style={styles.countdownEvent}>
+                      <span style={{ color: priorityInfo(nextEvent.priority).onDark }}>
+                        {priorityInfo(nextEvent.priority).mark}
+                      </span>{" "}
+                      {nextEvent.name}
+                    </div>
+                    <div style={styles.countdownDate}>
+                      {formatEventDate(nextEvent.date)}
+                      {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
+                    </div>
+                    {upcomingEvents.length > 1 && (
+                      <div style={styles.countdownRest}>
+                        {upcomingEvents.slice(1).map((e) => {
+                          const left = daysUntilDate(e.date);
+                          const info = priorityInfo(e.priority);
+                          return (
+                            <div key={e.id} style={styles.countdownRestRow}>
+                              <span style={{ color: info.onDark }}>{info.mark}</span>
+                              <span style={styles.countdownRestName}>{e.name}</span>
+                              {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
+                              <span style={styles.countdownRestLeft}>
+                                {left} {daysWord(left)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={styles.countdownEmpty}>
+                    Событий пока нет.
+                    <br />
+                    Добавьте экзамен или олимпиаду рядом.
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => setCalendarPanel(!calendarPanel)} style={styles.eventsToggle}>
+                {calendarPanel ? "Скрыть календарь" : "Календарь телефона"}
+              </button>
+              <Collapsible open={calendarPanel}>
+                <div style={styles.calendarPanel}>
+                  <div style={styles.calendarTitle}>Календарь телефона</div>
+                  {!cloudOn ? (
+                    <p style={styles.muted}>
+                      Подписка живёт в облаке — войдите в аккаунт по ссылке в самом верху страницы, и она появится здесь.
+                    </p>
+                  ) : !calendarToken ? (
+                    <>
+                      <p style={styles.muted}>
+                        В телефоне появится отдельный календарь «Ежедневник лицеиста»: события, экзамены из расписания и
+                        домашние задания со сроками. Он обновляется сам — поменяли дату здесь, она поменяется и там.
+                      </p>
+                      <button onClick={enableCalendarFeed} style={styles.addBtnSmall} disabled={calendarBusy}>
+                        {calendarBusy ? "Включаю…" : "Включить подписку"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <CalendarHowTo platform={devicePlatform} styles={styles} />
+                      <p style={styles.mutedSmall}>
+                        Ссылку никому не давайте: по ней видно всё, что вы внесли в события и задания.
+                      </p>
+                      <div style={styles.calendarRow}>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard
+                              .writeText(calendarLinks ? calendarLinks.https : "")
+                              .then(() => setCalendarMsg("Ссылка скопирована."))
+                              .catch(() => setCalendarMsg("Скопируйте ссылку из поля ниже вручную."));
+                          }}
+                          style={devicePlatform === "android" ? styles.addBtnSmall : styles.secondaryBtnSmall}
+                        >
+                          Скопировать ссылку
+                        </button>
+                        <a
+                          href={calendarLinks ? calendarLinks.webcal : "#"}
+                          style={devicePlatform === "android" ? styles.subscribeLinkSecondary : styles.subscribeLink}
+                        >
+                          Подписаться
+                        </a>
+                        <button onClick={refreshCalendarFeed} style={styles.secondaryBtnSmall} disabled={calendarBusy}>
+                          {calendarBusy ? "…" : "Обновить"}
+                        </button>
+                        <button onClick={disableCalendarFeed} style={styles.linkBtnSmall}>
+                          Отключить
+                        </button>
+                      </div>
+                      <input
+                        readOnly
+                        value={calendarLinks ? calendarLinks.https : ""}
+                        onFocus={(e) => e.target.select()}
+                        style={styles.calendarLinkInput}
+                      />
+                    </>
+                  )}
+                  {calendarMsg && <div style={styles.calendarMsg}>{calendarMsg}</div>}
+                </div>
+              </Collapsible>
+            </section>
+
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>События</div>
+              <EventsEditor
+                upcoming={upcomingEvents}
+                past={pastEvents}
+                mainEventId={mainEvent ? mainEvent.id : null}
+                onAdd={addEvent}
+                onUpdate={updateEvent}
+                onRemove={removeEvent}
               />
+            </section>
+          </div>
+          </>
+        )}
+
+        {screen === "budget" && (
+          <section className="ap-card" style={styles.card}>
+            <p style={styles.muted}>
+              Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут в день вы
+              реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам и проверка, хватит
+              ли этого ресурса на оставшиеся уроки.
+              {mainEvent
+                ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».`
+                : ""}
+            </p>
+
+            <div style={styles.dailyGoalsBlock}>
+              <label style={styles.label}>Сколько минут в день вы можете заниматься</label>
+              <div style={styles.dailyGoalsRow}>
+                {WEEKDAY_KEYS.map((k) => (
+                  <div key={k} style={styles.dailyGoalCell}>
+                    <div style={styles.dailyGoalLabel}>{WEEKDAY_LABELS[k]}</div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="5"
+                      value={budget.daily[k]}
+                      onChange={(e) => setDailyGoal(k, e.target.value)}
+                      style={styles.dailyGoalInput}
+                    />
+                    <div style={styles.dailyGoalHours}>{Math.round((Number(budget.daily[k]) / 60) * 10) / 10} ч</div>
+                  </div>
+                ))}
+              </div>
+              <p style={styles.muted}>Итого за неделю: {capacity.weeklyBudget} ч.</p>
+            </div>
+
+            <div style={styles.allocGrid}>
+              {ALL_SUBJECTS.map((s) => (
+                <div key={s.id} style={styles.allocRow}>
+                  <span style={{ ...styles.dot, background: s.color }} />
+                  <span style={styles.allocName}>{s.name}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={budget.alloc[s.id]}
+                    onChange={(e) => setAlloc(s.id, e.target.value)}
+                    style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={budget.alloc[s.id]}
+                    onChange={(e) => setAlloc(s.id, e.target.value)}
+                    style={styles.smallNumInput}
+                  />
+                  <span style={styles.hUnit}>ч/нед</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ ...styles.capacityBox, borderColor: capacity.overBudget ? "var(--red)" : "var(--green)" }}>
+              <div>
+                Распределено по предметам: <b>{capacity.weeklyTotal}</b> ч/нед из доступных {capacity.weeklyBudget} ч/нед
+                {capacity.overBudget && <span style={styles.warn}> — превышен бюджет</span>}
+              </div>
+              <div>
+                Осталось непройденных уроков: <b>{capacity.remainingTopics}</b> · суммарно по их длительности:{" "}
+                <b>{capacity.neededHours} ч</b>
+              </div>
+              {mainEvent ? (
+                <div>
+                  Доступно времени до «{mainEvent.name}» ({formatEventDate(mainEvent.date)}) с учётом расписания по дням
+                  недели: <b>{capacity.totalCapacityHours} ч</b>
+                </div>
+              ) : (
+                <div>Событие не выбрано — считать не от чего.</div>
+              )}
+              <div
+                style={{
+                  fontWeight: 600,
+                  color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
+                }}
+              >
+                {capacity.feasible === null
+                  ? "Добавьте событие наверху страницы — тогда посчитаю, хватит ли времени."
+                  : capacity.feasible
+                  ? "При таком темпе времени должно хватить."
+                  : "При текущем темпе времени может не хватить — стоит увеличить часы или пересмотреть приоритеты."}
+              </div>
+
+            </div>
+
+            {capacity.skew && (
+              <div style={styles.skewWarning}>
+                Слишком сильный уклон в «{capacity.skew.name}» ({capacity.skew.sharePct}% времени) — не забывайте и про
+                остальные сферы.
+              </div>
+            )}
+
+            <div style={styles.ppfSection}>
+              <div style={styles.ppfControls}>
+                <label style={styles.label}>Сравнить два предмета</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select value={pair[0]} onChange={(e) => setPair([e.target.value, pair[1]])} style={styles.select}>
+                    {ALL_SUBJECTS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={pair[1]} onChange={(e) => setPair([pair[0], e.target.value])} style={styles.select}>
+                    {ALL_SUBJECTS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p style={styles.muted}>
+                  Пунктирная линия — распределение, заданное выше в часах на неделю ({subjA?.name}: {plannedA} ч,{" "}
+                  {subjB?.name}: {plannedB} ч). Точка — сколько времени вы фактически уже потратили по дневнику:{" "}
+                  {subjA?.name} {actualA} ч, {subjB?.name} {actualB} ч. Чем дальше точка от линии, тем сильнее реальный
+                  темп отклоняется от плана — график сам пересчитывается по мере новых записей в дневнике.
+                </p>
+                {pairSkewed && (
+                  <p style={styles.skewWarningInline}>
+                    Фактически вы тратите {pairDeviationPct > 0 ? "больше" : "меньше"} времени на «{subjA?.name}», чем
+                    запланировано (на {Math.abs(pairDeviationPct)} п.п.) — стоит скорректировать темп по этой паре.
+                  </p>
+                )}
+              </div>
+              <svg viewBox="0 0 300 290" style={styles.svg}>
+                <line x1="30" y1="260" x2="290" y2="260" stroke="var(--line)" strokeWidth="1" />
+                <line x1="30" y1="260" x2="30" y2="10" stroke="var(--line)" strokeWidth="1" />
+                <path d={pathD} fill="none" stroke="var(--mute)" strokeWidth="2" strokeDasharray="4 3" />
+                <circle cx={pxA} cy={pyA} r="6" fill={subjA?.color || "var(--ink)"} stroke="var(--panel2)" strokeWidth="1.5" />
+                <text x="30" y="278" fontSize="10" fill="var(--ink2)">0</text>
+                <text x="270" y="278" fontSize="10" fill="var(--ink2)">
+                  {subjA?.name} {Math.round(axisMax)} ч
+                </text>
+                <text x="2" y="14" fontSize="10" fill="var(--ink2)">{subjB?.name}</text>
+                <text x="2" y="24" fontSize="10" fill="var(--ink2)">{Math.round(axisMax)} ч</text>
+              </svg>
+            </div>
+          </section>
+        )}
+
+        {screen === "study" && (
+          <section className="ap-card" style={styles.card}>
+            <div style={styles.subjGrid}>
+              {ALL_SUBJECTS.map((s) => {
+                const st = stats.perSubject[s.id];
+                const open = openSubject === s.id;
+                const isCustomSubject = customSubjects.some((cs) => cs.id === s.id);
+                const allTopics = [
+                  ...data[s.id].topics.map((t) => ({ ...t, custom: false })),
+                  ...data[s.id].custom.map((t) => ({ ...t, custom: true })),
+                ];
+                return (
+                  <div key={s.id} className="subj-card" style={{ ...styles.subjCard, borderColor: s.color }}>
+                    <div style={styles.subjHeaderRow}>
+                      <button onClick={() => setOpenSubject(open ? null : s.id)} style={styles.subjHeader}>
+                        <span style={{ ...styles.dot, background: s.color }} />
+                        <span style={styles.subjName}>{s.name}</span>
+                        <span style={styles.subjPct}>
+                          {st.done}/{st.total} · {st.pct}%
+                        </span>
+                      </button>
+                      <input
+                        type="color"
+                        value={hexOf(s.color)}
+                        onChange={(e) => setSubjectColor(s.id, e.target.value)}
+                        style={styles.colorPick}
+                        title="Цвет предмета"
+                      />
+                      <button onClick={() => removeSubject(s.id)} style={styles.subjRemoveBtn} title="Удалить предмет">
+                        ×
+                      </button>
+                    </div>
+                    <div style={styles.miniTrack}>
+                      <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
+                    </div>
+                    <Collapsible open={open}>
+                      <div style={styles.tabsRow}>
+                        {[
+                          ["lessons", "Уроки"],
+                          ["notebook", "Тетрадь"],
+                        ].map(([key, label]) => {
+                          const active = (subjectTab[s.id] || "lessons") === key;
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => setSubjectTab((prev) => ({ ...prev, [s.id]: key }))}
+                              style={{
+                                ...styles.tabBtn,
+                                color: active ? "#fff" : "var(--ink2)",
+                                background: active ? s.color: "var(--btnInk)",
+                                borderColor: active ? s.color : "var(--line)",
+                              }}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {(subjectTab[s.id] || "lessons") === "notebook" ? (
+                      <div style={styles.topicList}>
+                        <Notebook
+                          blocks={notebooks["subj:" + s.id] || []}
+                          onChange={(blocks) => setNotebook("subj:" + s.id, blocks)}
+                          onUndo={showUndo}
+                          prefix={"subj-" + s.id}
+                        />
+                      </div>
+                      ) : (
+                      <div style={styles.topicList}>
+                        {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
+                        {allTopics.map((t) => (
+                          <TopicItem
+                            key={t.id}
+                            subjectId={s.id}
+                            topic={t}
+                            notesOpen={!!openNotes[t.id]}
+                            onToggleNotes={() => toggleNotesPanel(t.id)}
+                            linkOpen={!!openLinks[t.id]}
+                            onToggleLink={() => toggleLinkPanel(t.id)}
+                            onSetUrl={(url) => setTopicUrl(s.id, t.id, t.custom, url)}
+                            onToggleDone={() => toggleTopic(s.id, t.id, t.custom)}
+                            onDurationChange={(v) => setTopicDuration(s.id, t.id, t.custom, v)}
+                            onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
+                            onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
+                            onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
+                            onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
+                          />
+                        ))}
+                        <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
+                      </div>
+                      )}
+                    </Collapsible>
+                  </div>
+                );
+              })}
+            </div>
+            <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
+          </section>
+        )}
+
+        {screen === "school" && (
+          <section className="ap-card" style={styles.card}>
+            <p style={styles.muted}>
+              Отдельно от самостоятельного изучения. Сверху — предметы лицея с тетрадями и цветом, ниже — расписание
+              с реальными звонками: время, кабинет, преподаватель и роль урока.
+            </p>
+
+            <h3 style={styles.subHead}>Предметы</h3>
+            {lyceumSubjectNames.length === 0 ? (
+              <p style={styles.muted}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
+            ) : (
+              <div style={styles.lyceumNotebooks}>
+                {lyceumSubjectNames.map((name) => {
+                  const key = "lyceum:" + name;
+                  const isOpen = openLyceumNotebook === name;
+                  const blocks = notebooks[key] || [];
+                  return (
+                    <div key={name} style={styles.lyceumNotebookBlock}>
+                      <div style={styles.lyceumSubjectRow}>
+                        <button
+                          onClick={() => setOpenLyceumNotebook(isOpen ? null : name)}
+                          style={{ ...styles.lyceumNotebookHead, color: lyceumColorOf(name) }}
+                        >
+                          <span style={styles.sectionChevron}>{isOpen ? "▾" : "▸"}</span>
+                          {name}
+                          <span style={styles.mutedSmall}>
+                            {blocks.length ? blocks.length + " блок." : "тетрадь пуста"}
+                          </span>
+                        </button>
+                        <input
+                          type="color"
+                          value={hexOf(lyceumColorOf(name))}
+                          onChange={(e) => setSubjectColor("lyceum:" + name, e.target.value)}
+                          style={styles.colorPick}
+                          title="Цвет предмета"
+                        />
+                      </div>
+                      <Collapsible open={isOpen}>
+                        <div style={styles.lyceumNotebookBody}>
+                          <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
+                        </div>
+                      </Collapsible>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <h3 style={styles.subHead}>Расписание</h3>
+            <div style={styles.sundayRow}>
+              <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
+                {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
+              </button>
+              {!showSunday && sundayLessons > 0 && (
+                <span style={styles.mutedSmall}>уроки воскресенья сохранены ({sundayLessons})</span>
+              )}
+            </div>
+
+            <div style={styles.priorityLegend}>
+              Важность урока — значками рядом с предметом:{" "}
+              {EVENT_PRIORITIES.map((p, i) => (
+                <span key={p.value}>
+                  {i > 0 && " · "}
+                  <span style={{ color: p.strong, fontWeight: 700 }}>{p.mark}</span> {p.label}
+                </span>
+              ))}
+            </div>
+
+            <div style={styles.scheduleGrid}>
+              {scheduleDays.map((day) => (
+                <ScheduleDay
+                  key={day}
+                  day={day}
+                  label={WEEKDAY_LABELS[day]}
+                  entries={lyceumSchedule
+                    .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
+                    .sort((a, b) => a.start.localeCompare(b.start))}
+                  onAdd={(entry) => addScheduleEntry(day, entry)}
+                  onUpdate={updateScheduleEntry}
+                  onRemove={removeScheduleEntry}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {screen === "journal" && (
+          <div className="ap-grid2" style={styles.grid2}>
+            <section className="ap-card" style={styles.card}>
+            <p style={styles.muted}>
+              За последние 7 дней записано {weeklyJournalHours} ч. Записи с уроками и заметками к ним добавляются сюда
+              автоматически — можно также добавить запись вручную.
+            </p>
+
+            <div style={styles.calendarWrap}>
+              <div style={styles.calHeader}>
+                <button
+                  onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1))}
+                  style={styles.calNavBtn}
+                >
+                  ‹
+                </button>
+                <div style={styles.calMonthLabel}>
+                  {calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
+                </div>
+                <button
+                  onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1))}
+                  style={styles.calNavBtn}
+                >
+                  ›
+                </button>
+              </div>
+              <div style={styles.calWeekdays}>
+                {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
+                  <div key={d} style={styles.calWeekday}>
+                    {d}
+                  </div>
+                ))}
+              </div>
+              <div style={styles.calGrid}>
+                {calendarDays.map((cellDate) => {
+                  const key = ymd(cellDate);
+                  const hours = dailyTotals[key] || 0;
+                  const goal = goalHoursForDate(budget, cellDate);
+                  const inMonth = cellDate.getMonth() === calMonth.getMonth();
+                  const isFuture = cellDate > todayDateOnly;
+                  const ratio = goal > 0 ? Math.min(hours / goal, 1) : hours > 0 ? 1 : 0;
+                  const selected = key === selectedDate;
+                  const hasHw = hwDates.has(key);
+                  const lessonDots = lessonDotsByDate[key] || [];
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setSelectedDate(key)}
+                      title={`${Math.round(hours * 10) / 10} ч из ${Math.round(goal * 10) / 10} ч цели`}
+                      style={{
+                        ...styles.calCell,
+                        background: isFuture ? "var(--neutralBg)" : ratioColor(ratio),
+                        color: isFuture ? "var(--mute)" : "#fff",
+                        opacity: inMonth ? 1 : 0.4,
+                        outline: selected ? "2px solid var(--ink)" : "none",
+                        outlineOffset: "-2px",
+                      }}
+                    >
+                      {lessonDots.length > 0 && (
+                        <span style={styles.lessonDots}>
+                          {lessonDots.slice(0, 3).map((color) => (
+                            <span key={color} style={{ ...styles.lessonDot, background: color }} />
+                          ))}
+                        </span>
+                      )}
+                      {cellDate.getDate()}
+                      {hasHw && <span style={styles.hwDot} />}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={styles.muted}>
+                Цвет клетки — от красного (день пропущен) к зелёному (дневная цель на этот день недели выполнена или
+                перевыполнена), пропорционально потраченному времени. Цель для каждого дня недели задаётся выше, в
+                минутах в день.
+              </p>
+            </div>
+            </section>
+            <section className="ap-card" style={styles.card}>
+            <div style={styles.dayDetail}>
+              <div style={styles.dayDetailTitle}>
+                {new Date(selectedDate + "T00:00:00").toLocaleDateString("ru-RU", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}{" "}
+                — {Math.round((dailyTotals[selectedDate] || 0) * 10) / 10} ч из{" "}
+                {Math.round(goalHoursForDate(budget, new Date(selectedDate + "T00:00:00")) * 10) / 10} ч цели
+              </div>
+              {selectedDayEntries.length === 0 && <div style={styles.muted}>В этот день записей нет.</div>}
+              {selectedDayEntries.map((e) => {
+                const s = ALL_SUBJECTS.find((s) => s.id === e.subjectId);
+                return (
+                  <div key={e.id} style={styles.journalRow}>
+                    <span style={{ ...styles.dot, background: s?.color }} />
+                    <span style={styles.jSubj}>{s?.name}</span>
+                    <span style={styles.jHours}>{e.hours} ч</span>
+                    <span style={styles.jNote}>{e.note}</span>
+                    <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+
+              <div style={styles.homeworkBlock}>
+                <div style={styles.homeworkTitle}>Домашнее задание и дела</div>
+                {selectedDaySubjects.length === 0 ? (
+                  <div style={styles.mutedSmall}>На этот день по расписанию лицея уроков нет.</div>
+                ) : (
+                  selectedDaySubjects.map((name) => {
+                    const items = homeworkForSelectedDate.filter((h) => h.subjectName === name);
+                    const dayInfo = selectedDayLevels[name];
+                    return (
+                      <div key={name} style={styles.homeworkSubjectBlock}>
+                        <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
+                          {name}
+                          {dayInfo && (
+                            <>
+                              <span style={{ ...styles.dayPriority, color: priorityInfo(dayInfo.priority).strong }}>
+                                {priorityInfo(dayInfo.priority).mark}
+                              </span>
+                              <span
+                                style={{
+                                  ...styles.levelChip,
+                                  color: levelInfo(dayInfo.level).color,
+                                  borderColor: levelInfo(dayInfo.level).color,
+                                }}
+                              >
+                                {levelInfo(dayInfo.level).short}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        {items.map((h) => (
+                          <HomeworkItem
+                            key={h.id}
+                            hw={h}
+                            onToggleDone={() => updateHomework(h.id, { done: !h.done })}
+                            onRemove={() => removeHomework(h.id)}
+                            onAttach={(file) => attachFileToHomework(h.id, file)}
+                            onOpenAttachment={openAttachment}
+                            onRemoveAttachment={(att) => removeAttachment(h.id, att)}
+                            onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
+                                />
+                        ))}
+                        <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
+                      </div>
+                    );
+                  })
+                )}
+
+                <div style={styles.homeworkSubjectBlock}>
+                  <div style={{ ...styles.homeworkSubjectName, color: "var(--ink3)" }}>Без привязки к уроку</div>
+                  {freeHomework.map((h) => (
+                    <HomeworkItem
+                      key={h.id}
+                      hw={h}
+                      onToggleDone={() => updateHomework(h.id, { done: !h.done })}
+                      onRemove={() => removeHomework(h.id)}
+                      onAttach={(file) => attachFileToHomework(h.id, file)}
+                      onOpenAttachment={openAttachment}
+                      onRemoveAttachment={(att) => removeAttachment(h.id, att)}
+                      onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
+                    />
+                  ))}
+                  <HomeworkAddForm
+                    placeholder="Например: подать заявку на олимпиаду"
+                    onAdd={(text, minutes) => addHomework(selectedDate, "", text, minutes)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.journalForm}>
+              <input type="date" value={jForm.date} onChange={(e) => setJForm({ ...jForm, date: e.target.value })} style={styles.dateInput} />
+              <select value={jForm.subjectId} onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })} style={styles.select}>
+                {ALL_SUBJECTS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 min="0"
-                value={budget.alloc[s.id]}
-                onChange={(e) => setAlloc(s.id, e.target.value)}
+                step="0.5"
+                value={jForm.hours}
+                onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
                 style={styles.smallNumInput}
               />
-              <span style={styles.hUnit}>ч/нед</span>
+              <input
+                type="text"
+                placeholder="Что прошли сегодня?"
+                value={jForm.note}
+                onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
+                style={styles.textInput}
+              />
+              <button onClick={addJournalEntry} style={styles.addBtn}>
+                Записать
+              </button>
             </div>
-          ))}
-        </div>
 
-        <div style={{ ...styles.capacityBox, borderColor: capacity.overBudget ? "#8B4A4A" : "#3F6E52" }}>
-          <div>
-            Распределено по предметам: <b>{capacity.weeklyTotal}</b> ч/нед из доступных {capacity.weeklyBudget} ч/нед
-            {capacity.overBudget && <span style={styles.warn}> — превышен бюджет</span>}
-          </div>
-          <div>
-            Осталось непройденных уроков: <b>{capacity.remainingTopics}</b> · суммарно по их длительности:{" "}
-            <b>{capacity.neededHours} ч</b>
-          </div>
-          {mainEvent ? (
-            <div>
-              Доступно времени до «{mainEvent.name}» ({formatEventDate(mainEvent.date)}) с учётом расписания по дням
-              недели: <b>{capacity.totalCapacityHours} ч</b>
-            </div>
-          ) : (
-            <div>Событие не выбрано — считать не от чего.</div>
-          )}
-          <div
-            style={{
-              fontWeight: 600,
-              color: capacity.feasible === null ? "#6B6656" : capacity.feasible ? "#3F6E52" : "#8B4A4A",
-            }}
-          >
-            {capacity.feasible === null
-              ? "Добавьте событие наверху страницы — тогда посчитаю, хватит ли времени."
-              : capacity.feasible
-              ? "При таком темпе времени должно хватить."
-              : "При текущем темпе времени может не хватить — стоит увеличить часы или пересмотреть приоритеты."}
-          </div>
-
-        </div>
-
-        {capacity.skew && (
-          <div style={styles.skewWarning}>
-            Слишком сильный уклон в «{capacity.skew.name}» ({capacity.skew.sharePct}% времени) — не забывайте и про
-            остальные сферы.
-          </div>
-        )}
-
-        <div style={styles.ppfSection}>
-          <div style={styles.ppfControls}>
-            <label style={styles.label}>Сравнить два предмета</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <select value={pair[0]} onChange={(e) => setPair([e.target.value, pair[1]])} style={styles.select}>
-                {ALL_SUBJECTS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <select value={pair[1]} onChange={(e) => setPair([pair[0], e.target.value])} style={styles.select}>
-                {ALL_SUBJECTS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p style={styles.muted}>
-              Пунктирная линия — распределение, заданное выше в часах на неделю ({subjA?.name}: {plannedA} ч,{" "}
-              {subjB?.name}: {plannedB} ч). Точка — сколько времени вы фактически уже потратили по дневнику:{" "}
-              {subjA?.name} {actualA} ч, {subjB?.name} {actualB} ч. Чем дальше точка от линии, тем сильнее реальный
-              темп отклоняется от плана — график сам пересчитывается по мере новых записей в дневнике.
-            </p>
-            {pairSkewed && (
-              <p style={styles.skewWarningInline}>
-                Фактически вы тратите {pairDeviationPct > 0 ? "больше" : "меньше"} времени на «{subjA?.name}», чем
-                запланировано (на {Math.abs(pairDeviationPct)} п.п.) — стоит скорректировать темп по этой паре.
-              </p>
-            )}
-          </div>
-          <svg viewBox="0 0 300 290" style={styles.svg}>
-            <line x1="30" y1="260" x2="290" y2="260" stroke="#B9B2A0" strokeWidth="1" />
-            <line x1="30" y1="260" x2="30" y2="10" stroke="#B9B2A0" strokeWidth="1" />
-            <path d={pathD} fill="none" stroke="#9B8B6A" strokeWidth="2" strokeDasharray="4 3" />
-            <circle cx={pxA} cy={pyA} r="6" fill={subjA?.color || "#333"} stroke="#fff" strokeWidth="1.5" />
-            <text x="30" y="278" fontSize="10" fill="#5A5347">0</text>
-            <text x="270" y="278" fontSize="10" fill="#5A5347">
-              {subjA?.name} {Math.round(axisMax)} ч
-            </text>
-            <text x="2" y="14" fontSize="10" fill="#5A5347">{subjB?.name}</text>
-            <text x="2" y="24" fontSize="10" fill="#5A5347">{Math.round(axisMax)} ч</text>
-          </svg>
-        </div>
-        </Collapsible>
-      </section>
-
-      {/* Subjects */}
-      <section style={styles.card}>
-        <button onClick={() => toggleSection("subjects")} style={styles.sectionHeaderBtn}>
-          <span style={styles.sectionChevron}>{openSections.subjects ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Самостоятельное изучение</h2>
-        </button>
-        <Collapsible open={openSections.subjects}>
-        <div style={styles.subjGrid}>
-          {ALL_SUBJECTS.map((s) => {
-            const st = stats.perSubject[s.id];
-            const open = openSubject === s.id;
-            const isCustomSubject = customSubjects.some((cs) => cs.id === s.id);
-            const allTopics = [
-              ...data[s.id].topics.map((t) => ({ ...t, custom: false })),
-              ...data[s.id].custom.map((t) => ({ ...t, custom: true })),
-            ];
-            return (
-              <div key={s.id} className="subj-card" style={{ ...styles.subjCard, borderColor: s.color }}>
-                <div style={styles.subjHeaderRow}>
-                  <button onClick={() => setOpenSubject(open ? null : s.id)} style={styles.subjHeader}>
-                    <span style={{ ...styles.dot, background: s.color }} />
-                    <span style={styles.subjName}>{s.name}</span>
-                    <span style={styles.subjPct}>
-                      {st.done}/{st.total} · {st.pct}%
-                    </span>
-                  </button>
-                  <input
-                    type="color"
-                    value={s.color}
-                    onChange={(e) => setSubjectColor(s.id, e.target.value)}
-                    style={styles.colorPick}
-                    title="Цвет предмета"
-                  />
-                  <button onClick={() => removeSubject(s.id)} style={styles.subjRemoveBtn} title="Удалить предмет">
-                    ×
-                  </button>
-                </div>
-                <div style={styles.miniTrack}>
-                  <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
-                </div>
-                <Collapsible open={open}>
-                  <div style={styles.tabsRow}>
-                    {[
-                      ["lessons", "Уроки"],
-                      ["notebook", "Тетрадь"],
-                    ].map(([key, label]) => {
-                      const active = (subjectTab[s.id] || "lessons") === key;
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setSubjectTab((prev) => ({ ...prev, [s.id]: key }))}
-                          style={{
-                            ...styles.tabBtn,
-                            color: active ? "#fff" : "#5A5347",
-                            background: active ? s.color : "#fff",
-                            borderColor: active ? s.color : "#C9C1AC",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {(subjectTab[s.id] || "lessons") === "notebook" ? (
-                  <div style={styles.topicList}>
-                    <Notebook
-                      blocks={notebooks["subj:" + s.id] || []}
-                      onChange={(blocks) => setNotebook("subj:" + s.id, blocks)}
-                      onUndo={showUndo}
-                      prefix={"subj-" + s.id}
-                    />
-                  </div>
-                  ) : (
-                  <div style={styles.topicList}>
-                    {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
-                    {allTopics.map((t) => (
-                      <TopicItem
-                        key={t.id}
-                        subjectId={s.id}
-                        topic={t}
-                        notesOpen={!!openNotes[t.id]}
-                        onToggleNotes={() => toggleNotesPanel(t.id)}
-                        linkOpen={!!openLinks[t.id]}
-                        onToggleLink={() => toggleLinkPanel(t.id)}
-                        onSetUrl={(url) => setTopicUrl(s.id, t.id, t.custom, url)}
-                        onToggleDone={() => toggleTopic(s.id, t.id, t.custom)}
-                        onDurationChange={(v) => setTopicDuration(s.id, t.id, t.custom, v)}
-                        onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
-                        onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
-                        onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
-                        onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
-                      />
-                    ))}
-                    <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
-                  </div>
-                  )}
-                </Collapsible>
-              </div>
-            );
-          })}
-        </div>
-        <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
-        </Collapsible>
-      </section>
-
-      {/* Lyceum schedule */}
-      <section style={styles.card}>
-        <button onClick={() => toggleSection("lyceum")} style={styles.sectionHeaderBtn}>
-          <span style={styles.sectionChevron}>{openSections.lyceum ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Лицей КЭО</h2>
-        </button>
-        <Collapsible open={openSections.lyceum}>
-        <p style={styles.muted}>
-          Отдельно от самостоятельного изучения. Сверху — предметы лицея с тетрадями и цветом, ниже — расписание
-          с реальными звонками: время, кабинет, преподаватель и роль урока.
-        </p>
-
-        <h3 style={styles.subHead}>Предметы</h3>
-        {lyceumSubjectNames.length === 0 ? (
-          <p style={styles.muted}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
-        ) : (
-          <div style={styles.lyceumNotebooks}>
-            {lyceumSubjectNames.map((name) => {
-              const key = "lyceum:" + name;
-              const isOpen = openLyceumNotebook === name;
-              const blocks = notebooks[key] || [];
-              return (
-                <div key={name} style={styles.lyceumNotebookBlock}>
-                  <div style={styles.lyceumSubjectRow}>
-                    <button
-                      onClick={() => setOpenLyceumNotebook(isOpen ? null : name)}
-                      style={{ ...styles.lyceumNotebookHead, color: lyceumColorOf(name) }}
-                    >
-                      <span style={styles.sectionChevron}>{isOpen ? "▾" : "▸"}</span>
-                      {name}
-                      <span style={styles.mutedSmall}>
-                        {blocks.length ? blocks.length + " блок." : "тетрадь пуста"}
-                      </span>
-                    </button>
-                    <input
-                      type="color"
-                      value={lyceumColorOf(name)}
-                      onChange={(e) => setSubjectColor("lyceum:" + name, e.target.value)}
-                      style={styles.colorPick}
-                      title="Цвет предмета"
-                    />
-                  </div>
-                  <Collapsible open={isOpen}>
-                    <div style={styles.lyceumNotebookBody}>
-                      <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
-                    </div>
-                  </Collapsible>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <h3 style={styles.subHead}>Расписание</h3>
-        <div style={styles.sundayRow}>
-          <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
-            {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
-          </button>
-          {!showSunday && sundayLessons > 0 && (
-            <span style={styles.mutedSmall}>уроки воскресенья сохранены ({sundayLessons})</span>
-          )}
-        </div>
-
-        <div style={styles.priorityLegend}>
-          Важность урока — значками рядом с предметом:{" "}
-          {EVENT_PRIORITIES.map((p, i) => (
-            <span key={p.value}>
-              {i > 0 && " · "}
-              <span style={{ color: p.strong, fontWeight: 700 }}>{p.mark}</span> {p.label}
-            </span>
-          ))}
-        </div>
-
-        <div style={styles.scheduleGrid}>
-          {scheduleDays.map((day) => (
-            <ScheduleDay
-              key={day}
-              day={day}
-              label={WEEKDAY_LABELS[day]}
-              entries={lyceumSchedule
-                .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
-                .sort((a, b) => a.start.localeCompare(b.start))}
-              onAdd={(entry) => addScheduleEntry(day, entry)}
-              onUpdate={updateScheduleEntry}
-              onRemove={removeScheduleEntry}
-            />
-          ))}
-        </div>
-        </Collapsible>
-      </section>
-
-      {/* Journal */}
-      <section style={styles.card}>
-        <button onClick={() => toggleSection("journal")} style={styles.sectionHeaderBtn}>
-          <span style={styles.sectionChevron}>{openSections.journal ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Дневник занятий</h2>
-        </button>
-        <Collapsible open={openSections.journal}>
-        <p style={styles.muted}>
-          За последние 7 дней записано {weeklyJournalHours} ч. Записи с уроками и заметками к ним добавляются сюда
-          автоматически — можно также добавить запись вручную.
-        </p>
-
-        <div style={styles.calendarWrap}>
-          <div style={styles.calHeader}>
-            <button
-              onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1))}
-              style={styles.calNavBtn}
-            >
-              ‹
-            </button>
-            <div style={styles.calMonthLabel}>
-              {calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
-            </div>
-            <button
-              onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1))}
-              style={styles.calNavBtn}
-            >
-              ›
-            </button>
-          </div>
-          <div style={styles.calWeekdays}>
-            {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
-              <div key={d} style={styles.calWeekday}>
-                {d}
-              </div>
-            ))}
-          </div>
-          <div style={styles.calGrid}>
-            {calendarDays.map((cellDate) => {
-              const key = ymd(cellDate);
-              const hours = dailyTotals[key] || 0;
-              const goal = goalHoursForDate(budget, cellDate);
-              const inMonth = cellDate.getMonth() === calMonth.getMonth();
-              const isFuture = cellDate > todayDateOnly;
-              const ratio = goal > 0 ? Math.min(hours / goal, 1) : hours > 0 ? 1 : 0;
-              const selected = key === selectedDate;
-              const hasHw = hwDates.has(key);
-              const lessonDots = lessonDotsByDate[key] || [];
-              return (
-                <button
-                  key={key}
-                  onClick={() => setSelectedDate(key)}
-                  title={`${Math.round(hours * 10) / 10} ч из ${Math.round(goal * 10) / 10} ч цели`}
-                  style={{
-                    ...styles.calCell,
-                    background: isFuture ? "#F7F4EC" : ratioColor(ratio),
-                    color: isFuture ? "#8A8370" : "#fff",
-                    opacity: inMonth ? 1 : 0.4,
-                    outline: selected ? "2px solid #2B2822" : "none",
-                    outlineOffset: "-2px",
-                  }}
-                >
-                  {lessonDots.length > 0 && (
-                    <span style={styles.lessonDots}>
-                      {lessonDots.slice(0, 3).map((color) => (
-                        <span key={color} style={{ ...styles.lessonDot, background: color }} />
-                      ))}
-                    </span>
-                  )}
-                  {cellDate.getDate()}
-                  {hasHw && <span style={styles.hwDot} />}
-                </button>
-              );
-            })}
-          </div>
-          <p style={styles.muted}>
-            Цвет клетки — от красного (день пропущен) к зелёному (дневная цель на этот день недели выполнена или
-            перевыполнена), пропорционально потраченному времени. Цель для каждого дня недели задаётся выше, в
-            минутах в день.
-          </p>
-        </div>
-
-        <div style={styles.dayDetail}>
-          <div style={styles.dayDetailTitle}>
-            {new Date(selectedDate + "T00:00:00").toLocaleDateString("ru-RU", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}{" "}
-            — {Math.round((dailyTotals[selectedDate] || 0) * 10) / 10} ч из{" "}
-            {Math.round(goalHoursForDate(budget, new Date(selectedDate + "T00:00:00")) * 10) / 10} ч цели
-          </div>
-          {selectedDayEntries.length === 0 && <div style={styles.muted}>В этот день записей нет.</div>}
-          {selectedDayEntries.map((e) => {
-            const s = ALL_SUBJECTS.find((s) => s.id === e.subjectId);
-            return (
-              <div key={e.id} style={styles.journalRow}>
-                <span style={{ ...styles.dot, background: s?.color }} />
-                <span style={styles.jSubj}>{s?.name}</span>
-                <span style={styles.jHours}>{e.hours} ч</span>
-                <span style={styles.jNote}>{e.note}</span>
-                <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
-                  ×
-                </button>
-              </div>
-            );
-          })}
-
-          <div style={styles.homeworkBlock}>
-            <div style={styles.homeworkTitle}>Домашнее задание и дела</div>
-            {selectedDaySubjects.length === 0 ? (
-              <div style={styles.mutedSmall}>На этот день по расписанию лицея уроков нет.</div>
-            ) : (
-              selectedDaySubjects.map((name) => {
-                const items = homeworkForSelectedDate.filter((h) => h.subjectName === name);
-                const dayInfo = selectedDayLevels[name];
+            <div style={styles.journalList}>
+              {journal.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
+              {journal.map((e) => {
+                const s = ALL_SUBJECTS.find((s) => s.id === e.subjectId);
                 return (
-                  <div key={name} style={styles.homeworkSubjectBlock}>
-                    <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
-                      {name}
-                      {dayInfo && (
-                        <>
-                          <span style={{ ...styles.dayPriority, color: priorityInfo(dayInfo.priority).strong }}>
-                            {priorityInfo(dayInfo.priority).mark}
-                          </span>
-                          <span
-                            style={{
-                              ...styles.levelChip,
-                              color: levelInfo(dayInfo.level).color,
-                              borderColor: levelInfo(dayInfo.level).color,
-                            }}
-                          >
-                            {levelInfo(dayInfo.level).short}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    {items.map((h) => (
-                      <HomeworkItem
-                        key={h.id}
-                        hw={h}
-                        onToggleDone={() => updateHomework(h.id, { done: !h.done })}
-                        onRemove={() => removeHomework(h.id)}
-                        onAttach={(file) => attachFileToHomework(h.id, file)}
-                        onOpenAttachment={openAttachment}
-                        onRemoveAttachment={(att) => removeAttachment(h.id, att)}
-                        onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                            />
-                    ))}
-                    <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
+                  <div key={e.id} style={styles.journalRow}>
+                    <span style={{ ...styles.dot, background: s?.color }} />
+                    <span style={styles.jDate}>{new Date(e.date).toLocaleDateString("ru-RU")}</span>
+                    <span style={styles.jSubj}>{s?.name}</span>
+                    <span style={styles.jHours}>{e.hours} ч</span>
+                    <span style={styles.jNote}>{e.note}</span>
+                    <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
+                      ×
+                    </button>
                   </div>
                 );
-              })
-            )}
-
-            <div style={styles.homeworkSubjectBlock}>
-              <div style={{ ...styles.homeworkSubjectName, color: "#6B6656" }}>Без привязки к уроку</div>
-              {freeHomework.map((h) => (
-                <HomeworkItem
-                  key={h.id}
-                  hw={h}
-                  onToggleDone={() => updateHomework(h.id, { done: !h.done })}
-                  onRemove={() => removeHomework(h.id)}
-                  onAttach={(file) => attachFileToHomework(h.id, file)}
-                  onOpenAttachment={openAttachment}
-                  onRemoveAttachment={(att) => removeAttachment(h.id, att)}
-                  onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                />
-              ))}
-              <HomeworkAddForm
-                placeholder="Например: подать заявку на олимпиаду"
-                onAdd={(text, minutes) => addHomework(selectedDate, "", text, minutes)}
-              />
+              })}
             </div>
+            </section>
           </div>
-        </div>
-
-        <div style={styles.journalForm}>
-          <input type="date" value={jForm.date} onChange={(e) => setJForm({ ...jForm, date: e.target.value })} style={styles.dateInput} />
-          <select value={jForm.subjectId} onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })} style={styles.select}>
-            {ALL_SUBJECTS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            value={jForm.hours}
-            onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
-            style={styles.smallNumInput}
-          />
-          <input
-            type="text"
-            placeholder="Что прошли сегодня?"
-            value={jForm.note}
-            onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
-            style={styles.textInput}
-          />
-          <button onClick={addJournalEntry} style={styles.addBtn}>
-            Записать
-          </button>
-        </div>
-
-        <div style={styles.journalList}>
-          {journal.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
-          {journal.map((e) => {
-            const s = ALL_SUBJECTS.find((s) => s.id === e.subjectId);
-            return (
-              <div key={e.id} style={styles.journalRow}>
-                <span style={{ ...styles.dot, background: s?.color }} />
-                <span style={styles.jDate}>{new Date(e.date).toLocaleDateString("ru-RU")}</span>
-                <span style={styles.jSubj}>{s?.name}</span>
-                <span style={styles.jHours}>{e.hours} ч</span>
-                <span style={styles.jNote}>{e.note}</span>
-                <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
-                  ×
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        </Collapsible>
-      </section>
-
-      <div style={styles.syncRow}>
-        <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
-          {syncing ? "Обновление…" : "Обновить сейчас"}
-        </button>
-        <span style={styles.mutedSmall}>
-          {lastSyncedAt
-            ? `Синхронизировано в ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
-            : "Ещё не синхронизировано"}
-          {syncDebug ? ` — ${syncDebug}` : ""}
-        </span>
-        {cloudPending && (
-          <span style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</span>
         )}
-      </div>
-      {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
-          занимает место, поэтому сворачивается в одну строку. */}
-      {cloudOn && !saveErr && !cloudPending && !showBackup ? (
-        <div style={styles.backupHint}>
-          <button onClick={() => setShowBackup(true)} style={styles.eventsToggle}>
-            Резервная копия данных
-          </button>
-          <span style={styles.mutedSmall}>синхронизация работает — переносить вручную не нужно</span>
-        </div>
-      ) : (
-      <section style={styles.card}>
-        <button onClick={() => toggleSection("backup")} style={styles.sectionHeaderBtn}>
-          <span style={styles.sectionChevron}>{openSections.backup ? "▾" : "▸"}</span>
-          <h2 style={styles.h2Inline}>Перенос данных между устройствами</h2>
-        </button>
-        <Collapsible open={openSections.backup}>
-            <p style={styles.muted}>
-              Если автоматическая синхронизация между устройствами не работает, данные можно перенести вручную:
-              скопируйте текст на одном устройстве и вставьте его в поле импорта на другом.
-            </p>
-            <label style={styles.label}>Экспорт (скопируйте этот текст)</label>
-            <textarea readOnly value={buildExportPayload()} style={styles.backupTextarea} onFocus={(e) => e.target.select()} />
-            <div style={styles.backupRow}>
-              <button onClick={copyExport} style={styles.addBtnSmall}>
-                Скопировать
-              </button>
-              {copyMsg && <span style={styles.mutedSmall}>{copyMsg}</span>}
-            </div>
 
-            <label style={{ ...styles.label, marginTop: 16 }}>Импорт (вставьте текст с другого устройства)</label>
-            <textarea
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              placeholder="Вставьте сюда текст, скопированный на другом устройстве"
-              style={styles.backupTextarea}
-            />
-            <div style={styles.backupRow}>
-              <button onClick={handleImport} style={styles.addBtnSmall} disabled={!importText.trim()}>
-                Импортировать
-              </button>
-              {importMsg && <span style={styles.mutedSmall}>{importMsg}</span>}
-            </div>
-            <p style={styles.muted}>
-              Импорт полностью заменит текущие данные на этом устройстве данными из вставленного текста —
-              используйте его на «пустом» или менее актуальном устройстве.
-            </p>
-        </Collapsible>
-      </section>
-      )}
+        {screen === "notes" && (
+          <>
+          <div className="ap-grid2" style={styles.grid2}>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Предметы</div>
+              <div style={styles.cardNote}>Тетрадь есть у каждого предмета — и своего, и лицейского</div>
+              <div style={styles.notebookList}>
+                {notebookOwners.map((o) => {
+                  const on = o.key === notebookOwner;
+                  const blocks = notebooks[o.key] || [];
+                  return (
+                    <button
+                      key={o.key}
+                      onClick={() => setNotebookOwner(o.key)}
+                      style={{
+                        ...styles.notebookPick,
+                        background: on ? "var(--neutralBg)" : "transparent",
+                        borderColor: on ? "var(--mute)" : "var(--line2)",
+                      }}
+                    >
+                      <span style={{ ...styles.notebookDot, background: o.color }} />
+                      <span style={styles.notebookName}>{o.name}</span>
+                      <span style={styles.mutedSmall}>{blocks.length ? blocks.length + " блок." : "пусто"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-      <div style={styles.versionRow}>
-        Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
-        {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
-        {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-      </div>
-      <ReleaseNotes />
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>{currentNotebook ? "Тетрадь · " + currentNotebook.name : "Тетрадь"}</div>
+              <div style={styles.cardNote}>Блок — большая тема, внутри ветки с конспектом и вложениями</div>
+              {currentNotebook ? (
+                <Notebook
+                  blocks={notebooks[currentNotebook.key] || []}
+                  onChange={(blocks) => setNotebook(currentNotebook.key, blocks)}
+                  onUndo={showUndo}
+                  prefix={"nb-" + currentNotebook.key}
+                />
+              ) : (
+                <p style={styles.muted}>Предметы появятся, как только вы добавите их в подготовку или в расписание.</p>
+              )}
+            </section>
+          </div>
+          </>
+        )}
+
+        {screen === "settings" && (
+          <div className="ap-grid3" style={styles.grid3}>
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Облако</div>
+              <div style={styles.cardNote}>
+                Один аккаунт на все устройства: правки с телефона и ноутбука сливаются, а не затирают друг друга.
+              </div>
+              <CloudPanel />
+              <div style={styles.syncRow}>
+                <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
+                  {syncing ? "Обновление…" : "Обновить сейчас"}
+                </button>
+                <span style={styles.mutedSmall}>
+                  {lastSyncedAt
+                    ? `Синхронизировано в ${lastSyncedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`
+                    : "Ещё не синхронизировано"}
+                  {syncDebug ? ` — ${syncDebug}` : ""}
+                </span>
+              </div>
+              {cloudPending && (
+                <div style={styles.pendingBadge}>правки ещё не ушли в облако — отправлю, как появится связь</div>
+              )}
+            </section>
+
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Резервная копия</div>
+              {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
+                  занимает место, поэтому сворачивается в строку. */}
+              {cloudOn && !saveErr && !cloudPending && !showBackup ? (
+                <>
+                  <div style={styles.cardNote}>Синхронизация работает — переносить вручную не нужно.</div>
+                  <button onClick={() => setShowBackup(true)} style={styles.eventsToggle}>
+                    Всё равно показать перенос
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={styles.cardNote}>
+                    Если автоматическая синхронизация не работает, данные переносятся вручную: скопируйте текст на
+                    одном устройстве и вставьте его в поле импорта на другом.
+                  </div>
+                  <label style={styles.label}>Экспорт (скопируйте этот текст)</label>
+                  <textarea readOnly value={buildExportPayload()} style={styles.backupTextarea} onFocus={(e) => e.target.select()} />
+                  <div style={styles.backupRow}>
+                    <button onClick={copyExport} style={styles.addBtnSmall}>
+                      Скопировать
+                    </button>
+                    {copyMsg && <span style={styles.mutedSmall}>{copyMsg}</span>}
+                  </div>
+
+                  <label style={{ ...styles.label, marginTop: 16 }}>Импорт (вставьте текст с другого устройства)</label>
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="Вставьте сюда текст, скопированный на другом устройстве"
+                    style={styles.backupTextarea}
+                  />
+                  <div style={styles.backupRow}>
+                    <button onClick={handleImport} style={styles.addBtnSmall} disabled={!importText.trim()}>
+                      Импортировать
+                    </button>
+                    {importMsg && <span style={styles.mutedSmall}>{importMsg}</span>}
+                  </div>
+                  <p style={styles.muted}>
+                    Импорт полностью заменит данные на этом устройстве — используйте его на «пустом» или менее
+                    актуальном устройстве.
+                  </p>
+                </>
+              )}
+            </section>
+
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Приложение</div>
+              <div style={styles.cardNote}>
+                С иконки ежедневник открывается без адресной строки и работает без сети — правки уйдут в облако, когда
+                связь появится.
+              </div>
+              <InstallHint />
+              <div style={styles.versionRow}>
+                Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
+                {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
+                {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+              <ReleaseNotes />
+            </section>
+          </div>
+        )}
+      </main>
 
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
@@ -2376,8 +2737,8 @@ function PriorityPicker({ value, onChange }) {
             style={{
               ...styles.priorityBtn,
               color: active ? "#fff" : p.color,
-              background: active ? p.color : "#fff",
-              borderColor: active ? p.color : "#C9C1AC",
+              background: active ? p.color: "var(--btnInk)",
+              borderColor: active ? p.color : "var(--line)",
             }}
           >
             {p.mark}
@@ -3069,20 +3430,60 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
 }
 
 const styles = {
+  // Оболочка: колонка навигации слева, экран справа. На телефоне колонка
+  // превращается в полосу сверху — это делает таблица стилей выше.
+  shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)" },
+  main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
+  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, marginBottom: 16 },
+  grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 16 },
+  cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 17, marginBottom: 4 },
+  cardNote: { fontSize: 12.5, color: "var(--ink3)", marginBottom: 10, lineHeight: 1.5 },
+  todayList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 },
+  todayRow: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+    flexWrap: "wrap",
+    borderLeft: "4px solid",
+    borderRadius: "0 4px 4px 0",
+    padding: "6px 9px",
+  },
+  todayTime: { fontSize: 12.5, fontWeight: 600, minWidth: 42 },
+  todayName: { fontSize: 13.5, fontWeight: 600, flex: "1 1 120px", minWidth: 0 },
+  todayMeta: { fontSize: 12, color: "var(--ink3)" },
+  quickLog: { borderTop: "1px solid var(--line2)", paddingTop: 10, marginTop: 4 },
+  quickRow: { display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6, flexWrap: "wrap" },
+  taskRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, flexWrap: "wrap" },
+  taskText: { flex: "1 1 140px", minWidth: 0 },
+  taskMeta: { fontSize: 12 },
+  progressRow: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 },
+  notebookList: { display: "flex", flexDirection: "column", gap: 4 },
+  notebookPick: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 9px",
+    border: "1px solid",
+    borderRadius: 6,
+    fontSize: 13.5,
+    textAlign: "left",
+  },
+  notebookDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
+  notebookName: { flex: 1, minWidth: 0 },
   page: {
     fontFamily: "Inter, system-ui, sans-serif",
-    background: "#EFEBE1",
-    color: "#2B2822",
+    background: "var(--bg)",
+    color: "var(--ink)",
     minHeight: "100vh",
     padding: "28px 20px 60px",
     maxWidth: 880,
     margin: "0 auto",
   },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap", marginBottom: 20 },
-  eyebrow: { fontSize: 13, color: "#8C7326", fontWeight: 600, marginBottom: 4 },
+  eyebrow: { fontSize: 13, color: "var(--accent)", fontWeight: 600, marginBottom: 4 },
   h1: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, margin: 0, lineHeight: 1.25, maxWidth: 480 },
-  lead: { fontSize: 13.5, color: "#5A5347", lineHeight: 1.55, maxWidth: 420, margin: "10px 0 0" },
-  leadMuted: { fontSize: 12.5, color: "#8A8370", lineHeight: 1.55, maxWidth: 420, margin: "6px 0 0" },
+  lead: { fontSize: 13.5, color: "var(--ink2)", lineHeight: 1.55, maxWidth: 420, margin: "10px 0 0" },
+  leadMuted: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.55, maxWidth: 420, margin: "6px 0 0" },
   h2: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 20, margin: "0 0 10px" },
   h2Inline: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 20, margin: 0 },
   sectionHeaderBtn: {
@@ -3096,17 +3497,17 @@ const styles = {
     marginBottom: 10,
     textAlign: "left",
   },
-  sectionChevron: { fontSize: 13, color: "#8A8370", width: 12, flexShrink: 0 },
-  countdownBox: { background: "#2B2822", color: "#EFEBE1", borderRadius: 4, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
+  sectionChevron: { fontSize: 13, color: "var(--mute)", width: 12, flexShrink: 0 },
+  countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 4, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
-  dateInput: { border: "1px solid #4A4638", background: "transparent", color: "inherit", borderRadius: 3, padding: "4px 6px", fontSize: 12, width: "100%" },
+  dateInput: { border: "1px solid var(--railActive)", background: "transparent", color: "inherit", borderRadius: 3, padding: "4px 6px", fontSize: 12, width: "100%" },
   countdownEvent: { fontSize: 16, fontWeight: 700, marginTop: 8, lineHeight: 1.3 },
   countdownDate: { fontSize: 12, opacity: 0.7, marginTop: 3 },
   countdownRest: {
     marginTop: 10,
     paddingTop: 8,
-    borderTop: "1px solid #4A4638",
+    borderTop: "1px solid var(--railActive)",
     display: "flex",
     flexDirection: "column",
     gap: 5,
@@ -3115,34 +3516,34 @@ const styles = {
   countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 12.5, lineHeight: 1.35 },
   countdownRestName: { flex: 1, minWidth: 0, opacity: 0.9 },
   countdownRestLeft: { fontSize: 13.5, opacity: 0.75, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
-  countdownPlan: { fontSize: 9.5, color: "#8FBF9F", marginLeft: 6, whiteSpace: "nowrap" },
+  countdownPlan: { fontSize: 9.5, color: "var(--green)", marginLeft: 6, whiteSpace: "nowrap" },
   countdownEmpty: { fontSize: 12.5, opacity: 0.8, lineHeight: 1.5 },
   eventsStrip: { marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 },
   eventRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, flexWrap: "wrap" },
   eventMark: { fontWeight: 700, minWidth: 14 },
   eventName: { fontWeight: 600 },
-  eventDate: { color: "#6B6656", fontSize: 12.5 },
-  eventLeft: { color: "#8A8370", fontSize: 12.5, marginLeft: "auto" },
-  calendarPanel: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 8 },
+  eventDate: { color: "var(--ink3)", fontSize: 12.5 },
+  eventLeft: { color: "var(--mute)", fontSize: 12.5, marginLeft: "auto" },
+  calendarPanel: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 6, padding: 14, marginTop: 8 },
   calendarTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 15, marginBottom: 8 },
   calendarRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 },
   calendarLinkInput: {
     width: "100%",
     padding: "5px 8px",
-    border: "1px solid #C9C1AC",
+    border: "1px solid var(--line)",
     borderRadius: 4,
     fontSize: 11.5,
-    background: "#fff",
-    color: "#5A5347",
+    background: "var(--panel2)",
+    color: "var(--ink2)",
   },
-  calendarMsg: { fontSize: 12, color: "#3F6E52", marginTop: 8 },
-  calendarSteps: { margin: "0 0 8px", paddingLeft: 20, fontSize: 12.5, color: "#5A5347", lineHeight: 1.6 },
+  calendarMsg: { fontSize: 12, color: "var(--green)", marginTop: 8 },
+  calendarSteps: { margin: "0 0 8px", paddingLeft: 20, fontSize: 12.5, color: "var(--ink2)", lineHeight: 1.6 },
   // Ссылка webcal: выглядит и ведёт себя как кнопка рядом с соседями.
   subscribeLink: {
     display: "inline-block",
     border: "none",
-    color: "#fff",
-    background: "#2B2822",
+    color: "var(--btnInk)",
+    background: "var(--btnBg)",
     borderRadius: 4,
     padding: "5px 10px",
     fontSize: 12,
@@ -3151,30 +3552,30 @@ const styles = {
   },
   subscribeLinkSecondary: {
     display: "inline-block",
-    border: "1px solid #C9C1AC",
-    background: "#fff",
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
     borderRadius: 4,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
-    color: "#2B2822",
+    color: "var(--ink)",
     textDecoration: "none",
   },
   secondaryBtnSmall: {
-    border: "1px solid #C9C1AC",
-    background: "#fff",
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
     borderRadius: 4,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
-    color: "#2B2822",
+    color: "var(--ink)",
   },
   linkBtnSmall: {
     border: "none",
     background: "none",
     padding: 0,
     fontSize: 12,
-    color: "#8B4A4A",
+    color: "var(--red)",
     textDecoration: "underline",
   },
   eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
@@ -3185,11 +3586,11 @@ const styles = {
     border: "none",
     padding: 0,
     fontSize: 12.5,
-    color: "#8C7326",
+    color: "var(--accent)",
     fontWeight: 600,
     textDecoration: "underline",
   },
-  eventsEditor: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 14, marginTop: 4 },
+  eventsEditor: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 6, padding: 14, marginTop: 4 },
   eventEditRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap", marginBottom: 8 },
   eventAddRow: {
     display: "flex",
@@ -3198,10 +3599,10 @@ const styles = {
     flexWrap: "wrap",
     marginTop: 12,
     paddingTop: 12,
-    borderTop: "1px solid #E7E1D2",
+    borderTop: "1px solid var(--line2)",
   },
-  eventNameInput: { flex: "1 1 160px", minWidth: 0, padding: "5px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, background: "#fff" },
-  eventDateInput: { padding: "5px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
+  eventNameInput: { flex: "1 1 160px", minWidth: 0, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
+  eventDateInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
   priorityRow: { display: "flex", gap: 4 },
   priorityBtn: { border: "1px solid", borderRadius: 4, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
@@ -3210,16 +3611,16 @@ const styles = {
   lyceumSubjectRow: { display: "flex", alignItems: "center", gap: 8 },
   sundayRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 },
   sundayBtn: {
-    border: "1px solid #C9C1AC",
-    background: "#fff",
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
     borderRadius: 4,
     padding: "5px 12px",
     fontSize: 12.5,
     fontWeight: 600,
-    color: "#5A5347",
+    color: "var(--ink2)",
   },
   lyceumNotebooks: { marginBottom: 18, display: "flex", flexDirection: "column", gap: 6 },
-  lyceumNotebookBlock: { borderBottom: "1px solid #E7E1D2", paddingBottom: 6 },
+  lyceumNotebookBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 6 },
   lyceumNotebookHead: {
     display: "flex",
     alignItems: "center",
@@ -3249,26 +3650,26 @@ const styles = {
     width: "100%",
     maxWidth: 560,
     pointerEvents: "auto",
-    background: "#2B2822",
-    color: "#EFEBE1",
+    background: "var(--btnBg)",
+    color: "var(--railInk)",
     borderRadius: 6,
     boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
     overflow: "hidden",
     zIndex: 50,
   },
-  undoBarTrack: { height: 3, background: "#4A4638" },
-  undoBar: { height: "100%", background: "#8C7326" },
+  undoBarTrack: { height: 3, background: "var(--railActive)" },
+  undoBar: { height: "100%", background: "var(--accent)" },
   undoRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" },
   undoText: { flex: 1, fontSize: 12.5, lineHeight: 1.45 },
   undoCancel: {
-    border: "1px solid #8A8370",
+    border: "1px solid var(--mute)",
     background: "transparent",
-    color: "#EFEBE1",
+    color: "var(--railInk)",
     borderRadius: 4,
     padding: "4px 10px",
     fontSize: 13,
   },
-  undoConfirm: { border: "none", background: "#3F6E52", color: "#fff", borderRadius: 4, padding: "4px 10px", fontSize: 13 },
+  undoConfirm: { border: "none", background: "var(--green)", color: "var(--btnInk)", borderRadius: 4, padding: "4px 10px", fontSize: 13 },
   dayPriority: { fontSize: 11, fontWeight: 700, marginLeft: 6 },
   levelChip: {
     border: "1px solid",
@@ -3279,62 +3680,62 @@ const styles = {
     marginLeft: 6,
     verticalAlign: "middle",
   },
-  fromScheduleBadge: { fontSize: 10.5, color: "#8B4A4A", border: "1px solid #E0B9B4", borderRadius: 4, padding: "1px 6px" },
-  mainBadge: { fontSize: 11, color: "#3F6E52", fontWeight: 600 },
-  pastLabel: { fontSize: 11.5, color: "#8A8370", margin: "10px 0 6px" },
+  fromScheduleBadge: { fontSize: 10.5, color: "var(--red)", border: "1px solid var(--redLine)", borderRadius: 4, padding: "1px 6px" },
+  mainBadge: { fontSize: 11, color: "var(--green)", fontWeight: 600 },
+  pastLabel: { fontSize: 11.5, color: "var(--mute)", margin: "10px 0 6px" },
   overallBar: { marginBottom: 24 },
-  overallTrack: { height: 8, background: "#DCD5C4", borderRadius: 4, overflow: "hidden" },
-  overallFill: { height: "100%", background: "#2B2822" },
+  overallTrack: { height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" },
+  overallFill: { height: "100%", background: "var(--rail)" },
   overallBtn: { display: "block", width: "100%", border: "none", background: "none", padding: 0, textAlign: "left" },
-  overallHint: { color: "#8C7326", fontWeight: 600, marginLeft: 8, fontSize: 12 },
-  overallText: { fontSize: 13, color: "#5A5347", marginTop: 6 },
-  card: { background: "#F7F4EC", border: "1px solid #DCD5C4", borderRadius: 6, padding: 22, marginBottom: 26 },
-  muted: { fontSize: 13.5, color: "#6B6656", lineHeight: 1.55, marginTop: 0 },
-  label: { fontSize: 13, fontWeight: 600, color: "#4A4638", display: "block", marginBottom: 6 },
+  overallHint: { color: "var(--accent)", fontWeight: 600, marginLeft: 8, fontSize: 12 },
+  overallText: { fontSize: 13, color: "var(--ink2)", marginTop: 6 },
+  card: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 6, padding: 22, marginBottom: 26 },
+  muted: { fontSize: 13.5, color: "var(--ink3)", lineHeight: 1.55, marginTop: 0 },
+  label: { fontSize: 13, fontWeight: 600, color: "var(--ink2)", display: "block", marginBottom: 6 },
   dailyGoalsBlock: { marginBottom: 18 },
   dailyGoalsRow: { display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, marginTop: 4 },
   dailyGoalCell: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 },
-  dailyGoalLabel: { fontSize: 11.5, color: "#8A8370" },
-  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, textAlign: "center", background: "#fff" },
-  dailyGoalHours: { fontSize: 11, color: "#6B6656" },
+  dailyGoalLabel: { fontSize: 11.5, color: "var(--mute)" },
+  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, textAlign: "center", background: "var(--panel2)" },
+  dailyGoalHours: { fontSize: 11, color: "var(--ink3)" },
   allocGrid: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 },
   allocRow: { display: "flex", alignItems: "center", gap: 10 },
   dot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0, display: "inline-block" },
   allocName: { fontSize: 13.5, width: 120, flexShrink: 0 },
-  smallNumInput: { width: 52, padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, background: "#fff" },
-  hUnit: { fontSize: 11.5, color: "#8A8370", width: 34 },
-  capacityBox: { border: "1px solid", borderRadius: 5, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, background: "#fff" },
+  smallNumInput: { width: 52, padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
+  hUnit: { fontSize: 11.5, color: "var(--mute)", width: 34 },
+  capacityBox: { border: "1px solid", borderRadius: 5, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, background: "var(--panel2)" },
   skewWarning: {
     marginTop: 10,
     padding: "10px 14px",
-    background: "#F3E7E7",
-    border: "1px solid #C99A9A",
+    background: "var(--redBg)",
+    border: "1px solid var(--redLine)",
     borderRadius: 5,
     fontSize: 13.5,
-    color: "#7A3A3A",
+    color: "var(--red)",
     fontWeight: 600,
   },
   skewWarningInline: {
     marginTop: 8,
     fontSize: 13,
-    color: "#7A3A3A",
+    color: "var(--red)",
     fontWeight: 600,
   },
-  warn: { color: "#8B4A4A", fontWeight: 600 },
+  warn: { color: "var(--red)", fontWeight: 600 },
   ppfSection: { marginTop: 20, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" },
   ppfControls: { flex: "1 1 220px", minWidth: 220 },
-  select: { padding: "6px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, background: "#fff" },
-  svg: { flex: "1 1 280px", maxWidth: 320, background: "#fff", border: "1px solid #DCD5C4", borderRadius: 5 },
+  select: { padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
+  svg: { flex: "1 1 280px", maxWidth: 320, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 5 },
   subjGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 },
-  subjCard: { background: "#F7F4EC", border: "1px solid", borderRadius: 6, padding: "14px 16px", transition: "transform 0.15s ease" },
+  subjCard: { background: "var(--neutralBg)", border: "1px solid", borderRadius: 6, padding: "14px 16px", transition: "transform 0.15s ease" },
   subjHeader: { display: "flex", alignItems: "center", gap: 8, flex: 1, background: "none", border: "none", padding: 0, textAlign: "left" },
   subjHeaderRow: { display: "flex", alignItems: "center", gap: 4 },
   addSubjectRow: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" },
-  addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13.5, background: "#fff" },
+  addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13.5, background: "var(--panel2)" },
   scheduleGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12, marginTop: 16 },
-  scheduleDayBlock: { background: "#fff", border: "1px solid #DCD5C4", borderRadius: 6, padding: "10px 12px" },
+  scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 6, padding: "10px 12px" },
   scheduleDayHeader: { fontSize: 13.5, fontWeight: 700, marginBottom: 8 },
-  mutedSmall: { fontSize: 12, color: "#8A8370" },
+  mutedSmall: { fontSize: 12, color: "var(--mute)" },
   scheduleEntry: {
     display: "flex",
     flexDirection: "column",
@@ -3350,7 +3751,7 @@ const styles = {
     border: "none",
     padding: 0,
     fontSize: 11.5,
-    color: "#8C7326",
+    color: "var(--accent)",
     fontWeight: 600,
     textDecoration: "underline",
   },
@@ -3360,25 +3761,25 @@ const styles = {
     gap: 6,
     padding: "8px 8px 10px",
     marginBottom: 8,
-    border: "1px dashed #C08A1E",
+    border: "1px dashed var(--gold)",
     borderRadius: 5,
-    background: "#FBF6E8",
+    background: "var(--warmBg)",
   },
   // Экзамен выделяется рамкой: цвет заливки уже занят под важность. Границы заданы
   // по сторонам, иначе сокращённое `border` сбрасывало бы толстую полосу слева.
   scheduleExam: {
-    borderTop: "1px solid #B23A3A",
-    borderRight: "1px solid #B23A3A",
-    borderBottom: "1px solid #B23A3A",
-    borderLeftColor: "#B23A3A",
+    borderTop: "1px solid var(--redStrong)",
+    borderRight: "1px solid var(--redStrong)",
+    borderBottom: "1px solid var(--redStrong)",
+    borderLeftColor: "var(--redStrong)",
   },
   examRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 },
-  examNote: { fontSize: 11.5, color: "#3F6E52", lineHeight: 1.5, marginTop: 6 },
+  examNote: { fontSize: 11.5, color: "var(--green)", lineHeight: 1.5, marginTop: 6 },
   examKindPicker: { display: "flex", gap: 4 },
   examKindOn: {
-    border: "1px solid #B23A3A",
-    background: "#B23A3A",
-    color: "#fff",
+    border: "1px solid var(--redStrong)",
+    background: "var(--redStrong)",
+    color: "var(--btnInk)",
     borderRadius: 4,
     padding: "2px 8px",
     fontSize: 11,
@@ -3388,9 +3789,9 @@ const styles = {
   },
   examKindOff: {
     // Невыбранное — серое: иначе два значка рядом читаются как две пометки сразу.
-    border: "1px solid #DCD5C4",
-    background: "#FBF9F4",
-    color: "#8A8370",
+    border: "1px solid var(--line)",
+    background: "var(--panel)",
+    color: "var(--mute)",
     borderRadius: 4,
     padding: "2px 8px",
     fontSize: 11,
@@ -3398,83 +3799,83 @@ const styles = {
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
-  examDateInput: { padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
-  examLink: { fontSize: 12, color: "#2F4E70" },
+  examDateInput: { padding: "3px 5px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)" },
+  examLink: { fontSize: 12, color: "var(--blue)" },
   // Название переносится на несколько строк, значки важности остаются у первой.
   scheduleSubjectRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" },
-  priorityLegend: { fontSize: 11.5, color: "#6B6656", lineHeight: 1.5, marginBottom: 10 },
-  scheduleSelect: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff", width: "100%" },
+  priorityLegend: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.5, marginBottom: 10 },
+  scheduleSelect: { padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)", width: "100%" },
   scheduleSubjectInput: {
     flex: "1 1 120px",
     minWidth: 0,
     padding: "4px 6px",
-    border: "1px solid #C9C1AC",
+    border: "1px solid var(--line)",
     borderRadius: 4,
     fontSize: 12.5,
-    background: "#fff",
+    background: "var(--panel2)",
     fontWeight: 600,
   },
   scheduleTimeRow: { display: "flex", alignItems: "center", gap: 4 },
-  scheduleTimeInput: { padding: "3px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff", width: 82 },
-  scheduleRoomInput: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
-  scheduleTeacherInput: { padding: "4px 6px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
-  addScheduleRow: { display: "flex", flexDirection: "column", gap: 4, marginTop: 6, paddingTop: 6, borderTop: "1px dashed #DCD5C4" },
-  subjName: { fontSize: 15.5, fontWeight: 600, flex: 1, color: "#2B2822" },
-  subjPct: { fontSize: 12.5, color: "#6B6656" },
-  miniTrack: { height: 5, background: "#DCD5C4", borderRadius: 3, marginTop: 10, overflow: "hidden" },
+  scheduleTimeInput: { padding: "3px 4px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)", width: 82 },
+  scheduleRoomInput: { padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
+  scheduleTeacherInput: { padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
+  addScheduleRow: { display: "flex", flexDirection: "column", gap: 4, marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--line)" },
+  subjName: { fontSize: 15.5, fontWeight: 600, flex: 1, color: "var(--ink)" },
+  subjPct: { fontSize: 12.5, color: "var(--ink3)" },
+  miniTrack: { height: 5, background: "var(--line)", borderRadius: 3, marginTop: 10, overflow: "hidden" },
   miniFill: { height: "100%" },
   topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 4, maxHeight: 380, overflowY: "auto" },
-  topicBlock: { borderBottom: "1px solid #E7E1D2", paddingBottom: 4 },
+  topicBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 4 },
   topicRow: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "5px 4px", borderRadius: 3 },
   topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
-  topicDone: { textDecoration: "line-through", color: "#9A927D" },
-  durationInput: { width: 44, padding: "3px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
-  notesToggle: { background: "none", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "#5A5347" },
+  topicDone: { textDecoration: "line-through", color: "var(--mute)" },
+  durationInput: { width: 44, padding: "3px 5px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)" },
+  notesToggle: { background: "none", border: "1px solid var(--line)", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "var(--ink2)" },
   colorPick: {
     width: 24,
     height: 20,
     padding: 0,
-    border: "1px solid #C9C1AC",
+    border: "1px solid var(--line)",
     borderRadius: 3,
-    background: "#fff",
+    background: "var(--panel2)",
     flexShrink: 0,
   },
   subjRemoveBtn: {
     border: "none",
     background: "none",
-    color: "#8B4A4A",
+    color: "var(--red)",
     fontSize: 20,
     lineHeight: 1,
     // Крестик на телефоне должен попадаться под палец, а не под пиксель.
     padding: "6px 10px",
     marginRight: -6,
   },
-  removeBtn: { marginLeft: 2, background: "none", border: "none", color: "#B08A8A", fontSize: 16, lineHeight: 1, padding: "0 4px" },
-  notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "#fff", border: "1px solid #E7E1D2", borderRadius: 5 },
+  removeBtn: { marginLeft: 2, background: "none", border: "none", color: "var(--red)", fontSize: 16, lineHeight: 1, padding: "0 4px" },
+  notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "var(--panel2)", border: "1px solid var(--line2)", borderRadius: 5 },
   noteBlock: { marginBottom: 6 },
-  noteChevron: { background: "none", border: "none", padding: 0, fontSize: 11, color: "#8A8370", width: 12 },
-  noteHasBody: { fontSize: 11, color: "#8C7326" },
+  noteChevron: { background: "none", border: "none", padding: 0, fontSize: 11, color: "var(--mute)", width: 12 },
+  noteHasBody: { fontSize: 11, color: "var(--accent)" },
   noteBody: { display: "flex", flexDirection: "column", gap: 6, margin: "6px 0 10px 14px" },
   noteRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "3px 0" },
-  noteDate: { color: "#8A8370", width: 68, flexShrink: 0 },
-  noteText: { flex: 1, color: "#4A4638" },
-  noteMins: { color: "#6B6656", width: 46, flexShrink: 0, textAlign: "right" },
+  noteDate: { color: "var(--mute)", width: 68, flexShrink: 0 },
+  noteText: { flex: 1, color: "var(--ink2)" },
+  noteMins: { color: "var(--ink3)", width: 46, flexShrink: 0, textAlign: "right" },
   noteForm: { display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  noteInput: { flex: "1 1 180px", padding: "5px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
-  addBtnSmall: { border: "none", color: "#fff", background: "#2B2822", borderRadius: 4, padding: "5px 10px", fontSize: 12, fontWeight: 600 },
+  noteInput: { flex: "1 1 180px", padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
+  addBtnSmall: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 4, padding: "5px 10px", fontSize: 12, fontWeight: 600 },
   addTopicRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  addTopicInput: { flex: 1, padding: "5px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, background: "#fff" },
-  addTopicUrlInput: { flex: "1 1 160px", padding: "5px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13, background: "#fff" },
-  addBtn: { border: "none", color: "#fff", background: "#2B2822", borderRadius: 4, padding: "6px 12px", fontSize: 13, fontWeight: 600 },
+  addTopicInput: { flex: 1, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
+  addTopicUrlInput: { flex: "1 1 160px", padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
+  addBtn: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 4, padding: "6px 12px", fontSize: 13, fontWeight: 600 },
   calendarWrap: { marginBottom: 18 },
   calHeader: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 8 },
-  calNavBtn: { background: "none", border: "1px solid #C9C1AC", borderRadius: 4, width: 28, height: 28, fontSize: 15, color: "#2B2822" },
+  calNavBtn: { background: "none", border: "1px solid var(--line)", borderRadius: 4, width: 28, height: 28, fontSize: 15, color: "var(--ink)" },
   calMonthLabel: { fontSize: 14.5, fontWeight: 600, textTransform: "capitalize", minWidth: 150, textAlign: "center" },
   calWeekdays: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 },
-  calWeekday: { fontSize: 11, color: "#8A8370", textAlign: "center" },
+  calWeekday: { fontSize: 11, color: "var(--mute)", textAlign: "center" },
   calGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 },
   calCell: { position: "relative", aspectRatio: "1", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" },
-  hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "#8C7326" },
+  hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" },
   // Клетка календаря сама цветная — от красной к зелёной, — поэтому точки сидят на
   // светлой подложке: иначе зелёный предмет пропадает на зелёном дне.
   lessonDots: {
@@ -3488,39 +3889,39 @@ const styles = {
     background: "rgba(247, 244, 236, 0.92)",
   },
   lessonDot: { width: 5, height: 5, borderRadius: "50%" },
-  dayDetail: { background: "#fff", border: "1px solid #DCD5C4", borderRadius: 5, padding: "12px 14px", marginBottom: 16 },
-  homeworkBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed #DCD5C4" },
+  dayDetail: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 5, padding: "12px 14px", marginBottom: 16 },
+  homeworkBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--line)" },
   homeworkTitle: { fontSize: 13, fontWeight: 700, marginBottom: 6 },
   homeworkSubjectBlock: { marginBottom: 10 },
   homeworkSubjectName: { fontSize: 12.5, fontWeight: 700, marginBottom: 3 },
   homeworkItemBlock: { marginBottom: 4 },
   homeworkItemRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "3px 0" },
-  homeworkText: { flex: 1, color: "#4A4638" },
+  homeworkText: { flex: 1, color: "var(--ink2)" },
   homeworkAddRow: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" },
-  homeworkInput: { flex: "1 1 160px", padding: "5px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12.5, background: "#fff" },
-  homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 12, background: "#fff" },
+  homeworkInput: { flex: "1 1 160px", padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
+  homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)" },
   attachBtn: { background: "none", border: "none", fontSize: 13, padding: "0 2px" },
   attachmentsRow: { display: "flex", flexWrap: "wrap", gap: 6, marginLeft: 24, marginBottom: 4 },
   attachmentChip: {
     display: "inline-flex",
     alignItems: "center",
     gap: 2,
-    background: "#F0ECE1",
+    background: "var(--neutralBg)",
     borderRadius: 10,
     padding: "2px 4px 2px 8px",
     fontSize: 11.5,
   },
-  attachmentLink: { background: "none", border: "none", color: "#2F4E70", textDecoration: "underline", fontSize: 11.5, padding: 0 },
+  attachmentLink: { background: "none", border: "none", color: "var(--blue)", textDecoration: "underline", fontSize: 11.5, padding: 0 },
   reminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
-  reminderSelect: { padding: "2px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, background: "#fff" },
-  reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 11.5, background: "#fff" },
+  reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 11.5, background: "var(--panel2)" },
+  reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 11.5, background: "var(--panel2)" },
   hwBanner: {
     display: "flex",
     alignItems: "stretch",
     gap: 12,
-    background: "#FBF0D2",
-    border: "1px solid #C08A1E",
-    borderLeft: "5px solid #C08A1E",
+    background: "var(--warmBg)",
+    border: "1px solid var(--gold)",
+    borderLeft: "5px solid var(--gold)",
     borderRadius: 6,
     padding: "12px 14px",
     marginBottom: 16,
@@ -3531,12 +3932,12 @@ const styles = {
     fontSize: 16,
     fontWeight: 700,
     marginBottom: 6,
-    color: "#7A5A12",
+    color: "var(--warmInk)",
   },
-  hwBannerRow: { fontSize: 13.5, color: "#3A362C", marginBottom: 3, lineHeight: 1.45 },
+  hwBannerRow: { fontSize: 13.5, color: "var(--ink)", marginBottom: 3, lineHeight: 1.45 },
   hwBannerSubject: { fontWeight: 700 },
-  hwBannerMinutes: { color: "#8A8370" },
-  hwBannerDue: { color: "#B23A3A", fontWeight: 600 },
+  hwBannerMinutes: { color: "var(--mute)" },
+  hwBannerDue: { color: "var(--redStrong)", fontWeight: 600 },
   // Знак ростом во всю плашку: напоминание должно цеплять взгляд, а не теряться.
   hwBannerMark: {
     display: "flex",
@@ -3545,40 +3946,41 @@ const styles = {
     fontSize: 46,
     lineHeight: 1,
     fontWeight: 700,
-    color: "#C08A1E",
+    color: "var(--gold)",
     flexShrink: 0,
   },
-  dayDetailTitle: { fontSize: 13.5, fontWeight: 600, marginBottom: 8, textTransform: "capitalize" },
+  // Без capitalize: он поднимал заглавные во всей строке — «12 Сентября 2026 Г. — 0 Ч Из 4 Ч Цели».
+  dayDetailTitle: { fontSize: 13.5, fontWeight: 600, marginBottom: 8 },
   journalForm: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" },
-  textInput: { flex: "1 1 200px", padding: "6px 8px", border: "1px solid #C9C1AC", borderRadius: 4, fontSize: 13.5, background: "#fff" },
+  textInput: { flex: "1 1 200px", padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13.5, background: "var(--panel2)" },
   journalList: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" },
-  journalRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, padding: "7px 8px", borderBottom: "1px solid #E7E1D2" },
-  jDate: { color: "#8A8370", width: 78, flexShrink: 0 },
+  journalRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, padding: "7px 8px", borderBottom: "1px solid var(--line2)" },
+  jDate: { color: "var(--mute)", width: 78, flexShrink: 0 },
   jSubj: { width: 100, flexShrink: 0, fontWeight: 600 },
-  jHours: { width: 44, flexShrink: 0, color: "#6B6656" },
-  jNote: { flex: 1, color: "#4A4638" },
-  saveErr: { fontSize: 12, color: "#8B4A4A", marginTop: 10, lineHeight: 1.6 },
+  jHours: { width: 44, flexShrink: 0, color: "var(--ink3)" },
+  jNote: { flex: 1, color: "var(--ink2)" },
+  saveErr: { fontSize: 12, color: "var(--red)", marginTop: 10, lineHeight: 1.6 },
   backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
-  pendingBadge: { fontSize: 11.5, color: "#8C7326", fontWeight: 600 },
-  versionRow: { fontSize: 11, color: "#A39B86", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
-  syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid #DCD5C4" },
+  pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
+  versionRow: { fontSize: 11, color: "var(--mute)", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
+  syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid var(--line)" },
   syncBtn: {
-    border: "1px solid #C9C1AC",
-    background: "#fff",
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
     borderRadius: 4,
     padding: "5px 10px",
     fontSize: 12.5,
-    color: "#2B2822",
+    color: "var(--ink)",
   },
   backupTextarea: {
     width: "100%",
     minHeight: 90,
     padding: "8px 10px",
-    border: "1px solid #C9C1AC",
+    border: "1px solid var(--line)",
     borderRadius: 5,
     fontSize: 11.5,
     fontFamily: "monospace",
-    background: "#fff",
+    background: "var(--panel2)",
     resize: "vertical",
     boxSizing: "border-box",
   },
