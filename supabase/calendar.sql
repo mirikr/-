@@ -10,6 +10,15 @@ insert into storage.buckets (id, name, public)
 values ('calendar', 'calendar', true)
 on conflict (id) do update set public = true;
 
+-- Владелец должен видеть свой файл в списке объектов. Без этого правила
+-- перезапись (upsert) ломается: хранилище не находит существующую запись,
+-- пробует вставить новую поверх — и получает «new row violates row-level
+-- security policy». Именно это происходило при подписке со второго устройства.
+drop policy if exists "calendar: свой файл видеть" on storage.objects;
+create policy "calendar: свой файл видеть"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'calendar' and (storage.foldername(name))[1] = auth.uid()::text);
+
 -- Писать в свою папку может только её владелец.
 drop policy if exists "calendar: свой файл создавать" on storage.objects;
 create policy "calendar: свой файл создавать"
@@ -26,3 +35,9 @@ drop policy if exists "calendar: свой файл удалять" on storage.ob
 create policy "calendar: свой файл удалять"
   on storage.objects for delete to authenticated
   using (bucket_id = 'calendar' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Проверка: должно вернуться четыре правила — видеть, создавать, обновлять, удалять.
+select policyname, cmd
+from pg_policies
+where schemaname = 'storage' and tablename = 'objects' and policyname like 'calendar:%'
+order by policyname;

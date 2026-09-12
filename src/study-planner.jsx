@@ -2441,9 +2441,6 @@ export default function StudyPlanner() {
                       style={{
                         ...styles.calCell,
                         opacity: inMonth ? 1 : 0.4,
-                        // Кольцо внутри клетки: outline со смещением рисовался поверх
-                        // границы, и заливка выглядывала из-под него полоской.
-                        boxShadow: selected ? "inset 0 0 0 2px var(--ink)" : "none",
                       }}
                     >
                       {/* Клетка заливается снизу вверх на долю выполненной цели: так видно
@@ -2463,6 +2460,10 @@ export default function StudyPlanner() {
                       )}
                       <span style={styles.calDayNum}>{cellDate.getDate()}</span>
                       {hasHw && <span style={styles.hwDot} />}
+                      {/* Рамка выбранного дня — отдельным слоем поверх заливки: и тень,
+                          и обводка рисуются под детьми элемента, поэтому заливка их
+                          перекрывала и выступала из-под рамки полоской. */}
+                      {selected && <span style={styles.calRing} />}
                     </button>
                   );
                 })}
@@ -4023,8 +4024,9 @@ const styles = {
     background: "var(--neutralBg)",
     color: "var(--ink)",
   },
-  calFill: { position: "absolute", left: 0, right: 0, bottom: 0 },
-  calDayNum: { position: "relative" },
+  calFill: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 0 },
+  calRing: { position: "absolute", inset: 0, border: "2px solid var(--ink)", borderRadius: 8, zIndex: 2, pointerEvents: "none" },
+  calDayNum: { position: "relative", zIndex: 1 },
   calLegend: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, color: "var(--ink3)", margin: "12px 0 8px" },
   calLegendItem: { display: "flex", alignItems: "center", gap: 5 },
   calLegendBox: { width: 12, height: 12, borderRadius: 3 },
