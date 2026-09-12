@@ -1790,7 +1790,7 @@ export default function StudyPlanner() {
            и мягко появляется при переходе на экран: иначе смена раздела выглядит рывком. */
         .ap-screen { animation: ap-screen-in .24s cubic-bezier(.2,.8,.3,1) both; }
         @keyframes ap-screen-in { from { opacity: .4; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        .ap-card { transition: box-shadow .22s ease, border-color .22s ease; animation: ap-rise .26s ease both; }
+        .ap-card { min-width: 0; transition: box-shadow .22s ease, border-color .22s ease; animation: ap-rise .26s ease both; }
         /* Карточки входят по очереди — так переход читается как движение, а не как вспышка. */
         .ap-screen > .ap-card:nth-child(2), .ap-screen > * > .ap-card:nth-child(2) { animation-delay: .04s; }
         .ap-screen > .ap-card:nth-child(3), .ap-screen > * > .ap-card:nth-child(3) { animation-delay: .08s; }
@@ -1855,7 +1855,9 @@ export default function StudyPlanner() {
           .ap-rail { display: none !important; }
           .ap-tabbar, .ap-only-mobile { display: block; }
           .ap-main { padding: 16px 14px 96px !important; }
-          .ap-grid2, .ap-grid3 { grid-template-columns: 1fr !important; }
+          /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
+             элемент внутри карточки и уезжает за край экрана. */
+          .ap-grid2, .ap-grid3 { grid-template-columns: minmax(0, 1fr) !important; }
         }
       `}</style>
 
@@ -3846,8 +3848,8 @@ const styles = {
   // превращается в полосу сверху — это делает таблица стилей выше.
   shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)" },
   main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
-  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, marginBottom: 16 },
-  grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 16 },
+  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: 16, marginBottom: 16 },
+  grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 },
   cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 5 },
   cardNote: { fontSize: 13.5, color: "var(--ink3)", marginBottom: 14, lineHeight: 1.5 },
   todayList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 },
@@ -3937,7 +3939,7 @@ const styles = {
     textAlign: "left",
   },
   sectionChevron: { fontSize: 13, color: "var(--mute)", width: 12, flexShrink: 0 },
-  countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 8, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
+  countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 10, padding: "16px 18px", textAlign: "center", width: "100%" },
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
   dateInput: { border: "1px solid var(--line)", background: "var(--panel2)", color: "inherit", borderRadius: 8, padding: "7px 9px", fontSize: 12.5, width: "100%" },
@@ -3952,8 +3954,8 @@ const styles = {
     gap: 5,
     textAlign: "left",
   },
-  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 12.5, lineHeight: 1.35 },
-  countdownRestName: { flex: 1, minWidth: 0, opacity: 0.9 },
+  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 12.5, lineHeight: 1.4, padding: "3px 0" },
+  countdownRestName: { flex: "1 1 auto", minWidth: 0, opacity: 0.9, textAlign: "left", overflowWrap: "anywhere" },
   countdownRestLeft: { fontSize: 13.5, opacity: 0.75, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
   countdownPlan: { fontSize: 9.5, color: "var(--green)", marginLeft: 6, whiteSpace: "nowrap" },
   countdownEmpty: { fontSize: 12.5, opacity: 0.8, lineHeight: 1.5 },
@@ -4449,11 +4451,12 @@ const styles = {
   journalForm: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" },
   textInput: { flex: "1 1 200px", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, background: "var(--panel2)" },
   journalList: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" },
-  journalRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, padding: "7px 8px", borderBottom: "1px solid var(--line2)" },
+  // Длинная заметка раздвигала строку и уносила крестик за край экрана.
+  journalRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, padding: "7px 8px", borderBottom: "1px solid var(--line2)", flexWrap: "wrap" },
   jDate: { color: "var(--mute)", width: 78, flexShrink: 0 },
   jSubj: { width: 100, flexShrink: 0, fontWeight: 600 },
   jHours: { width: 44, flexShrink: 0, color: "var(--ink3)" },
-  jNote: { flex: 1, color: "var(--ink2)" },
+  jNote: { flex: "1 1 120px", minWidth: 0, color: "var(--ink2)", overflowWrap: "anywhere" },
   saveErr: { fontSize: 12, color: "var(--red)", marginTop: 10, lineHeight: 1.6 },
   backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
   pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
