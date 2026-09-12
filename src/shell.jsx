@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 // Левая колонка: переключатель темы, навигация по экранам и строка о синхронизации.
 // Раньше всё приложение было одной длинной страницей со сворачиваемыми разделами:
@@ -80,6 +80,109 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
   );
 }
 
+
+// Нижняя панель вкладок — как в обычных приложениях на телефоне: большой палец
+// достаёт до неё, не дотягиваясь до верха экрана. Разделов восемь, в полосу
+// помещается пять, поэтому редкие спрятаны за «Ещё» — вместе с переключателем
+// темы, которому на телефоне места в шапке нет.
+const PRIMARY_TABS = ["today", "school", "journal", "study"];
+
+export function TabBar({ items, screen, onGo, mode, setMode, modeLabel }) {
+  const [more, setMore] = useState(false);
+  const primary = PRIMARY_TABS.map((key) => items.find((i) => i.key === key)).filter(Boolean);
+  const rest = items.filter((i) => !PRIMARY_TABS.includes(i.key));
+  const restActive = rest.some((i) => i.key === screen);
+
+  function go(key) {
+    setMore(false);
+    onGo(key);
+  }
+
+  return (
+    <>
+      {more && <div style={styles.sheetBackdrop} onClick={() => setMore(false)} />}
+      <div className="ap-tabbar" style={styles.tabbar}>
+        {more && (
+          <div style={styles.sheet}>
+            <div style={styles.sheetGrid}>
+              {rest.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => go(item.key)}
+                  style={{
+                    ...styles.sheetBtn,
+                    background: item.key === screen ? "var(--railActive)" : "transparent",
+                    color: item.key === screen ? "var(--railInk)" : "var(--railInk2)",
+                  }}
+                >
+                  {item.label}
+                  {item.hint ? <span style={styles.navHint}>{item.hint}</span> : null}
+                </button>
+              ))}
+            </div>
+            <div style={styles.sheetModes}>
+              <button
+                onClick={() => setMode("light")}
+                style={{ ...styles.modePill, ...(mode === "light" ? styles.modePillOn : null) }}
+                title="Светлая тема"
+              >
+                ☀
+              </button>
+              <button
+                onClick={() => setMode("night")}
+                style={{ ...styles.modePill, ...(mode === "night" ? styles.modePillOn : null) }}
+                title="Ночная тема"
+              >
+                ☾
+              </button>
+              <button
+                onClick={() => setMode("auto")}
+                style={{ ...styles.modePill, flex: 1.6, fontSize: 12.5, fontWeight: 600, ...(mode === "auto" ? styles.modePillOn : null) }}
+              >
+                Авто
+              </button>
+            </div>
+            <div style={styles.sheetNote}>{modeLabel}</div>
+          </div>
+        )}
+
+        <div style={styles.tabRow}>
+          {primary.map((item) => {
+            const on = item.key === screen;
+            return (
+              <button
+                key={item.key}
+                onClick={() => go(item.key)}
+                style={{
+                  ...styles.tab,
+                  background: on ? "var(--railActive)" : "transparent",
+                  color: on ? "var(--railInk)" : "var(--railInk2)",
+                  fontWeight: on ? 600 : 400,
+                }}
+              >
+                <span style={{ ...styles.tabMark, background: on ? "var(--accent)" : "transparent" }} />
+                {item.short || item.label}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setMore(!more)}
+            style={{
+              ...styles.tab,
+              background: more || restActive ? "var(--railActive)" : "transparent",
+              color: more || restActive ? "var(--railInk)" : "var(--railInk2)",
+              fontWeight: more || restActive ? 600 : 400,
+            }}
+          >
+            <span style={{ ...styles.tabMark, background: more || restActive ? "var(--accent)" : "transparent" }} />
+            Ещё
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Шапка экрана: где мы и что здесь делают.
 export function ScreenHead({ title, note, children }) {
   return (
@@ -132,7 +235,7 @@ const styles = {
     textAlign: "left",
     whiteSpace: "nowrap",
   },
-  navHint: { marginLeft: "auto", fontSize: 12, color: "var(--railInk2)", paddingLeft: 10 },
+  navHint: { marginLeft: "auto", fontSize: 12, color: "var(--railInk2)", paddingLeft: 10, whiteSpace: "nowrap" },
   railFoot: {
     marginTop: "auto",
     borderTop: "1px solid var(--railActive)",
@@ -142,6 +245,46 @@ const styles = {
     color: "var(--railInk2)",
     lineHeight: 1.55,
   },
+  tabbar: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 30,
+    background: "var(--rail)",
+    borderTop: "1px solid var(--railActive)",
+    paddingBottom: "env(safe-area-inset-bottom)",
+  },
+  tabRow: { display: "flex" },
+  tab: {
+    flex: 1,
+    minWidth: 0,
+    border: "none",
+    background: "none",
+    padding: "10px 4px 12px",
+    fontSize: 12,
+    lineHeight: 1.2,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+  },
+  tabMark: { width: 22, height: 3, borderRadius: 999 },
+  sheetBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,.35)", zIndex: 29 },
+  sheet: { borderBottom: "1px solid var(--railActive)", padding: "12px 12px 10px" },
+  sheetGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 },
+  sheetBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    border: "none",
+    borderRadius: 8,
+    padding: "10px 12px",
+    fontSize: 14,
+    textAlign: "left",
+  },
+  sheetModes: { display: "flex", alignItems: "center", gap: 4, background: "var(--railActive)", borderRadius: 999, padding: 3 },
+  sheetNote: { fontSize: 11.5, color: "var(--railInk2)", marginTop: 8, lineHeight: 1.45 },
   head: {
     display: "flex",
     alignItems: "flex-start",

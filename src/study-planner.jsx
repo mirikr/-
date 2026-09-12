@@ -9,7 +9,8 @@ import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
-import { Rail, ScreenHead } from "./shell.jsx";
+import { Rail, ScreenHead, TabBar } from "./shell.jsx";
+import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
 import { THEME_CSS, useThemeMode, NIGHT_FROM, NIGHT_TO } from "./theme.js";
@@ -300,6 +301,10 @@ function formatEventDate(dateStr) {
   });
 }
 
+function capitalizeFirst(text) {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
 function daysWord(n) {
   const abs = Math.abs(n) % 100;
   const last = abs % 10;
@@ -355,14 +360,14 @@ function ymd(date) {
 }
 
 // Interpolates from red (missed/under target) to green (target reached) as ratio goes 0 -> 1.
-function ratioColor(ratio) {
-  const c1 = [0x8b, 0x4a, 0x4a];
-  const c2 = [0x3f, 0x6e, 0x52];
-  const r = Math.round(c1[0] + (c2[0] - c1[0]) * ratio);
-  const g = Math.round(c1[1] + (c2[1] - c1[1]) * ratio);
-  const b = Math.round(c1[2] + (c2[2] - c1[2]) * ratio);
-  return `rgb(${r}, ${g}, ${b})`;
+// Клетка календаря: три ступени вместо плавного градиента от красного к зелёному.
+// Градиент было не с чем сравнить — оттенок ничего не сообщал сам по себе.
+function cellColor(ratio) {
+  if (ratio >= 0.95) return "var(--cellFull)";
+  if (ratio >= 0.4) return "var(--cellMid)";
+  return "var(--cellLow)";
 }
+
 
 // Deterministic color for a lyceum subject name, so the same subject looks the same across days.
 function subjectColor(name) {
@@ -402,7 +407,6 @@ export default function StudyPlanner() {
   const [openSubject, setOpenSubject] = useState(null);
   const [openNotes, setOpenNotes] = useState({});
   const [openLinks, setOpenLinks] = useState({});
-  const [pair, setPair] = useState(["law", "econ"]);
   const [jForm, setJForm] = useState({ date: todayStr(), subjectId: "law", hours: "1", note: "" });
   const [saveErr, setSaveErr] = useState(false);
   const [calMonth, setCalMonth] = useState(() => {
@@ -1203,10 +1207,6 @@ export default function StudyPlanner() {
       return next;
     });
     if (openSubject === id) setOpenSubject(null);
-    if (pair[0] === id || pair[1] === id) {
-      const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
-      setPair([rest[0] ? rest[0].id : null, rest[1] ? rest[1].id : rest[0] ? rest[0].id : null]);
-    }
     if (jForm.subjectId === id) {
       const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
       setJForm((prev) => ({ ...prev, subjectId: rest[0] ? rest[0].id : "" }));
@@ -1371,43 +1371,23 @@ export default function StudyPlanner() {
     );
   }
 
-  const subjA = ALL_SUBJECTS.find((s) => s.id === pair[0]);
-  const subjB = ALL_SUBJECTS.find((s) => s.id === pair[1]);
-
-  const actualHoursBySubject = useMemo(() => {
-    const map = {};
+  // Факт для баланса — часы за последние семь дней: план задан на неделю, значит
+  // и сравнивать надо с неделей, иначе к маю любой предмет «перевыполнен».
+  const balanceItems = useMemo(() => {
+    const since = ymd(new Date(Date.now() - 7 * 86400000));
+    const factBySubject = {};
     journal.forEach((e) => {
-      map[e.subjectId] = (map[e.subjectId] || 0) + e.hours;
+      if (e.date >= since) factBySubject[e.subjectId] = (factBySubject[e.subjectId] || 0) + (Number(e.hours) || 0);
     });
-    return map;
-  }, [journal]);
-
-  const actualA = Math.round((actualHoursBySubject[pair[0]] || 0) * 10) / 10;
-  const actualB = Math.round((actualHoursBySubject[pair[1]] || 0) * 10) / 10;
-  const plannedA = Number(budget.alloc[pair[0]]) || 0;
-  const plannedB = Number(budget.alloc[pair[1]]) || 0;
-
-  const axisMax = Math.max(actualA, actualB, plannedA, plannedB, 1) * 1.15;
-
-  // Planned-ratio reference line from the origin, extended to the edge of the chart.
-  const planLine = useMemo(() => {
-    if (plannedA <= 0 && plannedB <= 0) {
-      return { x: axisMax, y: axisMax }; // no allocation set — fall back to a 45° reference
-    }
-    const scale = axisMax / Math.max(plannedA, plannedB, 1e-9);
-    return { x: plannedA * scale, y: plannedB * scale };
-  }, [plannedA, plannedB, axisMax]);
-
-  const toChart = (x, y, max) => [30 + (x / max) * 220, 260 - (y / max) * 220];
-  const pathD = `M ${toChart(0, 0, axisMax).join(",")} L ${toChart(planLine.x, planLine.y, axisMax).join(",")}`;
-  const [pxA, pyA] = toChart(actualA, actualB, axisMax);
-
-  const plannedTotal = plannedA + plannedB;
-  const actualTotal = actualA + actualB;
-  const plannedShareA = plannedTotal > 0 ? plannedA / plannedTotal : 0.5;
-  const actualShareA = actualTotal > 0 ? actualA / actualTotal : plannedShareA;
-  const pairDeviationPct = Math.round((actualShareA - plannedShareA) * 100);
-  const pairSkewed = actualTotal > 0 && Math.abs(pairDeviationPct) >= 15;
+    return ALL_SUBJECTS.map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      plan: Number(budget.alloc[s.id]) || 0,
+      fact: Math.round((factBySubject[s.id] || 0) * 10) / 10,
+      done: (stats.perSubject[s.id] || { done: 0 }).done,
+    }));
+  }, [journal, budget, ALL_SUBJECTS, stats]);
 
   const weeklyJournalHours = useMemo(() => {
     const now = new Date();
@@ -1560,10 +1540,10 @@ export default function StudyPlanner() {
     { key: "events", label: "События", hint: upcomingEvents.length ? String(upcomingEvents.length) : "" },
     { key: "budget", label: "Распределение", hint: Math.round(weeklyBudget) + " ч" },
     { key: "study", label: "Подготовка", hint: stats.totalAll ? stats.overallPct + "%" : "" },
-    { key: "school", label: "Лицей КЭО", hint: "" },
+    { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
     { key: "notes", label: "Тетради", hint: "" },
-    { key: "settings", label: "Синхронизация", hint: saveErr ? "!" : "" },
+    { key: "settings", label: "Синхронизация", short: "Облако", hint: saveErr ? "!" : "" },
   ];
 
   const SCREEN_TEXT = {
@@ -1622,12 +1602,26 @@ export default function StudyPlanner() {
         @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
         @keyframes undo-countdown { from { width: 100%; } to { width: 0%; } }
         @media (prefers-reduced-motion: reduce) { .undo-bar { animation: none; width: 100%; } }
-        /* Карточка приподнимается под курсором — так видно, что с ней можно работать. */
-        .ap-card { transition: box-shadow .22s ease, border-color .22s ease; }
+        /* Карточка приподнимается под курсором — так видно, что с ней можно работать,
+           и мягко появляется при переходе на экран: иначе смена раздела выглядит рывком. */
+        .ap-card { transition: box-shadow .22s ease, border-color .22s ease; animation: ap-rise .3s ease both; }
         .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
         .ap-nav { transition: background .16s ease, padding-left .16s ease; }
         .ap-nav:hover { padding-left: 16px; background: var(--railActive); }
-        @media (prefers-reduced-motion: reduce) { .ap-card, .ap-nav { transition: none; } }
+        .ap-row { transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+        .ap-row:hover { box-shadow: var(--shadow); }
+        /* Полоса прогресса выезжает от левого края, столбик графика вырастает снизу. */
+        .ap-fill { transform-origin: left; animation: ap-sweep .8s cubic-bezier(.2,.8,.3,1) both; }
+        .ap-bar { transform-origin: bottom; animation: ap-grow .7s cubic-bezier(.2,.8,.3,1) both; }
+        /* В SVG точка отсчёта трансформации задаётся отдельно, иначе столбец растёт из угла холста. */
+        .ap-bar-svg { transform-box: fill-box; transform-origin: bottom; animation: ap-grow .7s cubic-bezier(.2,.8,.3,1) both; }
+        @keyframes ap-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes ap-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+        @keyframes ap-grow { from { transform: scaleY(.02); } to { transform: scaleY(1); } }
+        @media (prefers-reduced-motion: reduce) {
+          .ap-card, .ap-nav, .ap-row { transition: none; animation: none; }
+          .ap-fill, .ap-bar, .ap-bar-svg { animation: none; }
+        }
         /* Ширину названия урока задаёт таблица стилей, а не инлайновый стиль: иначе
            min-width: 0 применяется, а flex — нет, и название вылезает поверх полей. */
         .topic-row > label { flex: 1 1 auto; min-width: 0; }
@@ -1635,15 +1629,14 @@ export default function StudyPlanner() {
           .topic-row { flex-wrap: wrap; }
           .topic-row > label { flex-basis: 100%; }
         }
-        /* На телефоне колонка навигации ложится полосой сверху и прокручивается вбок:
-           240 пикселей слева там взять неоткуда. */
+        /* На телефоне навигация уходит вниз, как в обычных приложениях: до полосы
+           внизу большой палец дотягивается, до колонки слева — нет. */
+        .ap-tabbar { display: none; }
         @media (max-width: 900px) {
           .ap-shell { flex-direction: column; }
-          .ap-rail { width: auto !important; flex-direction: row !important; align-items: center;
-                     flex-wrap: wrap; gap: 8px !important; padding: 10px !important; }
-          .ap-rail nav { flex-direction: row !important; flex-wrap: wrap; }
-          .ap-rail nav button { padding: 8px 10px !important; }
-          .ap-railbody { display: none !important; }
+          .ap-rail { display: none !important; }
+          .ap-tabbar { display: block; }
+          .ap-main { padding: 16px 14px 96px !important; }
           .ap-grid2, .ap-grid3 { grid-template-columns: 1fr !important; }
         }
       `}</style>
@@ -1660,7 +1653,9 @@ export default function StudyPlanner() {
         syncNote={syncNote}
       />
 
-      <main style={styles.main}>
+      <TabBar items={navItems} screen={screen} onGo={goScreen} mode={mode} setMode={setMode} modeLabel={modeLabel} />
+
+      <main className="ap-main" style={styles.main}>
         {homeworkReminders.length > 0 && (
           <div style={styles.hwBanner}>
             <div style={styles.hwBannerBody}>
@@ -1691,18 +1686,17 @@ export default function StudyPlanner() {
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Часы занятий</div>
-              <button onClick={() => toggleSection("chart")} style={styles.overallBtn}>
-                <div style={styles.overallTrack}>
-                  <div style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
-                </div>
-                <div style={styles.overallText}>
-                  Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
-                  <span style={styles.overallHint}>{openSections.chart ? "▾ свернуть график" : "▸ график часов"}</span>
-                </div>
-              </button>
-              <Collapsible open={openSections.chart}>
-                <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
-              </Collapsible>
+              <div style={styles.cardNote}>
+                Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята.
+              </div>
+              <div style={styles.overallTrack}>
+                <div className="ap-fill" style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
+              </div>
+              <div style={styles.overallText}>
+                Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
+              </div>
+              {/* График не сворачивается: ради него карточка и существует. */}
+              <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
             </section>
 
             <section className="ap-card" style={styles.card}>
@@ -1859,7 +1853,7 @@ export default function StudyPlanner() {
                         </span>
                       </div>
                       <div style={styles.miniTrack}>
-                        <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
+                        <div className="ap-fill" style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
                       </div>
                     </div>
                   );
@@ -2097,55 +2091,21 @@ export default function StudyPlanner() {
             )}
 
             <div style={styles.ppfSection}>
-              <div style={styles.ppfControls}>
-                <label style={styles.label}>Сравнить два предмета</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <select value={pair[0]} onChange={(e) => setPair([e.target.value, pair[1]])} style={styles.select}>
-                    {ALL_SUBJECTS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select value={pair[1]} onChange={(e) => setPair([pair[0], e.target.value])} style={styles.select}>
-                    {ALL_SUBJECTS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+              <div style={styles.balanceHead}>
+                <div style={styles.cardTitle}>Баланс предметов</div>
+                <div style={styles.cardNote}>
+                  По горизонтали — план на неделю, по вертикали — записанное в дневнике за последние семь дней.
+                  Диагональ — линия баланса: точка на ней значит, что план и факт сошлись. Выше — предмет забирает
+                  больше времени, чем ему отведено, ниже — недобирает. Размер точки — сколько тем по нему пройдено.
                 </div>
-                <p style={styles.muted}>
-                  Пунктирная линия — распределение, заданное выше в часах на неделю ({subjA?.name}: {plannedA} ч,{" "}
-                  {subjB?.name}: {plannedB} ч). Точка — сколько времени вы фактически уже потратили по дневнику:{" "}
-                  {subjA?.name} {actualA} ч, {subjB?.name} {actualB} ч. Чем дальше точка от линии, тем сильнее реальный
-                  темп отклоняется от плана — график сам пересчитывается по мере новых записей в дневнике.
-                </p>
-                {pairSkewed && (
-                  <p style={styles.skewWarningInline}>
-                    Фактически вы тратите {pairDeviationPct > 0 ? "больше" : "меньше"} времени на «{subjA?.name}», чем
-                    запланировано (на {Math.abs(pairDeviationPct)} п.п.) — стоит скорректировать темп по этой паре.
-                  </p>
-                )}
               </div>
-              <svg viewBox="0 0 300 290" style={styles.svg}>
-                <line x1="30" y1="260" x2="290" y2="260" stroke="var(--line)" strokeWidth="1" />
-                <line x1="30" y1="260" x2="30" y2="10" stroke="var(--line)" strokeWidth="1" />
-                <path d={pathD} fill="none" stroke="var(--mute)" strokeWidth="2" strokeDasharray="4 3" />
-                <circle cx={pxA} cy={pyA} r="6" fill={subjA?.color || "var(--ink)"} stroke="var(--panel2)" strokeWidth="1.5" />
-                <text x="30" y="278" fontSize="10" fill="var(--ink2)">0</text>
-                <text x="270" y="278" fontSize="10" fill="var(--ink2)">
-                  {subjA?.name} {Math.round(axisMax)} ч
-                </text>
-                <text x="2" y="14" fontSize="10" fill="var(--ink2)">{subjB?.name}</text>
-                <text x="2" y="24" fontSize="10" fill="var(--ink2)">{Math.round(axisMax)} ч</text>
-              </svg>
+              <BalanceChart items={balanceItems} />
             </div>
           </section>
         )}
 
         {screen === "study" && (
-          <section className="ap-card" style={styles.card}>
+          <section style={styles.plainBlock}>
             <div style={styles.subjGrid}>
               {ALL_SUBJECTS.map((s) => {
                 const st = stats.perSubject[s.id];
@@ -2156,7 +2116,7 @@ export default function StudyPlanner() {
                   ...data[s.id].custom.map((t) => ({ ...t, custom: true })),
                 ];
                 return (
-                  <div key={s.id} className="subj-card" style={{ ...styles.subjCard, borderColor: s.color }}>
+                  <div key={s.id} className="subj-card ap-card" style={{ ...styles.subjCard, borderColor: s.color }}>
                     <div style={styles.subjHeaderRow}>
                       <button onClick={() => setOpenSubject(open ? null : s.id)} style={styles.subjHeader}>
                         <span style={{ ...styles.dot, background: s.color }} />
@@ -2177,7 +2137,7 @@ export default function StudyPlanner() {
                       </button>
                     </div>
                     <div style={styles.miniTrack}>
-                      <div style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
+                      <div className="ap-fill" style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
                     </div>
                     <Collapsible open={open}>
                       <div style={styles.tabsRow}>
@@ -2245,7 +2205,7 @@ export default function StudyPlanner() {
         )}
 
         {screen === "school" && (
-          <section className="ap-card" style={styles.card}>
+          <section style={styles.plainBlock}>
             <p style={styles.muted}>
               Отдельно от самостоятельного изучения. Сверху — предметы лицея с тетрадями и цветом, ниже — расписание
               с реальными звонками: время, кабинет, преподаватель и роль урока.
@@ -2347,7 +2307,7 @@ export default function StudyPlanner() {
                   ‹
                 </button>
                 <div style={styles.calMonthLabel}>
-                  {calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
+                  {capitalizeFirst(calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" }))}
                 </div>
                 <button
                   onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1))}
@@ -2379,15 +2339,22 @@ export default function StudyPlanner() {
                       key={key}
                       onClick={() => setSelectedDate(key)}
                       title={`${Math.round(hours * 10) / 10} ч из ${Math.round(goal * 10) / 10} ч цели`}
+                      className="ap-day"
                       style={{
                         ...styles.calCell,
-                        background: isFuture ? "var(--neutralBg)" : ratioColor(ratio),
-                        color: isFuture ? "var(--mute)" : "#fff",
                         opacity: inMonth ? 1 : 0.4,
                         outline: selected ? "2px solid var(--ink)" : "none",
                         outlineOffset: "-2px",
                       }}
                     >
+                      {/* Клетка заливается снизу вверх на долю выполненной цели: так видно
+                          не только «сделал или нет», но и насколько. */}
+                      {!isFuture && ratio > 0 && (
+                        <span
+                          className="ap-fill-up"
+                          style={{ ...styles.calFill, height: Math.round(ratio * 100) + "%", background: cellColor(ratio) }}
+                        />
+                      )}
                       {lessonDots.length > 0 && (
                         <span style={styles.lessonDots}>
                           {lessonDots.slice(0, 3).map((color) => (
@@ -2395,16 +2362,29 @@ export default function StudyPlanner() {
                           ))}
                         </span>
                       )}
-                      {cellDate.getDate()}
+                      <span style={styles.calDayNum}>{cellDate.getDate()}</span>
                       {hasHw && <span style={styles.hwDot} />}
                     </button>
                   );
                 })}
               </div>
-              <p style={styles.muted}>
-                Цвет клетки — от красного (день пропущен) к зелёному (дневная цель на этот день недели выполнена или
-                перевыполнена), пропорционально потраченному времени. Цель для каждого дня недели задаётся выше, в
-                минутах в день.
+              <div style={styles.calLegend}>
+                <span style={styles.calLegendItem}>
+                  <span style={{ ...styles.calLegendBox, background: "var(--cellFull)" }} />
+                  цель выполнена
+                </span>
+                <span style={styles.calLegendItem}>
+                  <span style={{ ...styles.calLegendBox, background: "var(--cellMid)" }} />
+                  частично
+                </span>
+                <span style={styles.calLegendItem}>
+                  <span style={{ ...styles.calLegendBox, background: "var(--cellLow)" }} />
+                  почти пусто
+                </span>
+              </div>
+              <p style={styles.mutedSmall}>
+                Высота заливки — доля дневной цели, а цель на каждый день недели задаётся в «Распределении».
+                Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день.
               </p>
             </div>
             </section>
@@ -2762,8 +2742,23 @@ function EventsEditor({ upcoming, past, mainEventId, onAdd, onUpdate, onRemove }
   }
 
   function row(e, isPast) {
+    const info = priorityInfo(e.priority);
+    const left = daysUntilDate(e.date);
     return (
-      <div key={e.id} style={{ ...styles.eventEditRow, opacity: isPast ? 0.55 : 1 }}>
+      <div
+        key={e.id}
+        className="ap-row"
+        style={{
+          ...styles.eventEditRow,
+          opacity: isPast ? 0.55 : 1,
+          borderLeftColor: info.strong,
+          background: isPast ? "var(--neutralBg)" : info.tint,
+        }}
+      >
+        {/* Сколько осталось — крупно и слева: ради этого числа список и открывают. */}
+        <span style={{ ...styles.eventDays, color: isPast ? "var(--mute)" : info.strong }}>
+          {isPast ? "—" : left}
+        </span>
         <AutoGrow value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
         <input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} style={styles.eventDateInput} />
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
@@ -3048,6 +3043,9 @@ function AddSubjectForm({ onAdd, placeholder }) {
 function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   const [examOpen, setExamOpen] = useState(false);
   const [examNote, setExamNote] = useState("");
+  // Форма урока — шесть полей; развёрнутая в каждом дне, она делала неделю
+  // стеной из полей, поэтому раскрывается по кнопке.
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     if (!examNote) return;
@@ -3056,12 +3054,17 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
   }, [examNote]);
 
   return (
-    <div style={styles.scheduleDayBlock}>
+    <div className="ap-card" style={styles.scheduleDayBlock}>
       <div style={styles.scheduleDayTop}>
         <div style={styles.scheduleDayHeader}>{label}</div>
-        <button onClick={() => setExamOpen(!examOpen)} style={styles.examToggle}>
-          {examOpen ? "Скрыть" : "+ Экзамен или олимпиада"}
-        </button>
+        <div style={styles.scheduleDayActions}>
+          <button onClick={() => setAddOpen(!addOpen)} style={styles.examToggle}>
+            {addOpen ? "Скрыть урок" : "+ Урок"}
+          </button>
+          <button onClick={() => setExamOpen(!examOpen)} style={styles.examToggle}>
+            {examOpen ? "Скрыть" : "+ Экзамен"}
+          </button>
+        </div>
       </div>
 
       <Collapsible open={examOpen}>
@@ -3081,7 +3084,14 @@ function ScheduleDay({ day, label, entries, onAdd, onUpdate, onRemove }) {
       {entries.map((e) => (
         <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} />
       ))}
-      <AddScheduleForm onAdd={onAdd} />
+      <Collapsible open={addOpen}>
+        <AddScheduleForm
+          onAdd={(entry) => {
+            onAdd(entry);
+            setAddOpen(false);
+          }}
+        />
+      </Collapsible>
     </div>
   );
 }
@@ -3436,8 +3446,8 @@ const styles = {
   main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
   grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, marginBottom: 16 },
   grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 16 },
-  cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 17, marginBottom: 4 },
-  cardNote: { fontSize: 12.5, color: "var(--ink3)", marginBottom: 10, lineHeight: 1.5 },
+  cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 5 },
+  cardNote: { fontSize: 13.5, color: "var(--ink3)", marginBottom: 14, lineHeight: 1.5 },
   todayList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 },
   todayRow: {
     display: "flex",
@@ -3464,7 +3474,7 @@ const styles = {
     gap: 8,
     padding: "7px 9px",
     border: "1px solid",
-    borderRadius: 6,
+    borderRadius: 10,
     fontSize: 13.5,
     textAlign: "left",
   },
@@ -3498,10 +3508,10 @@ const styles = {
     textAlign: "left",
   },
   sectionChevron: { fontSize: 13, color: "var(--mute)", width: 12, flexShrink: 0 },
-  countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 4, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
+  countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 8, padding: "14px 18px", textAlign: "center", flex: "1 1 250px", maxWidth: 340 },
   countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
   countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
-  dateInput: { border: "1px solid var(--railActive)", background: "transparent", color: "inherit", borderRadius: 3, padding: "4px 6px", fontSize: 12, width: "100%" },
+  dateInput: { border: "1px solid var(--railActive)", background: "transparent", color: "inherit", borderRadius: 7, padding: "4px 6px", fontSize: 12, width: "100%" },
   countdownEvent: { fontSize: 16, fontWeight: 700, marginTop: 8, lineHeight: 1.3 },
   countdownDate: { fontSize: 12, opacity: 0.7, marginTop: 3 },
   countdownRest: {
@@ -3524,14 +3534,14 @@ const styles = {
   eventName: { fontWeight: 600 },
   eventDate: { color: "var(--ink3)", fontSize: 12.5 },
   eventLeft: { color: "var(--mute)", fontSize: 12.5, marginLeft: "auto" },
-  calendarPanel: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 6, padding: 14, marginTop: 8 },
+  calendarPanel: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 8 },
   calendarTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 15, marginBottom: 8 },
   calendarRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 },
   calendarLinkInput: {
     width: "100%",
     padding: "5px 8px",
     border: "1px solid var(--line)",
-    borderRadius: 4,
+    borderRadius: 8,
     fontSize: 11.5,
     background: "var(--panel2)",
     color: "var(--ink2)",
@@ -3544,7 +3554,7 @@ const styles = {
     border: "none",
     color: "var(--btnInk)",
     background: "var(--btnBg)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
@@ -3554,7 +3564,7 @@ const styles = {
     display: "inline-block",
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
@@ -3564,7 +3574,7 @@ const styles = {
   secondaryBtnSmall: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
@@ -3590,8 +3600,18 @@ const styles = {
     fontWeight: 600,
     textDecoration: "underline",
   },
-  eventsEditor: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 6, padding: 14, marginTop: 4 },
-  eventEditRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap", marginBottom: 8 },
+  eventsEditor: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 4 },
+  eventEditRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 8,
+    borderLeft: "4px solid",
+    borderRadius: "0 9px 9px 0",
+    padding: "10px 12px",
+  },
+  eventDays: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 22, lineHeight: 1.1, minWidth: 30, textAlign: "right" },
   eventAddRow: {
     display: "flex",
     alignItems: "center",
@@ -3601,19 +3621,19 @@ const styles = {
     paddingTop: 12,
     borderTop: "1px solid var(--line2)",
   },
-  eventNameInput: { flex: "1 1 160px", minWidth: 0, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
-  eventDateInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
+  eventNameInput: { flex: "3 1 200px", minWidth: 0, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
+  eventDateInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
   priorityRow: { display: "flex", gap: 4 },
-  priorityBtn: { border: "1px solid", borderRadius: 4, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
+  priorityBtn: { border: "1px solid", borderRadius: 8, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
-  tabBtn: { border: "1px solid", borderRadius: 4, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
-  subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 16, margin: "18px 0 8px" },
+  tabBtn: { border: "1px solid", borderRadius: 8, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
+  subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 18, margin: "22px 0 10px" },
   lyceumSubjectRow: { display: "flex", alignItems: "center", gap: 8 },
   sundayRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 },
   sundayBtn: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "5px 12px",
     fontSize: 12.5,
     fontWeight: 600,
@@ -3652,7 +3672,7 @@ const styles = {
     pointerEvents: "auto",
     background: "var(--btnBg)",
     color: "var(--railInk)",
-    borderRadius: 6,
+    borderRadius: 10,
     boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
     overflow: "hidden",
     zIndex: 50,
@@ -3665,52 +3685,54 @@ const styles = {
     border: "1px solid var(--mute)",
     background: "transparent",
     color: "var(--railInk)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "4px 10px",
     fontSize: 13,
   },
-  undoConfirm: { border: "none", background: "var(--green)", color: "var(--btnInk)", borderRadius: 4, padding: "4px 10px", fontSize: 13 },
+  undoConfirm: { border: "none", background: "var(--green)", color: "var(--btnInk)", borderRadius: 8, padding: "4px 10px", fontSize: 13 },
   dayPriority: { fontSize: 11, fontWeight: 700, marginLeft: 6 },
   levelChip: {
     border: "1px solid",
-    borderRadius: 3,
+    borderRadius: 7,
     fontSize: 10,
     fontWeight: 600,
     padding: "1px 5px",
     marginLeft: 6,
     verticalAlign: "middle",
   },
-  fromScheduleBadge: { fontSize: 10.5, color: "var(--red)", border: "1px solid var(--redLine)", borderRadius: 4, padding: "1px 6px" },
+  fromScheduleBadge: { fontSize: 10.5, color: "var(--red)", border: "1px solid var(--redLine)", borderRadius: 8, padding: "1px 6px" },
   mainBadge: { fontSize: 11, color: "var(--green)", fontWeight: 600 },
   pastLabel: { fontSize: 11.5, color: "var(--mute)", margin: "10px 0 6px" },
   overallBar: { marginBottom: 24 },
-  overallTrack: { height: 8, background: "var(--line)", borderRadius: 4, overflow: "hidden" },
-  overallFill: { height: "100%", background: "var(--rail)" },
+  overallTrack: { height: 9, background: "var(--line)", borderRadius: 999, overflow: "hidden" },
+  overallFill: { height: "100%", background: "var(--accent)", borderRadius: 999 },
   overallBtn: { display: "block", width: "100%", border: "none", background: "none", padding: 0, textAlign: "left" },
   overallHint: { color: "var(--accent)", fontWeight: 600, marginLeft: 8, fontSize: 12 },
   overallText: { fontSize: 13, color: "var(--ink2)", marginTop: 6 },
-  card: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 6, padding: 22, marginBottom: 26 },
-  muted: { fontSize: 13.5, color: "var(--ink3)", lineHeight: 1.55, marginTop: 0 },
+  card: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: "18px 20px", marginBottom: 16 },
+  // Экран, который сам состоит из карточек: своей коробки ему не нужно.
+  plainBlock: { display: "block", marginBottom: 16 },
+  muted: { fontSize: 13.5, color: "var(--ink3)", lineHeight: 1.6, marginTop: 0 },
   label: { fontSize: 13, fontWeight: 600, color: "var(--ink2)", display: "block", marginBottom: 6 },
   dailyGoalsBlock: { marginBottom: 18 },
   dailyGoalsRow: { display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, marginTop: 4 },
   dailyGoalCell: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 },
   dailyGoalLabel: { fontSize: 11.5, color: "var(--mute)" },
-  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, textAlign: "center", background: "var(--panel2)" },
+  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, textAlign: "center", background: "var(--panel2)" },
   dailyGoalHours: { fontSize: 11, color: "var(--ink3)" },
   allocGrid: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 },
   allocRow: { display: "flex", alignItems: "center", gap: 10 },
   dot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0, display: "inline-block" },
   allocName: { fontSize: 13.5, width: 120, flexShrink: 0 },
-  smallNumInput: { width: 52, padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
+  smallNumInput: { width: 52, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
   hUnit: { fontSize: 11.5, color: "var(--mute)", width: 34 },
-  capacityBox: { border: "1px solid", borderRadius: 5, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, background: "var(--panel2)" },
+  capacityBox: { border: "1px solid", borderRadius: 9, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, background: "var(--panel2)" },
   skewWarning: {
     marginTop: 10,
     padding: "10px 14px",
     background: "var(--redBg)",
     border: "1px solid var(--redLine)",
-    borderRadius: 5,
+    borderRadius: 9,
     fontSize: 13.5,
     color: "var(--red)",
     fontWeight: 600,
@@ -3722,18 +3744,19 @@ const styles = {
     fontWeight: 600,
   },
   warn: { color: "var(--red)", fontWeight: 600 },
-  ppfSection: { marginTop: 20, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" },
+  ppfSection: { marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--line2)" },
+  balanceHead: { marginBottom: 12 },
   ppfControls: { flex: "1 1 220px", minWidth: 220 },
-  select: { padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
-  svg: { flex: "1 1 280px", maxWidth: 320, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 5 },
+  select: { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
+  svg: { flex: "1 1 280px", maxWidth: 320, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 9 },
   subjGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 },
-  subjCard: { background: "var(--neutralBg)", border: "1px solid", borderRadius: 6, padding: "14px 16px", transition: "transform 0.15s ease" },
+  subjCard: { background: "var(--panel2)", border: "1px solid", borderRadius: 11, padding: "16px 18px", transition: "transform 0.15s ease" },
   subjHeader: { display: "flex", alignItems: "center", gap: 8, flex: 1, background: "none", border: "none", padding: 0, textAlign: "left" },
   subjHeaderRow: { display: "flex", alignItems: "center", gap: 4 },
   addSubjectRow: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" },
-  addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13.5, background: "var(--panel2)" },
+  addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, background: "var(--panel2)" },
   scheduleGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12, marginTop: 16 },
-  scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 6, padding: "10px 12px" },
+  scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 11, padding: "14px 16px" },
   scheduleDayHeader: { fontSize: 13.5, fontWeight: 700, marginBottom: 8 },
   mutedSmall: { fontSize: 12, color: "var(--mute)" },
   scheduleEntry: {
@@ -3746,6 +3769,7 @@ const styles = {
     marginBottom: 8,
   },
   scheduleDayTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  scheduleDayActions: { display: "flex", gap: 10, flexWrap: "wrap" },
   examToggle: {
     background: "none",
     border: "none",
@@ -3762,7 +3786,7 @@ const styles = {
     padding: "8px 8px 10px",
     marginBottom: 8,
     border: "1px dashed var(--gold)",
-    borderRadius: 5,
+    borderRadius: 9,
     background: "var(--warmBg)",
   },
   // Экзамен выделяется рамкой: цвет заливки уже занят под важность. Границы заданы
@@ -3780,7 +3804,7 @@ const styles = {
     border: "1px solid var(--redStrong)",
     background: "var(--redStrong)",
     color: "var(--btnInk)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "2px 8px",
     fontSize: 11,
     fontWeight: 700,
@@ -3792,51 +3816,51 @@ const styles = {
     border: "1px solid var(--line)",
     background: "var(--panel)",
     color: "var(--mute)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "2px 8px",
     fontSize: 11,
     fontWeight: 600,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
-  examDateInput: { padding: "3px 5px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)" },
+  examDateInput: { padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
   examLink: { fontSize: 12, color: "var(--blue)" },
   // Название переносится на несколько строк, значки важности остаются у первой.
   scheduleSubjectRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" },
   priorityLegend: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.5, marginBottom: 10 },
-  scheduleSelect: { padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)", width: "100%" },
+  scheduleSelect: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)", width: "100%" },
   scheduleSubjectInput: {
     flex: "1 1 120px",
     minWidth: 0,
     padding: "4px 6px",
     border: "1px solid var(--line)",
-    borderRadius: 4,
+    borderRadius: 8,
     fontSize: 12.5,
     background: "var(--panel2)",
     fontWeight: 600,
   },
   scheduleTimeRow: { display: "flex", alignItems: "center", gap: 4 },
-  scheduleTimeInput: { padding: "3px 4px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)", width: 82 },
-  scheduleRoomInput: { padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
-  scheduleTeacherInput: { padding: "4px 6px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
+  scheduleTimeInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)", width: 82 },
+  scheduleRoomInput: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
+  scheduleTeacherInput: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
   addScheduleRow: { display: "flex", flexDirection: "column", gap: 4, marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--line)" },
   subjName: { fontSize: 15.5, fontWeight: 600, flex: 1, color: "var(--ink)" },
   subjPct: { fontSize: 12.5, color: "var(--ink3)" },
-  miniTrack: { height: 5, background: "var(--line)", borderRadius: 3, marginTop: 10, overflow: "hidden" },
-  miniFill: { height: "100%" },
-  topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 4, maxHeight: 380, overflowY: "auto" },
-  topicBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 4 },
-  topicRow: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "5px 4px", borderRadius: 3 },
+  miniTrack: { height: 6, background: "var(--line)", borderRadius: 999, marginTop: 8, overflow: "hidden" },
+  miniFill: { height: "100%", borderRadius: 999 },
+  topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 5, maxHeight: 420, overflowY: "auto" },
+  topicBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 5 },
+  topicRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "8px 10px", borderRadius: 9, border: "1px solid transparent" },
   topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
   topicDone: { textDecoration: "line-through", color: "var(--mute)" },
-  durationInput: { width: 44, padding: "3px 5px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)" },
-  notesToggle: { background: "none", border: "1px solid var(--line)", borderRadius: 4, fontSize: 11.5, padding: "3px 7px", color: "var(--ink2)" },
+  durationInput: { width: 44, padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
+  notesToggle: { background: "none", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, padding: "3px 7px", color: "var(--ink2)" },
   colorPick: {
     width: 24,
     height: 20,
     padding: 0,
     border: "1px solid var(--line)",
-    borderRadius: 3,
+    borderRadius: 7,
     background: "var(--panel2)",
     flexShrink: 0,
   },
@@ -3851,7 +3875,7 @@ const styles = {
     marginRight: -6,
   },
   removeBtn: { marginLeft: 2, background: "none", border: "none", color: "var(--red)", fontSize: 16, lineHeight: 1, padding: "0 4px" },
-  notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "var(--panel2)", border: "1px solid var(--line2)", borderRadius: 5 },
+  notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "var(--panel2)", border: "1px solid var(--line2)", borderRadius: 9 },
   noteBlock: { marginBottom: 6 },
   noteChevron: { background: "none", border: "none", padding: 0, fontSize: 11, color: "var(--mute)", width: 12 },
   noteHasBody: { fontSize: 11, color: "var(--accent)" },
@@ -3861,35 +3885,44 @@ const styles = {
   noteText: { flex: 1, color: "var(--ink2)" },
   noteMins: { color: "var(--ink3)", width: 46, flexShrink: 0, textAlign: "right" },
   noteForm: { display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  noteInput: { flex: "1 1 180px", padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
-  addBtnSmall: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 4, padding: "5px 10px", fontSize: 12, fontWeight: 600 },
+  noteInput: { flex: "1 1 180px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
+  addBtnSmall: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600 },
   addTopicRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  addTopicInput: { flex: 1, padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
-  addTopicUrlInput: { flex: "1 1 160px", padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13, background: "var(--panel2)" },
-  addBtn: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 4, padding: "6px 12px", fontSize: 13, fontWeight: 600 },
+  addTopicInput: { flex: 1, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
+  addTopicUrlInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
+  addBtn: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600 },
   calendarWrap: { marginBottom: 18 },
   calHeader: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 8 },
-  calNavBtn: { background: "none", border: "1px solid var(--line)", borderRadius: 4, width: 28, height: 28, fontSize: 15, color: "var(--ink)" },
-  calMonthLabel: { fontSize: 14.5, fontWeight: 600, textTransform: "capitalize", minWidth: 150, textAlign: "center" },
+  calNavBtn: { background: "none", border: "1px solid var(--line)", borderRadius: 8, width: 28, height: 28, fontSize: 15, color: "var(--ink)" },
+  // capitalize поднимал и «г.» в «Г.», поэтому заглавная ставится только первой букве.
+  calMonthLabel: { fontSize: 14.5, fontWeight: 600, minWidth: 150, textAlign: "center" },
   calWeekdays: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 },
   calWeekday: { fontSize: 11, color: "var(--mute)", textAlign: "center" },
   calGrid: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 },
-  calCell: { position: "relative", aspectRatio: "1", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" },
-  hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "var(--accent)" },
-  // Клетка календаря сама цветная — от красной к зелёной, — поэтому точки сидят на
-  // светлой подложке: иначе зелёный предмет пропадает на зелёном дне.
-  lessonDots: {
-    position: "absolute",
-    top: 2,
+  calCell: {
+    position: "relative",
+    aspectRatio: "1",
+    border: "none",
+    borderRadius: 8,
+    fontSize: 12.5,
+    fontWeight: 600,
     display: "flex",
-    gap: 2,
     alignItems: "center",
-    padding: "2px 3px",
-    borderRadius: 6,
-    background: "rgba(247, 244, 236, 0.92)",
+    justifyContent: "center",
+    overflow: "hidden",
+    background: "var(--neutralBg)",
+    color: "var(--ink)",
   },
+  calFill: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  calDayNum: { position: "relative" },
+  calLegend: { display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--ink3)", margin: "12px 0 8px" },
+  calLegendItem: { display: "flex", alignItems: "center", gap: 5 },
+  calLegendBox: { width: 12, height: 12, borderRadius: 3 },
+  hwDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: "50%", background: "var(--accent)", zIndex: 1 },
+  // Точки сидят над заливкой, поэтому подложка им больше не нужна.
+  lessonDots: { position: "absolute", top: 3, display: "flex", gap: 2, alignItems: "center", zIndex: 1 },
   lessonDot: { width: 5, height: 5, borderRadius: "50%" },
-  dayDetail: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 5, padding: "12px 14px", marginBottom: 16 },
+  dayDetail: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 9, padding: "12px 14px", marginBottom: 16 },
   homeworkBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--line)" },
   homeworkTitle: { fontSize: 13, fontWeight: 700, marginBottom: 6 },
   homeworkSubjectBlock: { marginBottom: 10 },
@@ -3898,8 +3931,8 @@ const styles = {
   homeworkItemRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "3px 0" },
   homeworkText: { flex: 1, color: "var(--ink2)" },
   homeworkAddRow: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" },
-  homeworkInput: { flex: "1 1 160px", padding: "5px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12.5, background: "var(--panel2)" },
-  homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 12, background: "var(--panel2)" },
+  homeworkInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
+  homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
   attachBtn: { background: "none", border: "none", fontSize: 13, padding: "0 2px" },
   attachmentsRow: { display: "flex", flexWrap: "wrap", gap: 6, marginLeft: 24, marginBottom: 4 },
   attachmentChip: {
@@ -3913,8 +3946,8 @@ const styles = {
   },
   attachmentLink: { background: "none", border: "none", color: "var(--blue)", textDecoration: "underline", fontSize: 11.5, padding: 0 },
   reminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
-  reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 11.5, background: "var(--panel2)" },
-  reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 11.5, background: "var(--panel2)" },
+  reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, background: "var(--panel2)" },
+  reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, background: "var(--panel2)" },
   hwBanner: {
     display: "flex",
     alignItems: "stretch",
@@ -3922,7 +3955,7 @@ const styles = {
     background: "var(--warmBg)",
     border: "1px solid var(--gold)",
     borderLeft: "5px solid var(--gold)",
-    borderRadius: 6,
+    borderRadius: 10,
     padding: "12px 14px",
     marginBottom: 16,
   },
@@ -3952,7 +3985,7 @@ const styles = {
   // Без capitalize: он поднимал заглавные во всей строке — «12 Сентября 2026 Г. — 0 Ч Из 4 Ч Цели».
   dayDetailTitle: { fontSize: 13.5, fontWeight: 600, marginBottom: 8 },
   journalForm: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" },
-  textInput: { flex: "1 1 200px", padding: "6px 8px", border: "1px solid var(--line)", borderRadius: 4, fontSize: 13.5, background: "var(--panel2)" },
+  textInput: { flex: "1 1 200px", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, background: "var(--panel2)" },
   journalList: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" },
   journalRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, padding: "7px 8px", borderBottom: "1px solid var(--line2)" },
   jDate: { color: "var(--mute)", width: 78, flexShrink: 0 },
@@ -3967,7 +4000,7 @@ const styles = {
   syncBtn: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 4,
+    borderRadius: 8,
     padding: "5px 10px",
     fontSize: 12.5,
     color: "var(--ink)",
@@ -3977,7 +4010,7 @@ const styles = {
     minHeight: 90,
     padding: "8px 10px",
     border: "1px solid var(--line)",
-    borderRadius: 5,
+    borderRadius: 9,
     fontSize: 11.5,
     fontFamily: "monospace",
     background: "var(--panel2)",

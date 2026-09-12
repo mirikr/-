@@ -15,6 +15,7 @@ export const THEME_CSS = `
   --redBg:#F9E2DF;--redLine:#D9A6A0;--neutralBg:#F1EEE4;
   --cellFull:#B6CFBC;--cellMid:#E6D79A;--cellLow:#E2B9B4;
   --barDim:#C9C1AC;--btnBg:#2B2822;--btnInk:#FBF9F3;
+  --corridor:rgba(140,115,38,.09);--corridorLine:#B8A879;
   --shadow:0 10px 26px rgba(43,40,34,.1);
   color-scheme:light;
 }
@@ -28,6 +29,7 @@ export const THEME_CSS = `
   --redBg:#2A1D1B;--redLine:#5A322C;--neutralBg:#211F19;
   --cellFull:#3A5C44;--cellMid:#7A6528;--cellLow:#6E3A34;
   --barDim:#8A5049;--btnBg:#E8C468;--btnInk:#171612;
+  --corridor:rgba(232,196,104,.08);--corridorLine:rgba(232,196,104,.5);
   --shadow:0 10px 26px rgba(0,0,0,.4);
   color-scheme:dark;
 }
