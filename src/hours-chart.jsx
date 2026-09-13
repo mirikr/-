@@ -20,7 +20,6 @@ function barColor(hours, goal) {
   if (goal > 0 && hours <= goal * 0.08) return BAR_DIM;
   return hours > 0 ? BAR : BAR_DIM;
 }
-const TARGET = "var(--mute)";
 const AXIS = "var(--line)";
 const INK = "var(--ink2)";
 const MUTED = "var(--mute)";
@@ -202,11 +201,35 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   const ticks = scaleInfo.ticks;
   const activeBucket = active === null ? null : buckets[active];
 
-  // Коридор цели: у дней цель своя, но в пределах недели она обычно одна и та же,
-  // поэтому полоса рисуется по середине целей периода, а штрих у столбца остаётся
-  // там, где его собственная цель от неё заметно отличается.
-  const goals = buckets.map((b) => b.goal).filter((g) => g > 0).sort((a, b) => a - b);
-  const medianGoal = goals.length ? goals[Math.floor(goals.length / 2)] : 0;
+  // Линия цели идёт ступеньками: в выходные цель выше, чем в будни, и ломаная
+  // это показывает прямо на графике. Раньше цель у каждого столбца рисовалась
+  // отдельным пунктирным отрезком шириной со столбец — на тридцати днях от него
+  // оставалась пара точек, и график выглядел засыпанным мусором.
+  const goalArea = useMemo(() => {
+    const bottom = top + plotH;
+    let line = "";
+    let area = "";
+    let open = false;
+    buckets.forEach((b, i) => {
+      const x1 = left + i * step;
+      const x2 = x1 + step;
+      const visible = b.goal > 0 && b.goal <= maxValue;
+      if (!visible) {
+        if (open) area += ` L${x1.toFixed(1)},${bottom} Z`;
+        open = false;
+        return;
+      }
+      const y = yOf(b.goal);
+      line += `${open ? "L" : "M"}${x1.toFixed(1)},${y.toFixed(1)} L${x2.toFixed(1)},${y.toFixed(1)} `;
+      area += open
+        ? `L${x1.toFixed(1)},${y.toFixed(1)} L${x2.toFixed(1)},${y.toFixed(1)} `
+        : `M${x1.toFixed(1)},${bottom} L${x1.toFixed(1)},${y.toFixed(1)} L${x2.toFixed(1)},${y.toFixed(1)} `;
+      open = true;
+    });
+    if (open) area += ` L${(left + buckets.length * step).toFixed(1)},${bottom} Z`;
+    return { line: line.trim(), area: area.trim() };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buckets, maxValue, step, plotH]);
 
   return (
     <div style={styles.wrap}>
@@ -253,17 +276,16 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
               </g>
             ))}
 
-            {medianGoal > 0 && medianGoal <= maxValue && (
+            {goalArea.line && (
               <>
-                <rect x={left} y={yOf(medianGoal)} width={plotW} height={top + plotH - yOf(medianGoal)} fill="var(--corridor)" />
-                <line
-                  x1={left}
-                  y1={yOf(medianGoal)}
-                  x2={W - right}
-                  y2={yOf(medianGoal)}
+                <path d={goalArea.area} fill="var(--corridor)" />
+                <path
+                  d={goalArea.line}
+                  fill="none"
                   stroke="var(--corridorLine)"
-                  strokeWidth="1"
-                  strokeDasharray="4 3"
+                  strokeWidth="1.2"
+                  strokeDasharray="5 3"
+                  strokeLinejoin="round"
                 />
               </>
             )}
@@ -285,17 +307,6 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
                       style={{ animationDelay: (i * 0.02).toFixed(2) + "s" }}
                       fill={barColor(b.hours, b.goal)}
                       opacity={active === null || isActive ? 1 : 0.45}
-                    />
-                  )}
-                  {b.goal > 0 && b.goal <= maxValue && Math.abs(b.goal - medianGoal) > medianGoal * 0.1 && (
-                    <line
-                      x1={x - 1}
-                      y1={yOf(b.goal)}
-                      x2={x + barW + 1}
-                      y2={yOf(b.goal)}
-                      stroke={TARGET}
-                      strokeWidth="1.2"
-                      strokeDasharray="2 1.5"
                     />
                   )}
                   <rect
@@ -350,7 +361,8 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
               </>
             ) : (
               <span style={styles.muted}>
-                Наведите или нажмите на столбец, чтобы увидеть точные часы. Штрих — цель на этот период.
+                Наведите или нажмите на столбец, чтобы увидеть точные часы. Пунктирная линия — цель: в выходные она
+                выше, чем в будни.
               </span>
             )}
           </div>
