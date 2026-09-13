@@ -18,6 +18,7 @@ import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
 import IntroDialog from "./intro-dialog.jsx";
 import Background from "./background.jsx";
+import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import SchedulePreset from "./lyceum-preset.jsx";
@@ -505,6 +506,9 @@ export default function StudyPlanner() {
   // цифр, и план тихо расходился с жизнью.
   const [weekPlanned, setWeekPlanned] = useState("");
   const [backgroundOn, setBackgroundOn] = useState(readBackgroundOn);
+  // Чем вызвана пасхалка: id фигуры и счётчик, чтобы одну и ту же можно было
+  // позвать дважды подряд.
+  const [showcase, setShowcase] = useState(null);
   const [homework, setHomework] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
@@ -1935,7 +1939,7 @@ export default function StudyPlanner() {
 
   return (
     <div data-theme={theme} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
-      <Background theme={theme} enabled={backgroundOn} />
+      <Background theme={theme} enabled={backgroundOn} showcase={showcase} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&display=swap');
         ${THEME_CSS}
@@ -3387,6 +3391,29 @@ export default function StudyPlanner() {
                 </span>
               </div>
             </section>
+
+            {__EASTER_TEST__ && (
+              <section className="ap-card" style={styles.card}>
+                <div style={styles.cardTitle}>Тест</div>
+                <div style={styles.cardNote}>
+                  Созвездия на фоне выпадают сами и редко — примерно раз в сотню проверок. Здесь их можно позвать
+                  руками. Этого раздела нет в том, что залито на сайт.
+                </div>
+                <div style={styles.eggRow}>
+                  {EASTER_EGGS.map((egg) => (
+                    <button
+                      key={egg.id}
+                      onClick={() => setShowcase({ id: egg.id, nonce: Date.now() })}
+                      style={styles.eggBtn}
+                      disabled={!backgroundOn}
+                    >
+                      {egg.label}
+                    </button>
+                  ))}
+                </div>
+                {!backgroundOn && <div style={styles.mutedSmall}>Сначала включите живой фон выше.</div>}
+              </section>
+            )}
 
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Приложение</div>
@@ -5019,6 +5046,16 @@ const styles = {
   pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
   themeRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
   themeBtn: { border: "1px solid", borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 600 },
+  eggRow: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 },
+  eggBtn: {
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "var(--ink2)",
+    borderRadius: 999,
+    padding: "6px 13px",
+    fontSize: 12.5,
+    fontWeight: 600,
+  },
   bgRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 14 },
   themeHours: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 8 },
   versionRow: { fontSize: 11, color: "var(--mute)", textAlign: "center", marginTop: 26, lineHeight: 1.5 },

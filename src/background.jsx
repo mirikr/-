@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { randomEgg, eggById, EASTER_CHANCE, EASTER_EVERY_MS } from "./constellations.js";
 
 // Фон приложения: россыпь точек, соединённых тонкими нитями, и пара кривых
 // возможностей, которые медленно дышат за ними.
@@ -20,6 +21,12 @@ const LINK_DIST = 168;
 // телефоне — полтора десятка: густая сетка на маленьком экране выглядит грязью.
 const AREA_PER_DOT = 26000;
 const MAX_DOTS = 64;
+// Сколько живёт созвездие: две секунды на сбор, пять на просмотр, две на
+// расход. Дольше — и оно превращается из случайной находки в обои.
+const EGG_IN = 2000;
+const EGG_HOLD = 5000;
+const EGG_OUT = 2000;
+const EGG_LIFE = EGG_IN + EGG_HOLD + EGG_OUT;
 
 const CURVES = [
   { base: 0.34, sway: 0.05, period: 124000, phase: 0, width: 2.2, alpha: 1 },
@@ -32,8 +39,11 @@ function readColor(name, fallback) {
   return value || fallback;
 }
 
-export default function Background({ theme, enabled = true }) {
+export default function Background({ theme, enabled = true, showcase = null }) {
   const canvasRef = useRef(null);
+  // Ссылка, а не состояние: вызов пасхалки не должен перезапускать анимацию.
+  const showcaseRef = useRef(null);
+  showcaseRef.current = showcase;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -49,6 +59,53 @@ export default function Background({ theme, enabled = true }) {
     let dots = [];
     let palette = [];
     const pointer = { x: -9999, y: -9999 };
+    // Созвездие: набор точек, едущих к своим местам, и рёбра между ними.
+    let egg = null;
+    let lastRoll = 0;
+    let lastShowcase = null;
+
+    function layout(shape) {
+      const { w, h } = size;
+      const ratio = shape.ratio || 1;
+      // Вписываем в середину экрана с полями. Высоту держим в трети экрана:
+      // во весь рост буквы налезают на текст и читаются хуже, чем кажется.
+      // Слово тянется в ширину, и высокие буквы налезали бы на текст; фигуре,
+      // наоборот, нужен рост, иначе птица выходит с ноготок.
+      const maxH = ratio > 1.6 ? h * 0.34 : h * 0.58;
+      const boxW = Math.min(w * 0.58, maxH * ratio);
+      const boxH = boxW / ratio;
+      const x0 = (w - boxW) / 2;
+      const y0 = (h - boxH) / 2;
+      return shape.p.map(([px, py]) => [x0 + px * boxW, y0 + py * boxH]);
+    }
+
+    function startEgg(item) {
+      if (!item || reduce) return;
+      const targets = layout(item.shape);
+      egg = {
+        id: item.id,
+        born: performance.now(),
+        edges: item.shape.e,
+        nodes: targets.map(([tx, ty], i) => {
+          // Точка приезжает из ближайшей фоновой — так видно, что созвездие
+          // собралось из того же, что и весь фон.
+          const from = dots[i % Math.max(dots.length, 1)] || { x: tx, y: ty + size.h };
+          return { x: from.x, y: from.y, tx, ty, color: i % 6 };
+        }),
+      };
+    }
+
+    function eggPhase(now) {
+      if (!egg) return 0;
+      const age = now - egg.born;
+      if (age >= EGG_LIFE) {
+        egg = null;
+        return 0;
+      }
+      if (age < EGG_IN) return age / EGG_IN;
+      if (age < EGG_IN + EGG_HOLD) return 1;
+      return 1 - (age - EGG_IN - EGG_HOLD) / EGG_OUT;
+    }
 
     function refreshPalette() {
       palette = [
@@ -96,8 +153,24 @@ export default function Background({ theme, enabled = true }) {
       pointer.y = -9999;
     }
 
-    function step(dt) {
+    function step(dt, now) {
       const { w, h } = size;
+      // Вызов из раздела «Тест» показывает конкретную фигуру сразу.
+      const asked = showcaseRef.current;
+      if (asked && asked.nonce !== lastShowcase) {
+        lastShowcase = asked.nonce;
+        startEgg(eggById(asked.id) || randomEgg());
+      } else if (!egg && !asked && now - lastRoll > EASTER_EVERY_MS) {
+        lastRoll = now;
+        if (Math.random() < EASTER_CHANCE) startEgg(randomEgg());
+      }
+      if (egg) {
+        // Приближение с запаздыванием: точки слетаются, а не прыгают.
+        egg.nodes.forEach((n) => {
+          n.x += (n.tx - n.x) * Math.min(1, dt * 2.2);
+          n.y += (n.ty - n.y) * Math.min(1, dt * 2.2);
+        });
+      }
       dots.forEach((d) => {
         d.x += d.vx * dt;
         d.y += d.vy * dt;
@@ -115,6 +188,9 @@ export default function Background({ theme, enabled = true }) {
       const night = theme === "night";
       const lineColor = readColor(night ? "--railInk2" : "--mute", "#8A8370");
       ctx.clearRect(0, 0, w, h);
+      const eggOn = eggPhase(now);
+      // Пока собирается созвездие, обычная россыпь отступает на задний план.
+      const fade = 1 - eggOn * 0.72;
 
       // Кривые возможностей — позади россыпи и совсем тихо: они держат тему,
       // а внимание на себя не тянут.
@@ -141,7 +217,7 @@ export default function Background({ theme, enabled = true }) {
           const dy = dots[i].y - dots[j].y;
           const dist = Math.hypot(dx, dy);
           if (dist > LINK_DIST) continue;
-          ctx.globalAlpha = (1 - dist / LINK_DIST) * (night ? 0.24 : 0.26);
+          ctx.globalAlpha = (1 - dist / LINK_DIST) * (night ? 0.24 : 0.26) * fade;
           ctx.beginPath();
           ctx.moveTo(dots[i].x, dots[i].y);
           ctx.lineTo(dots[j].x, dots[j].y);
@@ -155,7 +231,7 @@ export default function Background({ theme, enabled = true }) {
         dots.forEach((d) => {
           const dist = Math.hypot(d.x - pointer.x, d.y - pointer.y);
           if (dist > LINK_DIST * 1.3) return;
-          ctx.globalAlpha = (1 - dist / (LINK_DIST * 1.3)) * (night ? 0.38 : 0.4);
+          ctx.globalAlpha = (1 - dist / (LINK_DIST * 1.3)) * (night ? 0.38 : 0.4) * fade;
           ctx.beginPath();
           ctx.moveTo(d.x, d.y);
           ctx.lineTo(pointer.x, pointer.y);
@@ -166,12 +242,37 @@ export default function Background({ theme, enabled = true }) {
       dots.forEach((d) => {
         const near = fine && pointer.x > -9000 ? Math.hypot(d.x - pointer.x, d.y - pointer.y) : 9999;
         const lift = near < LINK_DIST ? 1 - near / LINK_DIST : 0;
-        ctx.globalAlpha = (night ? 0.6 : 0.62) + lift * 0.3;
+        ctx.globalAlpha = ((night ? 0.6 : 0.62) + lift * 0.3) * fade;
         ctx.fillStyle = palette[d.color] || lineColor;
         ctx.beginPath();
         ctx.arc(d.x, d.y, d.r + lift * 1.6, 0, Math.PI * 2);
         ctx.fill();
       });
+
+      // Само созвездие — поверх всего и заметно ярче россыпи: его должно быть
+      // видно сквозь стекло карточек.
+      if (egg && eggOn > 0.02) {
+        const accent = readColor(night ? "--gold" : "--accent", "#C9A227");
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 1.6;
+        ctx.globalAlpha = eggOn * (night ? 0.85 : 0.8);
+        egg.edges.forEach(([a, bIdx]) => {
+          const n1 = egg.nodes[a];
+          const n2 = egg.nodes[bIdx];
+          if (!n1 || !n2) return;
+          ctx.beginPath();
+          ctx.moveTo(n1.x, n1.y);
+          ctx.lineTo(n2.x, n2.y);
+          ctx.stroke();
+        });
+        egg.nodes.forEach((n) => {
+          ctx.globalAlpha = eggOn * 0.95;
+          ctx.fillStyle = palette[n.color] || accent;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
 
       ctx.globalAlpha = 1;
     }
@@ -180,7 +281,7 @@ export default function Background({ theme, enabled = true }) {
       if (!alive) return;
       const gap = now - last;
       if (gap >= 1000 / FPS) {
-        step(Math.min(gap, 400) / 1000);
+        step(Math.min(gap, 400) / 1000, now);
         last = now;
         draw(now);
       }

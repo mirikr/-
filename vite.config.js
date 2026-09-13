@@ -9,7 +9,7 @@ const base = process.env.BASE_PATH || "/";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base,
   build: { sourcemap: true },
   // Версия и дата сборки видны в подвале приложения: иначе «залилось или нет»
@@ -17,6 +17,9 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+    // Раздел «Тест» с кнопками вызова пасхалок нужен, только пока их смотрят:
+    // он есть в предпросмотре и исчезает из боевой сборки.
+    __EASTER_TEST__: JSON.stringify(mode !== "production"),
   },
   plugins: [
     react(),
@@ -63,4 +66,4 @@ export default defineConfig({
       },
     }),
   ],
-});
+}));
