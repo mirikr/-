@@ -120,7 +120,7 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account,
                   {account.signedIn ? account.email || "вход выполнен" : "Вход не выполнен — записи только на этом устройстве"}
                 </span>
                 {account.signedIn ? (
-                  <button onClick={account.onSignOut} className="ap-nav" style={styles.sheetAccountBtn}>
+                  <button onClick={account.onSignOut} style={styles.sheetAccountBtn}>
                     Выйти
                   </button>
                 ) : (
@@ -129,7 +129,6 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account,
                       setMore(false);
                       account.onOpen();
                     }}
-                    className="ap-nav"
                     style={styles.sheetAccountBtn}
                   >
                     Войти
@@ -141,12 +140,11 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account,
               {rest.map((item) => (
                 <button
                   key={item.key}
-                  className={"ap-nav" + (item.key === screen ? " is-on" : "")}
                   onClick={() => go(item.key)}
-                  style={styles.sheetBtn}
+                  style={item.key === screen ? styles.sheetBtnOn : styles.sheetBtn}
                 >
                   {item.label}
-                  {item.hint ? <span style={styles.navHint}>{item.hint}</span> : null}
+                  {item.hint ? <span style={styles.sheetHint}>{item.hint}</span> : null}
                 </button>
               ))}
             </div>
@@ -354,9 +352,52 @@ const styles = {
   },
   sheetDot: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
   sheetAccountText: { flex: 1, minWidth: 0, lineHeight: 1.35 },
-  sheetAccountBtn: { fontSize: 12.5, fontWeight: 600, flexShrink: 0 },
-  sheetGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 },
-  sheetBtn: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, textAlign: "left" },
+  sheetAccountBtn: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    flexShrink: 0,
+    padding: "7px 12px",
+    borderRadius: 999,
+    border: "1px solid var(--railInk2)",
+    background: "none",
+    color: "var(--railInk)",
+  },
+  sheetGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 },
+  // На телефоне подсветки под курсором нет, и разделы, нарисованные как строки
+  // текста, сливались в один столбец. Поэтому каждый — своя плашка с границей:
+  // видно, что это отдельная кнопка и куда по ней попадать пальцем.
+  sheetBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 46,
+    padding: "10px 12px",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--railActive)",
+    background: "var(--railActive)",
+    color: "var(--railInk2)",
+    fontSize: 14,
+    textAlign: "left",
+  },
+  sheetHint: { marginLeft: "auto", fontSize: 12, color: "var(--railInk2)", opacity: 0.75, whiteSpace: "nowrap" },
+  sheetBtnOn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 46,
+    padding: "10px 12px",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--accent)",
+    background: "var(--railActive)",
+    color: "var(--railInk)",
+    fontSize: 14,
+    fontWeight: 600,
+    textAlign: "left",
+  },
   sheetModes: { display: "flex", alignItems: "center", gap: 4, background: "var(--railActive)", borderRadius: 999, padding: 3 },
   sheetNote: { fontSize: 11.5, color: "var(--railInk2)", marginTop: 8, lineHeight: 1.45 },
   cdRow: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },

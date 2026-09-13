@@ -23,6 +23,8 @@ import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import NowCard from "./now-card.jsx";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
+import { dueTopics, reviewHours, agoWord } from "./repetition.js";
+import { search as searchAll } from "./search.js";
 import SchedulePreset from "./lyceum-preset.jsx";
 import ExamPreset from "./lyceum-exams-panel.jsx";
 import { KT_PRESET_ID, DEFAULT_KT } from "./lyceum-exams-10.js";
@@ -254,6 +256,8 @@ function examKindLabel(value) {
 const EXAM_SCHEDULE_DAYS = 7;
 
 const SCHEDULE_EVENT_PREFIX = "sch-ev:";
+
+const JOURNAL_PAGE = 50;
 
 function weekdayKeyFromDate(dateStr) {
   if (!dateStr) return null;
@@ -502,6 +506,11 @@ export default function StudyPlanner() {
   // Какие контрольные тесты человек сдаёт: даты общие, предметы у каждого свои.
   const [examPicks, setExamPicks] = useState(DEFAULT_KT);
   const [voshPicks, setVoshPicks] = useState(DEFAULT_VOSH);
+  const [query, setQuery] = useState("");
+  // Сколько записей дневника показано. Разом рисовать весь год — это
+  // полсекунды на телефоне при переходе на экран, а дальше первого десятка
+  // всё равно почти никто не смотрит.
+  const [journalShown, setJournalShown] = useState(JOURNAL_PAGE);
   // Событие, по которому считается план. Пусто — берётся самое приоритетное:
   // так было всегда, и для большинства этого достаточно.
   const [mainEventId, setMainEventId] = useState("");
@@ -550,6 +559,26 @@ export default function StudyPlanner() {
       }));
     },
     [customSubjects, hiddenSubjects, subjectColors, builtinsVisible]
+  );
+
+  // Поиск предмета по id на каждую строку дневника — это перебор всего списка
+  // на каждую из сотен записей; карта считается один раз.
+  const subjectById = useMemo(() => new Map(ALL_SUBJECTS.map((s) => [s.id, s])), [ALL_SUBJECTS]);
+
+  // Предметы вместе с их темами: одна и та же выжимка нужна и повторениям, и
+  // поиску, а собирать её на каждый рендер по два раза незачем.
+  const subjectsWithTopics = useMemo(
+    () =>
+      ALL_SUBJECTS.map((s) => ({
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        topics: [
+          ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
+          ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
+        ],
+      })),
+    [ALL_SUBJECTS, data]
   );
 
   useEffect(() => {
@@ -1820,6 +1849,34 @@ export default function StudyPlanner() {
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }, [homework, todayDateOnly]);
 
+  // Пора повторить: считается из дневника, поэтому темы, пройденные ещё до
+  // появления повторений, попадают сюда сами.
+  const dueForReview = useMemo(
+    () => dueTopics(subjectsWithTopics, journal, todayStr()),
+    [subjectsWithTopics, journal]
+  );
+
+  function reviewTopic(row) {
+    setJournal((prev) => [
+      {
+        id: Date.now(),
+        date: todayStr(),
+        subjectId: row.subjectId,
+        hours: reviewHours(row.duration),
+        note: "Повторение: " + row.name,
+        auto: true,
+        lessonId: row.topicId,
+        review: true,
+      },
+      ...prev,
+    ]);
+  }
+
+  const subjectNameById = useCallback(
+    (id) => (ALL_SUBJECTS.find((s) => s.id === id) || {}).name || id,
+    [ALL_SUBJECTS]
+  );
+
   function goScreen(key) {
     setScreen(key);
     try {
@@ -1868,6 +1925,29 @@ export default function StudyPlanner() {
 
   const currentNotebook = notebookOwners.find((o) => o.key === notebookOwner) || notebookOwners[0] || null;
 
+  const found = useMemo(
+    () =>
+      searchAll(query, {
+        subjects: subjectsWithTopics,
+        journal,
+        subjectName: subjectNameById,
+        homework,
+        events: allEvents,
+        schedule: lyceumSchedule,
+        notebookOwners,
+        notebooks,
+      }),
+    [query, subjectsWithTopics, journal, subjectNameById, homework, allEvents, lyceumSchedule, notebookOwners, notebooks]
+  );
+
+  // Находка ведёт туда, где она живёт: экран, а при надобности — предмет или
+  // тетрадь, которые надо там раскрыть.
+  function openFound(item) {
+    if (item.subjectId) setOpenSubject(item.subjectId);
+    if (item.notebook) setNotebookOwner(item.notebook);
+    goScreen(item.screen);
+  }
+
   const weeklyBudget = weeklyBudgetHours(budget);
   const navItems = [
     { key: "today", label: "Сегодня", hint: todayLessons.length ? String(todayLessons.length) : "" },
@@ -1877,6 +1957,7 @@ export default function StudyPlanner() {
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
     { key: "notes", label: "Тетради", hint: "" },
+    { key: "search", label: "Поиск", hint: "" },
     { key: "settings", label: "Синхронизация", short: "Облако", hint: saveErr ? "!" : "" },
   ];
 
@@ -1892,6 +1973,7 @@ export default function StudyPlanner() {
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
+    search: ["Поиск", "По темам, дневнику, заданиям, событиям, расписанию и тетрадям сразу"],
     settings: ["Синхронизация и данные", "Облако, резервная копия, оформление, установка на устройство и версия"],
   };
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
@@ -2186,6 +2268,37 @@ export default function StudyPlanner() {
 
             {/* Что идёт прямо сейчас — и у тебя, и у всей параллели. */}
             <NowCard entriesFor={dayEntries} styles={styles} />
+
+            {dueForReview.length > 0 && (
+              <section className="ap-card" style={styles.card}>
+                <div style={styles.cardTitle}>Пора повторить</div>
+                <div style={styles.cardNote}>
+                  Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке
+                </div>
+                <div style={styles.reviewList}>
+                  {dueForReview.slice(0, 3).map((row) => (
+                    <div key={row.topicId} style={styles.reviewRow}>
+                      <span style={{ ...styles.dot, background: row.color }} />
+                      <span style={styles.reviewText}>
+                        <span style={styles.reviewName}>{row.name}</span>
+                        <span style={styles.reviewNote}>
+                          {row.subjectName} · {agoWord(row.days)}
+                          {row.reviews > 0 ? " · повторений: " + row.reviews : ""}
+                        </span>
+                      </span>
+                      <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
+                        Повторил
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {dueForReview.length > 3 && (
+                  <button onClick={() => goScreen("study")} style={styles.eventsToggle}>
+                    Ещё {dueForReview.length - 3} — в «Подготовке»
+                  </button>
+                )}
+              </section>
+            )}
 
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
@@ -2685,6 +2798,33 @@ export default function StudyPlanner() {
                 </p>
               </section>
             )}
+            {dueForReview.length > 0 && (
+              <section className="ap-card" style={styles.card}>
+                <div style={styles.cardTitle}>Пора повторить</div>
+                <div style={styles.cardNote}>
+                  Первое повторение через три дня после урока, дальше через неделю, три недели и два месяца.
+                  «Повторил» пишет занятие в дневник — часы идут в общий план.
+                </div>
+                <div style={styles.reviewList}>
+                  {dueForReview.map((row) => (
+                    <div key={row.topicId} style={styles.reviewRow}>
+                      <span style={{ ...styles.dot, background: row.color }} />
+                      <span style={styles.reviewText}>
+                        <span style={styles.reviewName}>{row.name}</span>
+                        <span style={styles.reviewNote}>
+                          {row.subjectName} · {agoWord(row.days)}
+                          {row.reviews > 0 ? " · повторений: " + row.reviews : ""}
+                        </span>
+                      </span>
+                      <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
+                        Повторил
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div style={styles.subjGrid}>
               {ALL_SUBJECTS.map((s) => {
                 const st = stats.perSubject[s.id];
@@ -3169,8 +3309,8 @@ export default function StudyPlanner() {
 
             <div style={styles.journalList}>
               {journal.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
-              {journal.map((e) => {
-                const s = ALL_SUBJECTS.find((s) => s.id === e.subjectId);
+              {journal.slice(0, journalShown).map((e) => {
+                const s = subjectById.get(e.subjectId);
                 return (
                   <div key={e.id} style={styles.journalRow}>
                     <span style={{ ...styles.dot, background: s?.color }} />
@@ -3184,6 +3324,11 @@ export default function StudyPlanner() {
                   </div>
                 );
               })}
+              {journal.length > journalShown && (
+                <button onClick={() => setJournalShown(journalShown + JOURNAL_PAGE)} style={styles.eventsToggle}>
+                  Показать ещё {Math.min(JOURNAL_PAGE, journal.length - journalShown)} из {journal.length - journalShown}
+                </button>
+              )}
             </div>
             </section>
           </div>
@@ -3270,6 +3415,52 @@ export default function StudyPlanner() {
             </section>
           </div>
           </>
+        )}
+
+        {screen === "search" && (
+          <section className="ap-card" style={styles.card}>
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Что ищем?"
+              style={styles.searchInput}
+              aria-label="Поиск по записям"
+            />
+            {query.trim().length < 2 ? (
+              <p style={styles.muted}>
+                Наберите хотя бы две буквы. Ищется везде сразу: темы подготовки, записи дневника, задания, события,
+                уроки расписания и текст тетрадей.
+              </p>
+            ) : found.total === 0 ? (
+              <p style={styles.muted}>Ничего не нашлось. Попробуйте короче — ищется по части слова.</p>
+            ) : (
+              <>
+                <div style={styles.searchCount}>Нашлось: {found.total}</div>
+                {found.groups.map((group) => (
+                  <div key={group.id} style={styles.searchGroup}>
+                    <div style={styles.searchGroupTitle}>
+                      {group.title}
+                      <span style={styles.searchGroupCount}>{group.total}</span>
+                    </div>
+                    {group.shown.map((item) => (
+                      <button key={item.id} onClick={() => openFound(item)} className="ap-row" style={styles.searchRow}>
+                        {item.color && <span style={{ ...styles.dot, background: item.color }} />}
+                        <span style={styles.searchRowText}>
+                          <span style={styles.searchRowTitle}>{item.title}</span>
+                          {item.note && <span style={styles.searchRowNote}>{item.note}</span>}
+                          {item.body && <span style={styles.searchRowBody}>{item.body}</span>}
+                        </span>
+                      </button>
+                    ))}
+                    {group.total > group.shown.length && (
+                      <div style={styles.searchMore}>и ещё {group.total - group.shown.length} — уточните запрос</div>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </section>
         )}
 
         {screen === "settings" && (
@@ -4383,6 +4574,69 @@ const styles = {
   todayTime: { fontSize: 12.5, fontWeight: 600, minWidth: 42 },
   todayMark: { minWidth: 42, display: "flex", alignItems: "center" },
   // «Сейчас»: своя строка сверху, свой урок и то же время у всей параллели.
+  reviewList: { display: "flex", flexDirection: "column", gap: 6 },
+  reviewRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    border: "1px solid var(--line2)",
+    background: "var(--panel2)",
+    borderRadius: 9,
+    padding: "8px 11px",
+  },
+  reviewText: { display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 },
+  reviewName: { fontSize: 13.5, fontWeight: 600, color: "var(--ink)", overflowWrap: "anywhere" },
+  reviewNote: { fontSize: 11.5, color: "var(--ink3)" },
+  reviewBtn: {
+    flexShrink: 0,
+    border: "1px solid var(--line)",
+    background: "var(--panel)",
+    color: "var(--ink2)",
+    borderRadius: 8,
+    padding: "6px 11px",
+    fontSize: 12.5,
+    fontWeight: 600,
+  },
+  searchInput: {
+    width: "100%",
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "inherit",
+    borderRadius: 10,
+    padding: "11px 13px",
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  searchCount: { fontSize: 12.5, color: "var(--mute)", marginBottom: 10 },
+  searchGroup: { marginBottom: 16 },
+  searchGroupTitle: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+    fontSize: 11.5,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "var(--mute)",
+    marginBottom: 6,
+  },
+  searchGroupCount: { fontSize: 11.5, color: "var(--ink3)" },
+  searchRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 9,
+    width: "100%",
+    textAlign: "left",
+    border: "1px solid var(--line2)",
+    background: "var(--panel2)",
+    borderRadius: 9,
+    padding: "9px 11px",
+    marginBottom: 5,
+  },
+  searchRowText: { display: "flex", flexDirection: "column", gap: 2, minWidth: 0 },
+  searchRowTitle: { fontSize: 13.5, fontWeight: 600, color: "var(--ink)", overflowWrap: "anywhere" },
+  searchRowNote: { fontSize: 11.5, color: "var(--ink3)" },
+  searchRowBody: { fontSize: 12, color: "var(--ink2)", lineHeight: 1.45, overflowWrap: "anywhere" },
+  searchMore: { fontSize: 11.5, color: "var(--mute)", marginTop: 2 },
   nowHead: { display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 10 },
   nowTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19 },
   nowNote: { fontSize: 12.5, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
