@@ -3970,17 +3970,49 @@ function AddExamForm({ onAdd }) {
 
 function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
   const isExam = entry.kind === "exam";
+  // Урок читают куда чаще, чем правят, поэтому обычный вид — три короткие
+  // строки, а поля появляются по «изменить». Раньше каждый урок был формой из
+  // шести полей, и день из восьми уроков не помещался на экран.
+  const [editing, setEditing] = useState(false);
+
+  const box = {
+    ...styles.scheduleEntry,
+    borderLeftColor: priorityInfo(entry.priority).strong,
+    background: priorityInfo(entry.priority).tint,
+    ...(isExam ? styles.scheduleExam : null),
+    ...(compact ? styles.scheduleEntryCompact : null),
+  };
+
+  if (!editing) {
+    const facts = isExam
+      ? [entry.date ? formatEventDate(entry.date) : "", entry.place]
+      : [levelInfo(entry.level).short, entry.room, entry.teacher];
+    return (
+      <div style={box}>
+        <div style={styles.rowTop}>
+          <span style={styles.rowTime}>{entry.start}</span>
+          <span style={styles.rowName}>
+            {entry.subjectName || (isExam ? "Экзамен" : "Урок")}
+          </span>
+        </div>
+        <div style={styles.rowFacts}>{facts.filter(Boolean).join(" · ") || "без подробностей"}</div>
+        {isExam && entry.url && (
+          <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
+            Открыть ссылку
+          </a>
+        )}
+        <div style={styles.rowBottom}>
+          <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+          <button onClick={() => setEditing(true)} style={styles.rowEdit}>
+            изменить
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      style={{
-        ...styles.scheduleEntry,
-        borderLeftColor: priorityInfo(entry.priority).strong,
-        background: priorityInfo(entry.priority).tint,
-        ...(isExam ? styles.scheduleExam : null),
-        ...(compact ? styles.scheduleEntryCompact : null),
-      }}
-    >
+    <div style={box}>
       {isExam && (
         <div style={styles.examRow}>
           <ExamKindPicker value={entry.examKind} onChange={(v) => onUpdate(entry.id, { examKind: v })} />
@@ -4022,11 +4054,6 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
             onChange={(e) => onUpdate(entry.id, { url: e.target.value })}
             style={styles.scheduleRoomInput}
           />
-          {entry.url && (
-            <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
-              Открыть ссылку
-            </a>
-          )}
         </>
       ) : (
         <>
@@ -4058,9 +4085,14 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
           </select>
         </>
       )}
-      <button onClick={onRemove} style={styles.removeBtn}>
-        ×
-      </button>
+      <div style={styles.rowBottom}>
+        <button onClick={() => setEditing(false)} style={styles.rowDone}>
+          Готово
+        </button>
+        <button onClick={onRemove} style={styles.rowDelete}>
+          Удалить
+        </button>
+      </div>
     </div>
   );
 }
@@ -4711,6 +4743,30 @@ const styles = {
     marginBottom: 8,
   },
   // В сетке карточка сама себе строка, поэтому нижний отступ лишний.
+  rowTop: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
+  rowTime: { fontSize: 12.5, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
+  rowName: { fontSize: 13.5, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" },
+  rowFacts: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.45, overflowWrap: "anywhere" },
+  rowBottom: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 },
+  rowEdit: {
+    marginLeft: "auto",
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "var(--ink3)",
+    textDecoration: "underline",
+  },
+  rowDone: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600 },
+  rowDelete: {
+    marginLeft: "auto",
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "var(--red)",
+    textDecoration: "underline",
+  },
   scheduleEntryCompact: { marginBottom: 0, gap: 3, padding: "5px 8px" },
   scheduleDayTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   scheduleDayActions: { display: "flex", gap: 10, flexWrap: "wrap" },
