@@ -1,5 +1,6 @@
 import { supabase, cloudConfigured, currentUser, authReady } from "./supabase.js";
 import { get as kvGet, set as kvSet, remove as kvRemove } from "./storage.js";
+import { storagePath } from "./storage-key.js";
 
 // Вложения живут в двух видах:
 //   { name, size, path }  — файл в Supabase Storage (основной путь);
@@ -14,13 +15,6 @@ async function cloudUserId() {
   await authReady();
   const user = currentUser();
   return user ? user.id : null;
-}
-
-function safeName(name) {
-  // Кириллица и пробелы в ключе объекта ломают подписанные ссылки, поэтому имя
-  // для хранения обезличивается, а настоящее остаётся в подписи вложения.
-  const ext = name.includes(".") ? "." + name.split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") : "";
-  return Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ext;
 }
 
 function readAsDataUrl(file) {
@@ -41,7 +35,7 @@ export async function attachFile(file, prefix) {
     if (file.size > CLOUD_LIMIT) {
       return { ok: false, error: "файл больше 25 МБ" };
     }
-    const path = `${uid}/${prefix || "misc"}/${safeName(file.name)}`;
+    const path = storagePath(uid, prefix, file.name);
     const { error } = await supabase().storage.from(BUCKET).upload(path, file, { upsert: false });
     if (error) {
       const msg = error.message || String(error);
