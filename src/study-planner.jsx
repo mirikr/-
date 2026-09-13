@@ -358,6 +358,16 @@ function daysWord(n) {
   return "дней";
 }
 
+// Предмет без своей записи в data — не выдумка: свои предметы и их содержимое
+// лежат в состоянии по отдельности, и при слиянии с другого устройства первое
+// доезжало раньше второго. Приложение на этом падало белым экраном, а вместе с
+// ним пропадал доступ ко всем записям, поэтому пустая заготовка отдаётся всегда.
+const EMPTY_SUBJECT = { topics: [], custom: [] };
+
+function subjectData(data, id) {
+  return data[id] || EMPTY_SUBJECT;
+}
+
 function buildDefaultData() {
   const data = {};
   SUBJECT_DEFS.forEach((s) => {
@@ -762,7 +772,7 @@ export default function StudyPlanner() {
     let totalAll = 0;
     const perSubject = {};
     ALL_SUBJECTS.forEach((s) => {
-      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       const done = list.filter((t) => t.done).length;
       perSubject[s.id] = { done, total: list.length, pct: list.length ? Math.round((done / list.length) * 100) : 0 };
       doneAll += done;
@@ -836,7 +846,7 @@ export default function StudyPlanner() {
     let remainingMinutes = 0;
     let remainingTopics = 0;
     ALL_SUBJECTS.forEach((s) => {
-      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       list.forEach((t) => {
         if (!t.done) {
           remainingMinutes += Number(t.duration) || D;
@@ -1402,7 +1412,7 @@ export default function StudyPlanner() {
     if (!subject) return;
     const customIndex = customSubjects.findIndex((s) => s.id === id);
     const isCustom = customIndex !== -1;
-    const subjectData = data[id];
+    const entry = data[id] || EMPTY_SUBJECT;
     const savedAlloc = budget.alloc[id];
     const savedEntries = journal.filter((e) => e.subjectId === id);
     const notebookKey = "subj:" + id;
@@ -1445,7 +1455,7 @@ export default function StudyPlanner() {
             next.splice(Math.min(customIndex, next.length), 0, subject);
             return next;
           });
-          setData((prev) => ({ ...prev, [id]: subjectData }));
+          setData((prev) => ({ ...prev, [id]: entry }));
         } else {
           setHiddenSubjects((prev) => prev.filter((x) => x !== id));
         }
@@ -1456,8 +1466,8 @@ export default function StudyPlanner() {
       () => {
         // Подтверждено — сносим файлы: и из заметок к урокам, и из тетради предмета.
         const lessonFiles = [
-          ...((subjectData && subjectData.topics) || []),
-          ...((subjectData && subjectData.custom) || []),
+          ...(entry.topics || []),
+          ...(entry.custom || []),
         ].flatMap((t) => (t.notes || []).flatMap((n) => n.files || []));
         const notebookFiles = (savedNotebook || []).flatMap((b) =>
           (b.branches || []).flatMap((r) => r.files || [])
@@ -1641,7 +1651,7 @@ export default function StudyPlanner() {
     const remaining = {};
     let total = 0;
     ALL_SUBJECTS.forEach((s) => {
-      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       const hours = list.filter((t) => !t.done).reduce((sum, t) => sum + (Number(t.duration) || D) / 60, 0);
       remaining[s.id] = hours;
       total += hours;
@@ -2648,8 +2658,8 @@ export default function StudyPlanner() {
                 const open = openSubject === s.id;
                 const isCustomSubject = customSubjects.some((cs) => cs.id === s.id);
                 const allTopics = [
-                  ...data[s.id].topics.map((t) => ({ ...t, custom: false })),
-                  ...data[s.id].custom.map((t) => ({ ...t, custom: true })),
+                  ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
+                  ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
                 ];
                 return (
                   <div key={s.id} className="subj-card ap-card" style={{ ...styles.subjCard, borderColor: s.color }}>
