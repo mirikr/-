@@ -50,6 +50,11 @@ function round1(value) {
   return Math.round(value * 10) / 10;
 }
 
+// Дробная часть отделяется запятой, как во всём остальном приложении: «18,5 ч».
+function fmt(value) {
+  return String(round1(value)).replace(".", ",");
+}
+
 function hoursWord(n) {
   const abs = Math.abs(Math.round(n)) % 100;
   const last = abs % 10;
@@ -235,28 +240,6 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
     <div style={styles.wrap}>
       <div style={styles.head}>
         <div style={styles.title}>{scale === "days" ? "Последние 30 дней" : scale === "months" ? "Последние 12 месяцев" : "По годам"}</div>
-        <div style={styles.scaleRow}>
-          {SCALES.map((s) => {
-            const on = s.value === scale;
-            return (
-              <button
-                key={s.value}
-                onClick={() => {
-                  setScale(s.value);
-                  setActive(null);
-                }}
-                style={{
-                  ...styles.scaleBtn,
-                  color: on ? "var(--btnInk)" : INK,
-                  background: on ? "var(--btnBg)" : "var(--panel2)",
-                  borderColor: on ? "var(--btnBg)" : AXIS,
-                }}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {totalHours === 0 ? (
@@ -271,7 +254,7 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
               <g key={i}>
                 <line x1={left} y1={yOf(t)} x2={W - right} y2={yOf(t)} stroke={AXIS} strokeWidth="0.5" />
                 <text x={left - 4} y={yOf(t) + 3} textAnchor="end" fontSize="8" fill={MUTED}>
-                  {t >= 10 ? Math.round(t) : round1(t)}
+                  {t >= 10 ? Math.round(t) : fmt(t)}
                 </text>
               </g>
             ))}
@@ -331,7 +314,7 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
                 fontSize="8"
                 fill={INK}
               >
-                {round1(buckets[maxIndex].hours)} ч
+                {fmt(buckets[maxIndex].hours)} ч
               </text>
             )}
 
@@ -354,10 +337,43 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
           </svg>
 
           <div style={styles.readout}>
+            {/* Масштаб под графиком, а не тремя кнопками в шапке: он относится к
+                тому, что нарисовано, и рядом с картинкой его искать естественнее. */}
+            <div style={styles.scaleWrap}>
+              <input
+                type="range"
+                className="ap-range"
+                min="0"
+                max={SCALES.length - 1}
+                step="1"
+                value={SCALES.findIndex((s) => s.value === scale)}
+                onChange={(e) => {
+                  setScale(SCALES[Number(e.target.value)].value);
+                  setActive(null);
+                }}
+                aria-label="Масштаб графика"
+                style={styles.scaleRange}
+              />
+              <div style={styles.scaleTicks}>
+                {SCALES.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => {
+                      setScale(s.value);
+                      setActive(null);
+                    }}
+                    style={{ ...styles.scaleTick, ...(s.value === scale ? styles.scaleTickOn : null) }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {activeBucket ? (
               <>
-                <b>{activeBucket.title}</b> — {round1(activeBucket.hours)} {hoursWord(activeBucket.hours)}
-                {activeBucket.goal > 0 && <span style={styles.muted}> · цель {round1(activeBucket.goal)} ч</span>}
+                <b>{activeBucket.title}</b> — {fmt(activeBucket.hours)} {hoursWord(activeBucket.hours)}
+                {activeBucket.goal > 0 && <span style={styles.muted}> · цель {fmt(activeBucket.goal)} ч</span>}
               </>
             ) : (
               <span style={styles.muted}>
@@ -369,9 +385,9 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
 
           <div style={styles.stats}>
             <div style={styles.stat}>
-              <div style={styles.statValue}>{periodHours} ч</div>
+              <div style={styles.statValue}>{String(periodHours).replace(".", ",")} ч</div>
               <div style={styles.statLabel}>за выбранный период</div>
-              <div style={styles.statSub}>всего {totalHours} ч</div>
+              <div style={styles.statSub}>всего {String(totalHours).replace(".", ",")} ч</div>
             </div>
             <div style={styles.stat}>
               <div style={{ ...styles.statValue, display: "flex", alignItems: "center", gap: 6 }}>
@@ -385,7 +401,7 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
                 )}
               </div>
               <div style={styles.statLabel}>больше всего часов</div>
-              <div style={styles.statSub}>{bestSubject ? bestSubject.hours + " ч" : "записей нет"}</div>
+              <div style={styles.statSub}>{bestSubject ? fmt(bestSubject.hours) + " ч" : "записей нет"}</div>
             </div>
             <div style={styles.stat}>
               <div style={styles.statValue}>
@@ -407,8 +423,18 @@ const styles = {
   wrap: { marginTop: 12 },
   head: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" },
   title: { fontSize: 13.5, color: "var(--ink3)" },
-  scaleRow: { display: "flex", gap: 4 },
-  scaleBtn: { border: "1px solid", borderRadius: 7, padding: "5px 12px", fontSize: 12.5, fontWeight: 600 },
+  scaleWrap: { marginTop: 10, marginBottom: 8 },
+  scaleRange: { width: "100%", display: "block", margin: 0 },
+  scaleTicks: { display: "flex", justifyContent: "space-between", marginTop: 2 },
+  scaleTick: {
+    border: "none",
+    background: "none",
+    padding: "2px 0",
+    fontSize: 11.5,
+    color: "var(--mute)",
+    fontWeight: 500,
+  },
+  scaleTickOn: { color: "var(--ink)", fontWeight: 700 },
   svg: { width: "100%", height: "auto", display: "block", marginTop: 8, touchAction: "manipulation" },
   empty: { fontSize: 13, color: "var(--ink3)", lineHeight: 1.55, margin: "10px 0 0" },
   readout: { fontSize: 12.5, color: "var(--ink)", minHeight: 32, lineHeight: 1.45, marginTop: 2 },

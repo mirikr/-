@@ -34,6 +34,22 @@ html, body { background: var(--bg); color: var(--ink); }
   --shadow:0 10px 26px rgba(0,0,0,.4);
   color-scheme:dark;
 }
+/* Ползунок масштаба под графиком часов. Системный вид у него слишком яркий
+   и в ночной теме светится белым, поэтому дорожка и бегунок свои. */
+.ap-range { -webkit-appearance: none; appearance: none; height: 22px; background: none; }
+.ap-range:focus { outline: none; }
+.ap-range::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: var(--line); }
+.ap-range::-moz-range-track { height: 4px; border-radius: 999px; background: var(--line); }
+.ap-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: -7px;
+  border-radius: 50%; background: var(--btnBg); border: 2px solid var(--panel); cursor: pointer;
+}
+.ap-range::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; background: var(--btnBg);
+  border: 2px solid var(--panel); cursor: pointer;
+}
+.ap-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--corridorLine); }
+
 .ap-balance-tip { position: absolute; }
 /* На телефоне накладка перекрыла бы весь график, поэтому разбор встаёт под ним. */
 @media (max-width: 700px) {
