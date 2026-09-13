@@ -10,12 +10,15 @@
     <!-- Полоса состояния красится фоном страницы, а не белым: приложение бывает тёмным. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Ежедневник" />
-    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <!-- ?v меняется вместе с рисунком иконки. Уже созданный ярлык это не
+         обновит — его картинка живёт в системе, — но при новой установке Safari
+         точно возьмёт свежий файл, а не тот, что лежит у него в кэше. -->
+    <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2" />
     <!-- Иконку на домашнем экране система по теме не переключает — она запоминается
          при установке, поэтому там всегда тёмная. А вот значок вкладки тему знает:
          на светлом фоне браузера уместнее светлый вариант. -->
-    <link rel="icon" type="image/png" href="icon-192.png" media="(prefers-color-scheme: dark)" />
-    <link rel="icon" type="image/png" href="icon-light-192.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" href="icon-192.png?v=2" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" href="icon-light-192.png?v=2" media="(prefers-color-scheme: light)" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
