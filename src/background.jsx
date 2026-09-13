@@ -127,7 +127,7 @@ export default function Background({ theme, enabled = true }) {
         ctx.moveTo(-w * 0.08, y0);
         ctx.bezierCurveTo(w * 0.44, y0 + h * 0.05, w * 0.68, h * (1 - k * 0.3), w * 1.08, h * 1.06);
         ctx.strokeStyle = curveColor;
-        ctx.globalAlpha = c.alpha * (night ? 0.1 : 0.08);
+        ctx.globalAlpha = c.alpha * (night ? 0.12 : 0.13);
         ctx.lineWidth = c.width;
         ctx.stroke();
       });
@@ -141,7 +141,7 @@ export default function Background({ theme, enabled = true }) {
           const dy = dots[i].y - dots[j].y;
           const dist = Math.hypot(dx, dy);
           if (dist > LINK_DIST) continue;
-          ctx.globalAlpha = (1 - dist / LINK_DIST) * (night ? 0.2 : 0.16);
+          ctx.globalAlpha = (1 - dist / LINK_DIST) * (night ? 0.24 : 0.26);
           ctx.beginPath();
           ctx.moveTo(dots[i].x, dots[i].y);
           ctx.lineTo(dots[j].x, dots[j].y);
@@ -155,7 +155,7 @@ export default function Background({ theme, enabled = true }) {
         dots.forEach((d) => {
           const dist = Math.hypot(d.x - pointer.x, d.y - pointer.y);
           if (dist > LINK_DIST * 1.3) return;
-          ctx.globalAlpha = (1 - dist / (LINK_DIST * 1.3)) * (night ? 0.34 : 0.26);
+          ctx.globalAlpha = (1 - dist / (LINK_DIST * 1.3)) * (night ? 0.38 : 0.4);
           ctx.beginPath();
           ctx.moveTo(d.x, d.y);
           ctx.lineTo(pointer.x, pointer.y);
@@ -166,7 +166,7 @@ export default function Background({ theme, enabled = true }) {
       dots.forEach((d) => {
         const near = fine && pointer.x > -9000 ? Math.hypot(d.x - pointer.x, d.y - pointer.y) : 9999;
         const lift = near < LINK_DIST ? 1 - near / LINK_DIST : 0;
-        ctx.globalAlpha = (night ? 0.5 : 0.42) + lift * 0.35;
+        ctx.globalAlpha = (night ? 0.6 : 0.62) + lift * 0.3;
         ctx.fillStyle = palette[d.color] || lineColor;
         ctx.beginPath();
         ctx.arc(d.x, d.y, d.r + lift * 1.6, 0, Math.PI * 2);
