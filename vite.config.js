@@ -36,10 +36,13 @@ export default defineConfig({
         // белым перед тёмным приложением.
         background_color: "#171612",
         theme_color: "#171612",
+        // ?v меняется вместе с рисунком. Chrome считает иконку прежней, пока
+        // совпадает её адрес, и у уже установленного приложения не трогает —
+        // смена адреса единственный способ заставить его заметить новую.
         icons: [
-          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
-          { src: "maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "icon-192.png?v=2", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png?v=2", sizes: "512x512", type: "image/png" },
+          { src: "maskable-512.png?v=2", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
