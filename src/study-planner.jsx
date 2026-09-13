@@ -1673,6 +1673,13 @@ export default function StudyPlanner() {
 
   const hwDates = useMemo(() => new Set(homework.map((h) => h.date)), [homework]);
 
+  // Дни с экзаменом или олимпиадой видно в календаре сразу: это те даты, ради
+  // которых весь план и считается.
+  const examDates = useMemo(
+    () => new Set(lyceumSchedule.filter((e) => e.kind === "exam" && e.date).map((e) => e.date)),
+    [lyceumSchedule]
+  );
+
   // Точки над числом — пройденные в этот день уроки, каждая в цвете своего предмета.
   // Берём только записи об отметке урока: заметки со временем сюда не считаются.
   const lessonDotsByDate = useMemo(() => {
@@ -2847,6 +2854,7 @@ export default function StudyPlanner() {
                   const ratio = goal > 0 ? Math.min(hours / goal, 1) : hours > 0 ? 1 : 0;
                   const selected = key === selectedDate;
                   const hasHw = hwDates.has(key);
+                  const hasExam = examDates.has(key);
                   const lessonDots = lessonDotsByDate[key] || [];
                   return (
                     <button
@@ -2878,7 +2886,10 @@ export default function StudyPlanner() {
                       {hasHw && <span style={styles.hwDot} />}
                       {/* Рамка выбранного дня — отдельным слоем поверх заливки: и тень,
                           и обводка рисуются под детьми элемента, поэтому заливка их
-                          перекрывала и выступала из-под рамки полоской. */}
+                          перекрывала и выступала из-под рамки полоской. Обводка
+                          экзамена живёт по тому же правилу, только слоем ниже:
+                          выбранный день должен быть виден и на дне экзамена. */}
+                      {hasExam && <span style={styles.calExamRing} />}
                       {selected && <span style={styles.calRing} />}
                     </button>
                   );
@@ -2896,7 +2907,8 @@ export default function StudyPlanner() {
               </div>
               <p style={styles.mutedSmall}>
                 Высота заливки — доля дневной цели, а цель на каждый день недели задаётся в «Распределении».
-                Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день.
+                Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. Красная рамка — день
+                экзамена или олимпиады.
               </p>
             </div>
             </section>
@@ -4680,7 +4692,15 @@ const styles = {
     color: "var(--ink)",
   },
   calFill: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 0 },
-  calRing: { position: "absolute", inset: 0, border: "2px solid var(--ink)", borderRadius: 8, zIndex: 2, pointerEvents: "none" },
+  calRing: { position: "absolute", inset: 0, border: "2px solid var(--ink)", borderRadius: 8, zIndex: 3, pointerEvents: "none" },
+  calExamRing: {
+    position: "absolute",
+    inset: 0,
+    border: "2px solid var(--redStrong)",
+    borderRadius: 8,
+    zIndex: 2,
+    pointerEvents: "none",
+  },
   calDayNum: { position: "relative", zIndex: 1 },
   calLegend: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, color: "var(--ink3)", margin: "12px 0 8px" },
   calLegendItem: { display: "flex", alignItems: "center", gap: 5 },
