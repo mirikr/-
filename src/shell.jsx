@@ -257,11 +257,16 @@ export function Countdowns({ next, main, tone }) {
 }
 
 // Шапка экрана: где мы и что здесь делают.
-export function ScreenHead({ title, note, children }) {
+export function ScreenHead({ title, note, date, children }) {
   return (
     <div style={styles.head}>
       <div style={styles.headText}>
-        <h1 style={styles.h1}>{title}</h1>
+        <h1 style={styles.h1}>
+          {title}
+          {/* Число и день недели — рядом с заголовком: в колонке слева они есть,
+              а на телефоне колонки нет, и календаря под рукой тоже. */}
+          {date && <span style={styles.headDate}>{date}</span>}
+        </h1>
         {note && <div style={styles.note}>{note}</div>}
       </div>
       {children ? <div style={styles.headSide}>{children}</div> : null}
@@ -386,5 +391,11 @@ const styles = {
   headText: { minWidth: 0 },
   h1: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 30, margin: 0, fontWeight: 400, lineHeight: 1.15 },
   note: { fontSize: 14, color: "var(--ink3)", marginTop: 5, lineHeight: 1.5 },
+  headDate: {
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 24,
+    color: "var(--ink3)",
+    marginLeft: 12,
+  },
   headSide: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
 };

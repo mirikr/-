@@ -22,8 +22,13 @@ const RELEASES = [
     items: [
       "Масштаб графика часов — ползунком под графиком, а не кнопками в шапке.",
       "Часы пишутся через запятую: «18,5 ч».",
+      "В сравнении версий можно выбрать любые две, а не только соседние.",
+      "В заголовке «Сегодня» — число и день недели.",
     ],
-    changes: [["Масштаб переключался тремя кнопками в шапке карточки", "Ползунок под графиком, подписи под ним тоже нажимаются"]],
+    changes: [
+      ["Масштаб переключался тремя кнопками в шапке карточки", "Ползунок под графиком, подписи под ним тоже нажимаются"],
+      ["Версии сравнивались ползунком, а подписи под ним слипались в кашу из цифр", "Два списка: любые две версии, и место не растёт с их числом"],
+    ],
   },
   {
     v: "0.6.3.1",
@@ -274,10 +279,26 @@ function Wipe({ before, after, beforeLabel, afterLabel }) {
 
 function Compare({ onBack }) {
   const ordered = [...RELEASES].reverse();
-  const [index, setIndex] = useState(ordered.length - 1);
-  const release = ordered[index];
-  const previous = index > 0 ? ordered[index - 1] : null;
-  const hasShots = previous && SHOT_VERSIONS.includes(previous.v) && SHOT_VERSIONS.includes(release.v);
+  // «от» может быть и «до приложения» — это индекс -1, шаг перед первой версией.
+  const [from, setFrom] = useState(ordered.length - 2);
+  const [to, setTo] = useState(ordered.length - 1);
+
+  // Порядок концов не даём перепутать: выбрали «от» позже «до» — сдвигается
+  // второй конец, а не появляется пустое сравнение задом наперёд.
+  function pickFrom(next) {
+    setFrom(next);
+    if (next >= to) setTo(Math.min(ordered.length - 1, next + 1));
+  }
+  function pickTo(next) {
+    setTo(next);
+    if (next <= from) setFrom(next - 1);
+  }
+
+  const left = from >= 0 ? ordered[from] : null;
+  const right = ordered[to];
+  const steps = ordered.slice(from + 1, to + 1);
+  const pairs = steps.flatMap((r) => r.changes || []);
+  const hasShots = left && SHOT_VERSIONS.includes(left.v) && SHOT_VERSIONS.includes(right.v);
 
   return (
     <>
@@ -285,42 +306,49 @@ function Compare({ onBack }) {
         <button onClick={onBack} className="ap-version" style={styles.backBtn}>
           ← вся история
         </button>
-        <div style={styles.compareVersions}>
-          {previous ? `${previous.v} → ${release.v}` : `до приложения → ${release.v}`}
-        </div>
+        <div style={styles.compareVersions}>{left ? `${left.v} → ${right.v}` : `до приложения → ${right.v}`}</div>
       </div>
 
-      <input
-        type="range"
-        min="0"
-        max={ordered.length - 1}
-        step="1"
-        value={index}
-        onChange={(e) => setIndex(Number(e.target.value))}
-        style={styles.slider}
-        aria-label="Версия"
-      />
-      <div style={styles.scaleRow}>
-        {ordered.map((r, i) => (
-          <button
-            key={r.v}
-            onClick={() => setIndex(i)}
-            className="ap-version"
-            style={{ ...styles.scaleMark, color: i === index ? "var(--accent)" : "var(--mute)" }}
-          >
-            {r.v}
-          </button>
-        ))}
+      {/* Версий уже полтора десятка, и подписями под ползунком они сливались в
+          кашу из цифр. Два списка занимают столько же места независимо от того,
+          сколько версий вышло, и позволяют сравнить любые две, а не соседние. */}
+      <div style={styles.pickRow}>
+        <label style={styles.pickCell}>
+          <span style={styles.pickLabel}>от версии</span>
+          <select value={from} onChange={(e) => pickFrom(Number(e.target.value))} style={styles.pickSelect}>
+            <option value={-1}>до приложения</option>
+            {ordered.slice(0, ordered.length - 1).map((r, i) => (
+              <option key={r.v} value={i}>
+                {r.v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span style={styles.pickArrow} aria-hidden="true">
+          →
+        </span>
+        <label style={styles.pickCell}>
+          <span style={styles.pickLabel}>до версии</span>
+          <select value={to} onChange={(e) => pickTo(Number(e.target.value))} style={styles.pickSelect}>
+            {ordered.map((r, i) =>
+              i === 0 ? null : (
+                <option key={r.v} value={i}>
+                  {r.v}
+                </option>
+              )
+            )}
+          </select>
+        </label>
       </div>
+      {steps.length > 1 && (
+        <div style={styles.pickNote}>
+          {steps.length} версий за этот промежуток, изменения собраны вместе.
+        </div>
+      )}
 
       {/* Картинки сняты из истории репозитория скриптом scripts/make-version-shots.mjs. */}
       {hasShots ? (
-        <Wipe
-          before={shotUrl(previous.v)}
-          after={shotUrl(release.v)}
-          beforeLabel={previous.v}
-          afterLabel={release.v}
-        />
+        <Wipe before={shotUrl(left.v)} after={shotUrl(right.v)} beforeLabel={left.v} afterLabel={right.v} />
       ) : (
         <div style={styles.noShots}>
           Снимками показан переход {SHOT_VERSIONS[0]} → {SHOT_VERSIONS[1]}: там разница видна с первого взгляда.
@@ -329,7 +357,7 @@ function Compare({ onBack }) {
       )}
 
       <div style={styles.compareBody}>
-        {(release.changes || []).map((pair, i) => (
+        {pairs.map((pair, i) => (
           <div key={i} style={styles.pair}>
             <div style={styles.before}>
               <div style={styles.pairLabel}>было</div>
@@ -344,7 +372,7 @@ function Compare({ onBack }) {
             </div>
           </div>
         ))}
-        {!(release.changes || []).length && <div style={styles.list}>Для этой версии сравнение не записано.</div>}
+        {!pairs.length && <div style={styles.list}>Для этого промежутка сравнение не записано.</div>}
       </div>
     </>
   );
@@ -468,12 +496,24 @@ const styles = {
     marginBottom: 16,
     width: "100%",
   },
+  pickRow: { display: "flex", alignItems: "flex-end", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+  pickCell: { flex: "1 1 120px", minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
+  pickLabel: { fontSize: 11, color: "var(--mute)" },
+  pickSelect: {
+    width: "100%",
+    padding: "7px 9px",
+    border: "1px solid var(--line)",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    background: "var(--panel2)",
+    color: "var(--ink)",
+  },
+  pickArrow: { color: "var(--mute)", fontSize: 14, paddingBottom: 8 },
+  pickNote: { fontSize: 11.5, color: "var(--mute)", marginBottom: 8 },
   compareHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
   backBtn: { fontSize: 12.5, color: "var(--ink3)", border: "none", background: "none", padding: 0 },
   compareVersions: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 16 },
-  slider: { width: "100%", accentColor: "var(--accent)" },
-  scaleRow: { display: "flex", justifyContent: "space-between", marginBottom: 14 },
-  scaleMark: { border: "none", background: "none", padding: 0, fontSize: 11, fontWeight: 600 },
   wipe: {
     position: "relative",
     width: "100%",
