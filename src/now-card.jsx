@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { bellState, dayKeyOf, lessonsAt, minutesWord, nextSchoolDay, periodLabel } from "./lyceum-now.js";
+import {
+  bellState,
+  dayKeyOf,
+  lessonsAt,
+  minutesOfTime,
+  minutesWord,
+  nextDayWith,
+  nextSchoolDay,
+  periodLabel,
+  WEEK,
+} from "./lyceum-now.js";
 
 // «Сейчас» на экране «Сегодня»: какой урок идёт по звонкам, что в это время
 // стоит у тебя и что — у всей параллели.
@@ -17,7 +27,27 @@ export default function NowCard({ entriesFor, styles }) {
   }, []);
 
   const dayKey = dayKeyOf(now);
-  const state = bellState(dayKey, now.getHours() * 60 + now.getMinutes());
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const state = bellState(dayKey, nowMin);
+
+  // «Первый в 08:30» по общей сетке бесполезно, если у тебя первым уроком
+  // вторая пара. Поэтому время первого урока берётся из своего расписания, а
+  // общая сетка остаётся запасным ответом — для тех, кто его ещё не выбрал.
+  const myStarts = (key) =>
+    (entriesFor(key) || [])
+      .map((e) => e.start)
+      .filter(Boolean)
+      .sort();
+  const mineToday = myStarts(dayKey);
+  const hasOwn = WEEK.some((key) => myStarts(key).length > 0);
+  const myNextDay = hasOwn ? nextDayWith(dayKey, (key) => myStarts(key).length > 0) : null;
+  const myEnds = (entriesFor(dayKey) || []).map((e) => e.end).filter(Boolean).sort();
+  const me = {
+    hasOwn,
+    firstToday: mineToday[0] || null,
+    lastEndToday: myEnds[myEnds.length - 1] || null,
+    next: myNextDay ? { when: myNextDay.when, start: myStarts(myNextDay.day)[0] } : null,
+  };
 
   // На перемене и до начала дня смотреть интересно уже на следующий урок:
   // перемена — это ожидание, а не пауза сама по себе.
@@ -25,7 +55,7 @@ export default function NowCard({ entriesFor, styles }) {
   const rows = shown ? lessonsAt(dayKey, shown.n) : [];
   const mine = shown ? (entriesFor(dayKey) || []).filter((e) => e.start === shown.start) : [];
 
-  const head = headline(state, dayKey);
+  const head = headline(state, dayKey, me, nowMin);
 
   return (
     <section className="ap-card" style={styles.card}>
@@ -82,14 +112,32 @@ export default function NowCard({ entriesFor, styles }) {
   );
 }
 
-function headline(state, dayKey) {
+function headline(state, dayKey, me, nowMin) {
   const left = (n) => n + " " + minutesWord(n);
-  // Когда уроков нет или они кончились, полезно не «их нет», а когда следующие.
+  // Когда уроков нет или они кончились, полезно не «их нет», а когда следующие
+  // — и именно твои. Общая сетка отвечает только тем, кто расписание не выбрал.
   const later = () => {
+    if (me.next) return `${me.next.when} твой первый в ${me.next.start}`;
+    if (me.hasOwn) return "";
     const day = nextSchoolDay(dayKey);
-    return day ? `${day.when} первый в ${day.first.start}` : "";
+    return day ? `${day.when} первый урок в параллели в ${day.first.start}` : "";
   };
   if (state.phase === "off") return { title: "Сегодня уроков нет", note: later() };
+
+  // Дальше — про свой день, а не про звонки лицея: в семь вечера у параллели
+  // идёт вечерняя пара, а у тебя уроки кончились в одиннадцать, и «идёт
+  // вечерняя пара» в заголовке — ответ не на тот вопрос. Что происходит у всех,
+  // видно ниже, в списке.
+  if (me.hasOwn) {
+    if (!me.firstToday) return { title: "Сегодня у тебя уроков нет", note: later() };
+    if (me.lastEndToday && nowMin > minutesOfTime(me.lastEndToday)) {
+      return { title: "Твои уроки на сегодня закончились", note: later() };
+    }
+    if (nowMin < minutesOfTime(me.firstToday)) {
+      const wait = minutesOfTime(me.firstToday) - nowMin;
+      return { title: "Уроки ещё не начались", note: `твой первый в ${me.firstToday}, через ${left(wait)}` };
+    }
+  }
   if (state.phase === "lesson") {
     return {
       title: "Идёт " + periodLabel(state.current.n),
@@ -105,7 +153,10 @@ function headline(state, dayKey) {
     return { title: "Перемена", note: `до ${periodLabel(state.next.n)} ${left(state.leftMin)}` };
   }
   if (state.phase === "before") {
-    return { title: "Уроки ещё не начались", note: `первый в ${state.next.start}, через ${left(state.leftMin)}` };
+    return {
+      title: "Уроки ещё не начались",
+      note: `первый в параллели в ${state.next.start}, через ${left(state.leftMin)}`,
+    };
   }
   return { title: "Уроки на сегодня закончились", note: later() };
 }
