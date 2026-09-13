@@ -61,6 +61,32 @@ html, body { background: var(--bg); color: var(--ink); }
   -webkit-backdrop-filter: blur(20px) saturate(1.08);
 }
 
+/* На телефоне карточки занимают почти весь экран: фон виден только сквозь них,
+   и при том же стекле, что на большом экране, от движения не остаётся ничего.
+   Поэтому на узком экране стекло тоньше, а размытие слабее — иначе за карточкой
+   видно муть, а не нити. */
+@media (max-width: 900px) {
+  .ap-live-bg {
+    --panel: rgba(251, 249, 243, 0.46);
+    --panel2: rgba(255, 253, 248, 0.36);
+    --warmBg: rgba(251, 240, 210, 0.52);
+    --redBg: rgba(249, 226, 223, 0.52);
+    --neutralBg: rgba(241, 238, 228, 0.36);
+  }
+  .ap-live-bg[data-theme="night"] {
+    --panel: rgba(30, 28, 22, 0.46);
+    --panel2: rgba(33, 31, 25, 0.36);
+    --warmBg: rgba(42, 36, 23, 0.52);
+    --redBg: rgba(42, 29, 27, 0.52);
+    --neutralBg: rgba(33, 31, 25, 0.36);
+  }
+  .ap-live-bg .ap-card,
+  .ap-live-bg .ap-dialog {
+    backdrop-filter: blur(11px) saturate(1.06);
+    -webkit-backdrop-filter: blur(11px) saturate(1.06);
+  }
+}
+
 /* Живой фон рисуется под интерфейсом. Колонка и экран статичны, а холст
    позиционирован, поэтому без явного слоя он лёг бы поверх них. */
 .ap-rail, .ap-main, .ap-tabbar { position: relative; z-index: 1; }
