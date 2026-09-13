@@ -17,10 +17,18 @@ import { randomEgg, eggById, EASTER_CHANCE, EASTER_EVERY_MS } from "./constellat
 //   не видно, а работы процессору втрое меньше.
 const FPS = 20;
 const LINK_DIST = 168;
-// Одна точка на такую площадь. На ноутбуке выходит около полусотни, на
-// телефоне — полтора десятка: густая сетка на маленьком экране выглядит грязью.
+// Одна точка на такую площадь. На телефоне сетку сгущаем вдвое: там карточки
+// занимают почти весь экран, и фон видно только сквозь стекло — редкая россыпь
+// за ним пропадает совсем. На ноутбуке выходит около полусотни точек, на
+// телефоне — около двадцати пяти.
 const AREA_PER_DOT = 26000;
+const AREA_PER_DOT_NARROW = 12000;
+const MIN_DOTS = 12;
+const MIN_DOTS_NARROW = 22;
+const NARROW = 900;
 const MAX_DOTS = 64;
+// Палец убрали — нить не гаснет рывком, а расходится за секунду.
+const TOUCH_FADE = 1.1;
 // Сколько живёт созвездие: две секунды на сбор, пять на просмотр, две на
 // расход. Дольше — и оно превращается из случайной находки в обои.
 const EGG_IN = 2000;
@@ -49,7 +57,6 @@ export default function Background({ theme, enabled = true, showcase = null }) {
     const canvas = canvasRef.current;
     if (!canvas || !enabled) return;
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const fine = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
 
     const ctx = canvas.getContext("2d");
     let raf = 0;
@@ -58,7 +65,11 @@ export default function Background({ theme, enabled = true, showcase = null }) {
     let size = { w: 0, h: 0 };
     let dots = [];
     let palette = [];
-    const pointer = { x: -9999, y: -9999 };
+    // power — насколько фон сейчас тянется к пальцу или курсору: у мыши он
+    // держится, пока она на странице, у касания гаснет после того, как палец
+    // подняли. Без этого на телефоне нить осталась бы висеть там, где
+    // коснулись в последний раз.
+    const pointer = { x: -9999, y: -9999, power: 0, fading: false };
     // Созвездие: набор точек, едущих к своим местам, и рёбра между ними.
     let egg = null;
     let lastRoll = 0;
@@ -118,18 +129,42 @@ export default function Background({ theme, enabled = true, showcase = null }) {
       ];
     }
 
-    function seed() {
+    function dotCount() {
       const { w, h } = size;
-      const count = Math.min(MAX_DOTS, Math.max(12, Math.round((w * h) / AREA_PER_DOT)));
-      dots = Array.from({ length: count }, () => ({
+      const narrow = w < NARROW;
+      const per = narrow ? AREA_PER_DOT_NARROW : AREA_PER_DOT;
+      const least = narrow ? MIN_DOTS_NARROW : MIN_DOTS;
+      return Math.min(MAX_DOTS, Math.max(least, Math.round((w * h) / per)));
+    }
+
+    function newDot() {
+      const { w, h } = size;
+      return {
         x: Math.random() * w,
         y: Math.random() * h,
         // Скорость в пикселях в секунду: медленнее пешехода в сто раз.
         vx: (Math.random() - 0.5) * 7,
         vy: (Math.random() - 0.5) * 7,
-        r: 1.6 + Math.random() * 3.4,
+        // На узком экране точки крупнее: сквозь размытие стекла мелкие
+        // превращаются в дымку, и движения за карточкой не разобрать.
+        r: (w < NARROW ? 2.1 : 1.6) + Math.random() * 3.4,
         color: Math.floor(Math.random() * 6),
-      }));
+      };
+    }
+
+    // На телефоне адресная строка прячется при прокрутке, и это приходит как
+    // изменение размера окна. Пересобирать россыпь заново нельзя: фон дёргался
+    // бы при каждом движении пальца — поэтому точки остаются, меняется только
+    // их число.
+    function seed() {
+      const { w, h } = size;
+      const count = dotCount();
+      dots = dots.slice(0, count);
+      while (dots.length < count) dots.push(newDot());
+      dots.forEach((d) => {
+        d.x = Math.min(Math.max(d.x, -20), w + 20);
+        d.y = Math.min(Math.max(d.y, -20), h + 20);
+      });
     }
 
     function resize() {
@@ -143,18 +178,29 @@ export default function Background({ theme, enabled = true, showcase = null }) {
       seed();
     }
 
-    function onMove(e) {
+    function aim(e) {
       pointer.x = e.clientX;
       pointer.y = e.clientY;
+      pointer.power = 1;
+      pointer.fading = false;
+    }
+
+    // Мышь со страницы не уходит сама по себе, поэтому её нить держится; палец
+    // подняли — отпускаем, и притяжение расходится за TOUCH_FADE.
+    function onUp(e) {
+      if (e.pointerType !== "mouse") pointer.fading = true;
     }
 
     function onLeave() {
+      pointer.power = 0;
+      pointer.fading = false;
       pointer.x = -9999;
       pointer.y = -9999;
     }
 
     function step(dt, now) {
       const { w, h } = size;
+      if (pointer.fading && pointer.power > 0) pointer.power = Math.max(0, pointer.power - dt / TOUCH_FADE);
       // Вызов из раздела «Тест» показывает конкретную фигуру сразу.
       const asked = showcaseRef.current;
       if (asked && asked.nonce !== lastShowcase) {
@@ -225,13 +271,14 @@ export default function Background({ theme, enabled = true, showcase = null }) {
         }
       }
 
-      // Курсор дотягивается до ближних точек своей нитью — фон отзывается, но
-      // ничего не перестраивает.
-      if (fine && !reduce && pointer.x > -9000) {
+      // Курсор или палец дотягивается до ближних точек своей нитью — фон
+      // отзывается, но ничего не перестраивает.
+      const reach = reduce ? 0 : pointer.power;
+      if (reach > 0.02 && pointer.x > -9000) {
         dots.forEach((d) => {
           const dist = Math.hypot(d.x - pointer.x, d.y - pointer.y);
           if (dist > LINK_DIST * 1.3) return;
-          ctx.globalAlpha = (1 - dist / (LINK_DIST * 1.3)) * (night ? 0.38 : 0.4) * fade;
+          ctx.globalAlpha = (1 - dist / (LINK_DIST * 1.3)) * (night ? 0.38 : 0.4) * fade * reach;
           ctx.beginPath();
           ctx.moveTo(d.x, d.y);
           ctx.lineTo(pointer.x, pointer.y);
@@ -240,8 +287,8 @@ export default function Background({ theme, enabled = true, showcase = null }) {
       }
 
       dots.forEach((d) => {
-        const near = fine && pointer.x > -9000 ? Math.hypot(d.x - pointer.x, d.y - pointer.y) : 9999;
-        const lift = near < LINK_DIST ? 1 - near / LINK_DIST : 0;
+        const near = reach > 0.02 ? Math.hypot(d.x - pointer.x, d.y - pointer.y) : 9999;
+        const lift = (near < LINK_DIST ? 1 - near / LINK_DIST : 0) * reach;
         ctx.globalAlpha = ((night ? 0.6 : 0.62) + lift * 0.3) * fade;
         ctx.fillStyle = palette[d.color] || lineColor;
         ctx.beginPath();
@@ -304,8 +351,13 @@ export default function Background({ theme, enabled = true, showcase = null }) {
     start();
     window.addEventListener("resize", resize);
     document.addEventListener("visibilitychange", onVisibility);
-    if (fine && !reduce) {
-      window.addEventListener("pointermove", onMove, { passive: true });
+    // Слушаем и мышь, и касание: на телефоне pointermove приходит, только пока
+    // палец на экране, поэтому отдельного «ведения» для него не нужно.
+    if (!reduce) {
+      window.addEventListener("pointermove", aim, { passive: true });
+      window.addEventListener("pointerdown", aim, { passive: true });
+      window.addEventListener("pointerup", onUp, { passive: true });
+      window.addEventListener("pointercancel", onUp, { passive: true });
       document.addEventListener("pointerleave", onLeave);
     }
     return () => {
@@ -313,7 +365,10 @@ export default function Background({ theme, enabled = true, showcase = null }) {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointermove", aim);
+      window.removeEventListener("pointerdown", aim);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       document.removeEventListener("pointerleave", onLeave);
     };
   }, [enabled, theme]);
