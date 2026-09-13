@@ -21,6 +21,7 @@ import Background from "./background.jsx";
 import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
+import NowCard from "./now-card.jsx";
 import SchedulePreset from "./lyceum-preset.jsx";
 import ExamPreset from "./lyceum-exams-panel.jsx";
 import { KT_PRESET_ID, DEFAULT_KT } from "./lyceum-exams-10.js";
@@ -39,9 +40,9 @@ const DOW_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]; // Date.ge
 // the number is what the schedule maths sorts by.
 const EVENT_PRIORITIES = [
   // strong и tint — для карточек расписания: тонкая полоска сбоку читалась плохо.
-  { value: 1, mark: "!", label: "не особо важно", color: "var(--mute)", onDark: "#B9B2A0", strong: "var(--ink3)", tint: "var(--neutralBg)" },
-  { value: 2, mark: "⚡", label: "важно", color: "var(--accent)", onDark: "#D9BE6A", strong: "var(--gold)", tint: "var(--warmBg)" },
-  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "var(--red)", onDark: "#D98A8A", strong: "var(--redStrong)", tint: "var(--redBg)" },
+  { value: 1, mark: "!", label: "не особо важно", color: "var(--mute)", strong: "var(--ink3)", tint: "var(--neutralBg)" },
+  { value: 2, mark: "⚡", label: "важно", color: "var(--accent)", strong: "var(--gold)", tint: "var(--warmBg)" },
+  { value: 3, mark: "⚡⚡⚡", label: "очень важно", color: "var(--red)", strong: "var(--redStrong)", tint: "var(--redBg)" },
 ];
 
 // Weight of a lyceum lesson. Order matters: later entries outrank earlier ones when the same
@@ -2161,6 +2162,10 @@ export default function StudyPlanner() {
                 )}
               </div>
             </section>
+
+            {/* Что идёт прямо сейчас — и у тебя, и у всей параллели. */}
+            <NowCard entriesFor={dayEntries} styles={styles} />
+
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Часы занятий</div>
@@ -2268,7 +2273,9 @@ export default function StudyPlanner() {
                     const info = priorityInfo(e.priority);
                     return (
                       <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
-                        <span style={{ ...styles.todayTime, color: info.color }}>{info.mark}</span>
+                        <span style={styles.todayMark}>
+                          <PriorityMark value={e.priority} height={11} />
+                        </span>
                         <span style={styles.todayName}>{e.name}</span>
                         <span style={styles.todayMeta}>
                           {left} {daysWord(left)}
@@ -2366,48 +2373,49 @@ export default function StudyPlanner() {
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Отсчёт</div>
-              <div style={styles.countdownBox}>
-                {nextEvent ? (
-                  <>
+              {nextEvent ? (
+                <>
+                  <div
+                    style={{
+                      ...styles.countdownLead,
+                      borderLeftColor: priorityInfo(nextEvent.priority).strong,
+                      background: priorityInfo(nextEvent.priority).tint,
+                    }}
+                  >
                     <div style={styles.countdownNum}>{daysUntilDate(nextEvent.date)}</div>
-                    <div style={styles.countdownLabel}>{daysWord(daysUntilDate(nextEvent.date))} до события</div>
-                    <div style={styles.countdownEvent}>
-                      <span style={{ color: priorityInfo(nextEvent.priority).onDark }}>
-                        {priorityInfo(nextEvent.priority).mark}
-                      </span>{" "}
-                      {nextEvent.name}
-                    </div>
-                    <div style={styles.countdownDate}>
-                      {formatEventDate(nextEvent.date)}
-                      {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
-                    </div>
-                    {upcomingEvents.length > 1 && (
-                      <div style={styles.countdownRest}>
-                        {upcomingEvents.slice(1).map((e) => {
-                          const left = daysUntilDate(e.date);
-                          const info = priorityInfo(e.priority);
-                          return (
-                            <div key={e.id} style={styles.countdownRestRow}>
-                              <span style={{ color: info.onDark }}>{info.mark}</span>
-                              <span style={styles.countdownRestName}>{e.name}</span>
-                              {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
-                              <span style={styles.countdownRestLeft}>
-                                {left} {daysWord(left)}
-                              </span>
-                            </div>
-                          );
-                        })}
+                    <div style={styles.countdownLeadText}>
+                      <div style={styles.countdownLabel}>{daysWord(daysUntilDate(nextEvent.date))} до события</div>
+                      <div style={styles.countdownEvent}>
+                        <PriorityMark value={nextEvent.priority} height={13} />
+                        <span>{nextEvent.name}</span>
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={styles.countdownEmpty}>
-                    Событий пока нет.
-                    <br />
-                    Добавьте экзамен или олимпиаду рядом.
+                      <div style={styles.countdownDate}>
+                        {formatEventDate(nextEvent.date)}
+                        {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                  {upcomingEvents.length > 1 && (
+                    <div style={styles.countdownRest}>
+                      {upcomingEvents.slice(1).map((e) => {
+                        const left = daysUntilDate(e.date);
+                        return (
+                          <div key={e.id} style={styles.countdownRestRow}>
+                            <PriorityMark value={e.priority} height={11} />
+                            <span style={styles.countdownRestName}>{e.name}</span>
+                            {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
+                            <span style={styles.countdownRestLeft}>
+                              {left} {daysWord(left)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={styles.countdownEmpty}>Событий пока нет — добавьте экзамен или олимпиаду рядом.</div>
+              )}
 
               <button onClick={() => setCalendarPanel(!calendarPanel)} style={styles.eventsToggle}>
                 {calendarPanel ? "Скрыть календарь" : "Календарь телефона"}
@@ -2849,7 +2857,7 @@ export default function StudyPlanner() {
               {EVENT_PRIORITIES.map((p, i) => (
                 <span key={p.value}>
                   {i > 0 && " · "}
-                  <span style={{ color: p.strong, fontWeight: 700 }}>{p.mark}</span> {p.label}
+                  <PriorityMark value={p.value} height={10} /> {p.label}
                 </span>
               ))}
               <br />
@@ -3045,8 +3053,8 @@ export default function StudyPlanner() {
                           {name}
                           {dayInfo && (
                             <>
-                              <span style={{ ...styles.dayPriority, color: priorityInfo(dayInfo.priority).strong }}>
-                                {priorityInfo(dayInfo.priority).mark}
+                              <span style={styles.dayPriority}>
+                                <PriorityMark value={dayInfo.priority} height={10} />
                               </span>
                               <span
                                 style={{
@@ -3479,6 +3487,29 @@ export default function StudyPlanner() {
   );
 }
 
+// Важность — три столбика, как шкала: сколько закрашено, такая и важность.
+// Раньше здесь стояла эмодзи-молния, но на телефоне она рисуется оранжевой и
+// была единственным насыщенным цветом во всём приложении — из-за неё карточка
+// отсчёта выглядела чужой вставкой. Столбики берут цвет из палитры, тот же,
+// что у полоски слева на карточке урока.
+function PriorityMark({ value, height = 12, on, off }) {
+  const info = priorityInfo(value);
+  return (
+    <span style={{ ...styles.priorityMark, height }} title={info.label} aria-label={"важность: " + info.label}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            ...styles.priorityBar,
+            height: Math.round(height * (0.45 + i * 0.275)),
+            background: i < info.value ? on || info.strong : off || "var(--line)",
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 function PriorityPicker({ value, onChange }) {
   return (
     <div style={styles.priorityRow}>
@@ -3491,12 +3522,11 @@ function PriorityPicker({ value, onChange }) {
             title={p.label}
             style={{
               ...styles.priorityBtn,
-              color: active ? "#fff" : p.color,
-              background: active ? p.color: "var(--btnInk)",
+              background: active ? p.color : "var(--btnInk)",
               borderColor: active ? p.color : "var(--line)",
             }}
           >
-            {p.mark}
+            <PriorityMark value={p.value} height={13} on={active ? "#fff" : undefined} off={active ? "rgba(255,255,255,.4)" : undefined} />
           </button>
         );
       })}
@@ -3570,7 +3600,8 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
     <div style={styles.eventsEditor}>
       <p style={styles.muted}>
         Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
-        план: «{EVENT_PRIORITIES[2].mark}» важнее «{EVENT_PRIORITIES[1].mark}» и «{EVENT_PRIORITIES[0].mark}». Если
+        план: <PriorityMark value={3} height={10} /> важнее <PriorityMark value={2} height={10} /> и{" "}
+        <PriorityMark value={1} height={10} />. Если
         приоритет одинаковый, берётся ближайшее. Можно выбрать и вручную — «считать план по нему» у любого события.
         Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
         это одна и та же запись, и править её можно с любой стороны.
@@ -4320,6 +4351,23 @@ const styles = {
     padding: "6px 9px",
   },
   todayTime: { fontSize: 12.5, fontWeight: 600, minWidth: 42 },
+  todayMark: { minWidth: 42, display: "flex", alignItems: "center" },
+  // «Сейчас»: своя строка сверху, свой урок и то же время у всей параллели.
+  nowHead: { display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 10 },
+  nowTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19 },
+  nowNote: { fontSize: 12.5, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
+  nowMine: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 },
+  nowMineRow: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", fontSize: 13.5 },
+  nowMineTag: { fontSize: 10.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--accent)", flexShrink: 0 },
+  nowMineName: { fontWeight: 600, color: "var(--ink)" },
+  nowMineMeta: { color: "var(--ink3)", fontSize: 12.5 },
+  nowAll: { borderTop: "1px solid var(--line2)", paddingTop: 10 },
+  nowAllTitle: { fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--mute)", marginBottom: 8 },
+  nowAllRow: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 0" },
+  nowAllName: { fontSize: 13.5, fontWeight: 600, color: "var(--ink2)", display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
+  nowAllWho: { fontSize: 11, fontWeight: 400, color: "var(--mute)" },
+  nowAllItems: { display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12.5, color: "var(--ink3)" },
+  nowAllItem: { whiteSpace: "nowrap" },
   todayName: { fontSize: 13.5, fontWeight: 600, flex: "1 1 120px", minWidth: 0 },
   todayMeta: { fontSize: 12, color: "var(--ink3)" },
   quickLog: { borderTop: "1px solid var(--line2)", paddingTop: 10, marginTop: 4 },
@@ -4422,26 +4470,55 @@ const styles = {
     textAlign: "left",
   },
   sectionChevron: { fontSize: 13, color: "var(--mute)", width: 12, flexShrink: 0 },
-  countdownBox: { background: "var(--rail)", color: "var(--railInk)", borderRadius: 10, padding: "16px 18px", textAlign: "center", width: "100%" },
-  countdownNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 34, lineHeight: 1 },
-  countdownLabel: { fontSize: 12, opacity: 0.75, marginTop: 2, marginBottom: 8 },
-  dateInput: { border: "1px solid var(--line)", background: "var(--panel2)", color: "inherit", borderRadius: 8, padding: "7px 9px", fontSize: 12.5, width: "100%" },
-  countdownEvent: { fontSize: 16, fontWeight: 700, marginTop: 8, lineHeight: 1.3 },
-  countdownDate: { fontSize: 12, opacity: 0.7, marginTop: 3 },
-  countdownRest: {
-    marginTop: 10,
-    paddingTop: 8,
-    borderTop: "1px solid var(--railActive)",
+  // Отсчёт собран из того же, что и карточка урока: полоска важности слева и её
+  // же оттенок фоном. Раньше здесь стояла тёмная плашка цветом боковой колонки —
+  // единственная такая во всём приложении, и читалась она как чужая вставка.
+  countdownLead: {
     display: "flex",
-    flexDirection: "column",
-    gap: 5,
-    textAlign: "left",
+    alignItems: "center",
+    gap: 16,
+    borderWidth: "1px 1px 1px 3px",
+    borderStyle: "solid",
+    borderColor: "var(--line)",
+    borderRadius: 10,
+    padding: "14px 16px",
   },
-  countdownRestRow: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 12.5, lineHeight: 1.4, padding: "3px 0" },
-  countdownRestName: { flex: "1 1 auto", minWidth: 0, opacity: 0.9, textAlign: "left", overflowWrap: "anywhere" },
-  countdownRestLeft: { fontSize: 13.5, opacity: 0.75, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
-  countdownPlan: { fontSize: 9.5, color: "var(--green)", marginLeft: 6, whiteSpace: "nowrap" },
-  countdownEmpty: { fontSize: 12.5, opacity: 0.8, lineHeight: 1.5 },
+  countdownNum: {
+    fontFamily: "'PT Serif', Georgia, serif",
+    fontSize: 42,
+    lineHeight: 0.9,
+    color: "var(--ink)",
+    fontVariantNumeric: "tabular-nums",
+    flexShrink: 0,
+  },
+  countdownLeadText: { minWidth: 0 },
+  countdownLabel: { fontSize: 12, color: "var(--mute)", marginBottom: 4 },
+  dateInput: { border: "1px solid var(--line)", background: "var(--panel2)", color: "inherit", borderRadius: 8, padding: "7px 9px", fontSize: 12.5, width: "100%" },
+  countdownEvent: {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    fontSize: 15.5,
+    fontWeight: 600,
+    color: "var(--ink)",
+    lineHeight: 1.3,
+    overflowWrap: "anywhere",
+  },
+  countdownDate: { fontSize: 12, color: "var(--ink3)", marginTop: 3 },
+  countdownRest: { marginTop: 12, display: "flex", flexDirection: "column" },
+  countdownRestRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    lineHeight: 1.4,
+    padding: "7px 2px",
+    borderTop: "1px solid var(--line2)",
+  },
+  countdownRestName: { flex: "1 1 auto", minWidth: 0, color: "var(--ink2)", overflowWrap: "anywhere" },
+  countdownRestLeft: { fontSize: 13, color: "var(--ink3)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
+  countdownPlan: { fontSize: 10, color: "var(--green)", marginLeft: 6, whiteSpace: "nowrap", letterSpacing: 0.4, textTransform: "uppercase" },
+  countdownEmpty: { fontSize: 13, color: "var(--ink3)", lineHeight: 1.5 },
   eventsStrip: { marginBottom: 20, display: "flex", flexDirection: "column", gap: 6 },
   eventRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, flexWrap: "wrap" },
   eventMark: { fontWeight: 700, minWidth: 14 },
@@ -4547,6 +4624,8 @@ const styles = {
   },
   eventNameInput: { flex: "3 1 200px", minWidth: 0, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
   eventDateInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
+  priorityMark: { display: "inline-flex", alignItems: "flex-end", gap: 2, flexShrink: 0, verticalAlign: "-1px" },
+  priorityBar: { width: 3, borderRadius: 1.5, display: "block" },
   priorityRow: { display: "flex", gap: 4 },
   priorityBtn: { border: "1px solid", borderRadius: 8, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
