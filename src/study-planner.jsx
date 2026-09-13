@@ -1817,6 +1817,14 @@ export default function StudyPlanner() {
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
 
   const todayLabel = new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  // В заголовке экрана порядок обратный: сначала число, потом день недели —
+  // «13 сентября, воскресенье» читается быстрее, чем наоборот.
+  const todayHeadLabel = (() => {
+    const now = new Date();
+    const day = now.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    const weekday = now.toLocaleDateString("ru-RU", { weekday: "long" });
+    return `${day}, ${weekday}`;
+  })();
   const pad2 = (n) => String(n).padStart(2, "0") + ":00";
   const modeLabel =
     mode === "auto"
@@ -2022,7 +2030,7 @@ export default function StudyPlanner() {
           </div>
         )}
 
-        <ScreenHead title={screenInfo.title} note={screenInfo.note}>
+        <ScreenHead title={screenInfo.title} note={screenInfo.note} date={screen === "today" ? todayHeadLabel : null}>
           <div className="ap-only-mobile">
             <Countdowns next={nextCountdown} main={mainCountdown} />
           </div>
