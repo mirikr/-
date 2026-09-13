@@ -17,6 +17,8 @@ import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js"
 import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
 import IntroDialog from "./intro-dialog.jsx";
+import Background from "./background.jsx";
+import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import SchedulePreset from "./lyceum-preset.jsx";
@@ -185,6 +187,27 @@ const INTRO_KEY = "planner-intro-version";
 // Про что именно рассказываем. Привязка к номеру приложения всплывала бы с
 // каждым обновлением, а рассказ один и тот же.
 const INTRO_VERSION = "0.6.0-schedule";
+// Живой фон — настройка устройства, а не данных: на слабом телефоне его можно
+// выключить, не трогая второй.
+const BG_KEY = "planner-background";
+
+function readBackgroundOn() {
+  try {
+    return localStorage.getItem(BG_KEY) !== "off";
+  } catch (e) {
+    return true;
+  }
+}
+
+// Номер недели по ISO: неделя начинается с понедельника, а у года их 52-53.
+function weekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d - start) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 // Встроенные предметы (право, экономика, политология, социология, философия,
@@ -336,6 +359,16 @@ function daysWord(n) {
   return "дней";
 }
 
+// Предмет без своей записи в data — не выдумка: свои предметы и их содержимое
+// лежат в состоянии по отдельности, и при слиянии с другого устройства первое
+// доезжало раньше второго. Приложение на этом падало белым экраном, а вместе с
+// ним пропадал доступ ко всем записям, поэтому пустая заготовка отдаётся всегда.
+const EMPTY_SUBJECT = { topics: [], custom: [] };
+
+function subjectData(data, id) {
+  return data[id] || EMPTY_SUBJECT;
+}
+
 function buildDefaultData() {
   const data = {};
   SUBJECT_DEFS.forEach((s) => {
@@ -468,6 +501,14 @@ export default function StudyPlanner() {
   // Событие, по которому считается план. Пусто — берётся самое приоритетное:
   // так было всегда, и для большинства этого достаточно.
   const [mainEventId, setMainEventId] = useState("");
+  // Неделя, на которую время уже распределено. Пока она не совпадает с текущей,
+  // на «Сегодня» висит напоминание: без него новая неделя начиналась с прошлых
+  // цифр, и план тихо расходился с жизнью.
+  const [weekPlanned, setWeekPlanned] = useState("");
+  const [backgroundOn, setBackgroundOn] = useState(readBackgroundOn);
+  // Чем вызвана пасхалка: id фигуры и счётчик, чтобы одну и ту же можно было
+  // позвать дважды подряд.
+  const [showcase, setShowcase] = useState(null);
   const [homework, setHomework] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
@@ -582,6 +623,7 @@ export default function StudyPlanner() {
           if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
           if (parsed.examPicks) setExamPicks(parsed.examPicks);
           if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
+          if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
         }
@@ -695,6 +737,7 @@ export default function StudyPlanner() {
           presetChoices,
           examPicks,
           mainEventId,
+          weekPlanned,
           openSections,
           homework,
         });
@@ -722,7 +765,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, weekPlanned, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -733,7 +776,7 @@ export default function StudyPlanner() {
     let totalAll = 0;
     const perSubject = {};
     ALL_SUBJECTS.forEach((s) => {
-      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       const done = list.filter((t) => t.done).length;
       perSubject[s.id] = { done, total: list.length, pct: list.length ? Math.round((done / list.length) * 100) : 0 };
       doneAll += done;
@@ -807,7 +850,7 @@ export default function StudyPlanner() {
     let remainingMinutes = 0;
     let remainingTopics = 0;
     ALL_SUBJECTS.forEach((s) => {
-      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       list.forEach((t) => {
         if (!t.done) {
           remainingMinutes += Number(t.duration) || D;
@@ -1074,12 +1117,20 @@ export default function StudyPlanner() {
     });
   }
 
+  // Тронули распределение — значит неделю распланировали; отдельная кнопка
+  // «я всё сделал» нужна только тем, кого прошлые цифры устраивают как есть.
+  function markWeekPlanned() {
+    setWeekPlanned(weekKey(new Date()));
+  }
+
   function setAlloc(id, val) {
     setBudget((prev) => ({ ...prev, alloc: { ...prev.alloc, [id]: Math.max(0, Number(val) || 0) } }));
+    markWeekPlanned();
   }
 
   function setDailyGoal(key, minutes) {
     setBudget((prev) => ({ ...prev, daily: { ...prev.daily, [key]: Math.max(0, Number(minutes) || 0) } }));
+    markWeekPlanned();
   }
 
   function toggleNotesPanel(topicId) {
@@ -1096,7 +1147,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, weekPlanned, openSections, homework },
       null,
       2
     );
@@ -1129,6 +1180,7 @@ export default function StudyPlanner() {
       if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
       if (parsed.examPicks) setExamPicks(parsed.examPicks);
       if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
+      if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
       // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
@@ -1364,7 +1416,7 @@ export default function StudyPlanner() {
     if (!subject) return;
     const customIndex = customSubjects.findIndex((s) => s.id === id);
     const isCustom = customIndex !== -1;
-    const subjectData = data[id];
+    const entry = data[id] || EMPTY_SUBJECT;
     const savedAlloc = budget.alloc[id];
     const savedEntries = journal.filter((e) => e.subjectId === id);
     const notebookKey = "subj:" + id;
@@ -1407,7 +1459,7 @@ export default function StudyPlanner() {
             next.splice(Math.min(customIndex, next.length), 0, subject);
             return next;
           });
-          setData((prev) => ({ ...prev, [id]: subjectData }));
+          setData((prev) => ({ ...prev, [id]: entry }));
         } else {
           setHiddenSubjects((prev) => prev.filter((x) => x !== id));
         }
@@ -1418,8 +1470,8 @@ export default function StudyPlanner() {
       () => {
         // Подтверждено — сносим файлы: и из заметок к урокам, и из тетради предмета.
         const lessonFiles = [
-          ...((subjectData && subjectData.topics) || []),
-          ...((subjectData && subjectData.custom) || []),
+          ...(entry.topics || []),
+          ...(entry.custom || []),
         ].flatMap((t) => (t.notes || []).flatMap((n) => n.files || []));
         const notebookFiles = (savedNotebook || []).flatMap((b) =>
           (b.branches || []).flatMap((r) => r.files || [])
@@ -1603,7 +1655,7 @@ export default function StudyPlanner() {
     const remaining = {};
     let total = 0;
     ALL_SUBJECTS.forEach((s) => {
-      const list = [...data[s.id].topics, ...data[s.id].custom];
+      const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       const hours = list.filter((t) => !t.done).reduce((sum, t) => sum + (Number(t.duration) || D) / 60, 0);
       remaining[s.id] = hours;
       total += hours;
@@ -1759,6 +1811,7 @@ export default function StudyPlanner() {
   // Уроки на сегодня: те же правила, что и в расписании, включая экзамены,
   // которые показываются только за неделю до даты.
   const todayKey = DOW_TO_KEY[new Date().getDay()];
+  const currentWeek = weekKey(new Date());
   const todayLessons = useMemo(
     () =>
       activeSchedule
@@ -1781,8 +1834,13 @@ export default function StudyPlanner() {
 
   // Тетради всех предметов в одном месте: свои предметы и предметы лицея.
   const notebookOwners = useMemo(() => {
-    const own = ALL_SUBJECTS.map((s) => ({ key: "subj:" + s.id, name: s.name, color: s.color }));
-    const lyceum = lyceumSubjectNames.map((name) => ({ key: "lyceum:" + name, name, color: lyceumColorOf(name) }));
+    const own = ALL_SUBJECTS.map((s) => ({ key: "subj:" + s.id, name: s.name, color: s.color, from: "own" }));
+    const lyceum = lyceumSubjectNames.map((name) => ({
+      key: "lyceum:" + name,
+      name,
+      color: lyceumColorOf(name),
+      from: "lyceum",
+    }));
     return own.concat(lyceum);
   }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors]);
 
@@ -1880,7 +1938,8 @@ export default function StudyPlanner() {
     : { ok: false, text: "только на этом устройстве" };
 
   return (
-    <div data-theme={theme} className="ap-shell" style={styles.shell}>
+    <div data-theme={theme} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
+      <Background theme={theme} enabled={backgroundOn} showcase={showcase} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&display=swap');
         ${THEME_CSS}
@@ -2042,6 +2101,31 @@ export default function StudyPlanner() {
 
         {screen === "today" && (
           <>
+            {weekPlanned !== currentWeek && (
+              <section className="ap-card" style={{ ...styles.card, ...styles.weekCard }}>
+                <div style={styles.reminderRow}>
+                  <div style={styles.reminderMark} aria-hidden="true">
+                    ↻
+                  </div>
+                  <div style={styles.reminderBody}>
+                    <div style={styles.reminderTitle}>Новая неделя — распределите время</div>
+                    <div style={styles.reminderText}>
+                      Сколько часов в неделю уходит на каждый предмет и сколько времени вы готовы отдавать учёбе
+                      по дням — от этих цифр считается весь план. С прошлой недели они могли устареть.
+                    </div>
+                    <div style={styles.weekActions}>
+                      <button onClick={() => goScreen("budget")} style={styles.weekGo}>
+                        Распределить
+                      </button>
+                      <button onClick={markWeekPlanned} style={styles.weekSkip}>
+                        Оставить как есть
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Напоминание крупным планом: строчкой внизу карточки его не замечали. */}
             <section
               className="ap-card"
@@ -2578,8 +2662,8 @@ export default function StudyPlanner() {
                 const open = openSubject === s.id;
                 const isCustomSubject = customSubjects.some((cs) => cs.id === s.id);
                 const allTopics = [
-                  ...data[s.id].topics.map((t) => ({ ...t, custom: false })),
-                  ...data[s.id].custom.map((t) => ({ ...t, custom: true })),
+                  ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
+                  ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
                 ];
                 return (
                   <div key={s.id} className="subj-card ap-card" style={{ ...styles.subjCard, borderColor: s.color }}>
@@ -3097,8 +3181,44 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>{currentNotebook ? "Тетрадь · " + currentNotebook.name : "Тетрадь"}</div>
-              <div style={styles.cardNote}>Блок — большая тема, внутри ветки с конспектом и вложениями</div>
+              <div style={styles.notebookHead}>
+                <div style={styles.cardTitle}>Тетрадь</div>
+                {/* Список предметов слева читается как оглавление, а не как выбор,
+                    поэтому тот же выбор стоит и здесь — там, где его ищут. Тетрадь
+                    одна и та же: и список, и этот выбор открывают одни и те же
+                    блоки, они же лежат в карточке предмета и в разделе лицея. */}
+                <select
+                  value={currentNotebook ? currentNotebook.key : ""}
+                  onChange={(e) => setNotebookOwner(e.target.value)}
+                  style={styles.notebookSelect}
+                  aria-label="Предмет тетради"
+                >
+                  <optgroup label="Самостоятельное изучение">
+                    {notebookOwners
+                      .filter((o) => o.from === "own")
+                      .map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                  {notebookOwners.some((o) => o.from === "lyceum") && (
+                    <optgroup label="Лицей КЭО">
+                      {notebookOwners
+                        .filter((o) => o.from === "lyceum")
+                        .map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+              <div style={styles.cardNote}>
+                Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке
+                предмета и в разделе лицея — записи везде одни.
+              </div>
               {currentNotebook ? (
                 <Notebook
                   blocks={notebooks[currentNotebook.key] || []}
@@ -3241,7 +3361,59 @@ export default function StudyPlanner() {
                 </select>
               </div>
               <div style={styles.mutedSmall}>{modeLabel}</div>
+
+              {/* Живой фон — украшение, а украшение должно выключаться: на слабом
+                  телефоне оно тратит батарею, а кому-то просто мешает. */}
+              <div style={styles.bgRow}>
+                <button
+                  onClick={() => {
+                    const next = !backgroundOn;
+                    setBackgroundOn(next);
+                    try {
+                      localStorage.setItem(BG_KEY, next ? "on" : "off");
+                    } catch (e) {
+                      /* приватный режим — переживёт до перезагрузки */
+                    }
+                  }}
+                  style={{
+                    ...styles.themeBtn,
+                    background: backgroundOn ? "var(--accent)" : "var(--panel2)",
+                    color: backgroundOn ? "var(--accentInk)" : "var(--ink2)",
+                    borderColor: backgroundOn ? "var(--accent)" : "var(--line)",
+                  }}
+                >
+                  Живой фон
+                </button>
+                <span style={styles.mutedSmall}>
+                  {backgroundOn
+                    ? "Кривые возможностей дышат за интерфейсом; на компьютере ведутся за курсором"
+                    : "Фон ровный, без анимации"}
+                </span>
+              </div>
             </section>
+
+            {__EASTER_TEST__ && (
+              <section className="ap-card" style={styles.card}>
+                <div style={styles.cardTitle}>Тест</div>
+                <div style={styles.cardNote}>
+                  Созвездия на фоне выпадают сами и редко — примерно раз в сотню проверок. Здесь их можно позвать
+                  руками. Этого раздела нет в том, что залито на сайт.
+                </div>
+                <div style={styles.eggRow}>
+                  {EASTER_EGGS.map((egg) => (
+                    <button
+                      key={egg.id}
+                      onClick={() => setShowcase({ id: egg.id, nonce: Date.now() })}
+                      style={styles.eggBtn}
+                      disabled={!backgroundOn}
+                    >
+                      {egg.label}
+                    </button>
+                  ))}
+                </div>
+                {!backgroundOn && <div style={styles.mutedSmall}>Сначала включите живой фон выше.</div>}
+              </section>
+            )}
 
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Приложение</div>
@@ -3835,17 +4007,49 @@ function AddExamForm({ onAdd }) {
 
 function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
   const isExam = entry.kind === "exam";
+  // Урок читают куда чаще, чем правят, поэтому обычный вид — три короткие
+  // строки, а поля появляются по «изменить». Раньше каждый урок был формой из
+  // шести полей, и день из восьми уроков не помещался на экран.
+  const [editing, setEditing] = useState(false);
+
+  const box = {
+    ...styles.scheduleEntry,
+    borderLeftColor: priorityInfo(entry.priority).strong,
+    background: priorityInfo(entry.priority).tint,
+    ...(isExam ? styles.scheduleExam : null),
+    ...(compact ? styles.scheduleEntryCompact : null),
+  };
+
+  if (!editing) {
+    const facts = isExam
+      ? [entry.date ? formatEventDate(entry.date) : "", entry.place]
+      : [levelInfo(entry.level).short, entry.room, entry.teacher];
+    return (
+      <div style={box}>
+        <div style={styles.rowTop}>
+          <span style={styles.rowTime}>{entry.start}</span>
+          <span style={styles.rowName}>
+            {entry.subjectName || (isExam ? "Экзамен" : "Урок")}
+          </span>
+        </div>
+        <div style={styles.rowFacts}>{facts.filter(Boolean).join(" · ") || "без подробностей"}</div>
+        {isExam && entry.url && (
+          <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
+            Открыть ссылку
+          </a>
+        )}
+        <div style={styles.rowBottom}>
+          <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+          <button onClick={() => setEditing(true)} style={styles.rowEdit}>
+            изменить
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      style={{
-        ...styles.scheduleEntry,
-        borderLeftColor: priorityInfo(entry.priority).strong,
-        background: priorityInfo(entry.priority).tint,
-        ...(isExam ? styles.scheduleExam : null),
-        ...(compact ? styles.scheduleEntryCompact : null),
-      }}
-    >
+    <div style={box}>
       {isExam && (
         <div style={styles.examRow}>
           <ExamKindPicker value={entry.examKind} onChange={(v) => onUpdate(entry.id, { examKind: v })} />
@@ -3887,11 +4091,6 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
             onChange={(e) => onUpdate(entry.id, { url: e.target.value })}
             style={styles.scheduleRoomInput}
           />
-          {entry.url && (
-            <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
-              Открыть ссылку
-            </a>
-          )}
         </>
       ) : (
         <>
@@ -3923,9 +4122,14 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
           </select>
         </>
       )}
-      <button onClick={onRemove} style={styles.removeBtn}>
-        ×
-      </button>
+      <div style={styles.rowBottom}>
+        <button onClick={() => setEditing(false)} style={styles.rowDone}>
+          Готово
+        </button>
+        <button onClick={onRemove} style={styles.rowDelete}>
+          Удалить
+        </button>
+      </div>
     </div>
   );
 }
@@ -4099,7 +4303,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
 const styles = {
   // Оболочка: колонка навигации слева, экран справа. На телефоне колонка
   // превращается в полосу сверху — это делает таблица стилей выше.
-  shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)" },
+  shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative" },
   main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
   grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: 16, marginBottom: 16 },
   grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 },
@@ -4139,6 +4343,18 @@ const styles = {
   streakBox: { textAlign: "center", minWidth: 78 },
   streakNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, lineHeight: 1, color: "var(--green)" },
   streakWord: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
+  weekCard: { borderColor: "var(--accent)" },
+  weekActions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
+  weekGo: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 9, padding: "8px 15px", fontSize: 13, fontWeight: 600 },
+  weekSkip: {
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "var(--ink2)",
+    borderRadius: 9,
+    padding: "8px 15px",
+    fontSize: 13,
+    fontWeight: 600,
+  },
   // Пропущенный день подсвечивается тёплым — это напоминание, а не выговор.
   pulseWarm: {
     background: "var(--warmBg)",
@@ -4153,6 +4369,18 @@ const styles = {
   taskText: { flex: "1 1 140px", minWidth: 0 },
   taskMeta: { fontSize: 12 },
   progressRow: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 },
+  notebookHead: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 5 },
+  notebookSelect: {
+    flex: "1 1 160px",
+    minWidth: 0,
+    padding: "7px 9px",
+    border: "1px solid var(--line)",
+    borderRadius: 8,
+    fontSize: 13.5,
+    fontWeight: 600,
+    background: "var(--panel2)",
+    color: "var(--ink)",
+  },
   notebookList: { display: "flex", flexDirection: "column", gap: 4 },
   notebookPick: {
     display: "flex",
@@ -4552,6 +4780,30 @@ const styles = {
     marginBottom: 8,
   },
   // В сетке карточка сама себе строка, поэтому нижний отступ лишний.
+  rowTop: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
+  rowTime: { fontSize: 12.5, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
+  rowName: { fontSize: 13.5, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" },
+  rowFacts: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.45, overflowWrap: "anywhere" },
+  rowBottom: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 },
+  rowEdit: {
+    marginLeft: "auto",
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "var(--ink3)",
+    textDecoration: "underline",
+  },
+  rowDone: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600 },
+  rowDelete: {
+    marginLeft: "auto",
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "var(--red)",
+    textDecoration: "underline",
+  },
   scheduleEntryCompact: { marginBottom: 0, gap: 3, padding: "5px 8px" },
   scheduleDayTop: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   scheduleDayActions: { display: "flex", gap: 10, flexWrap: "wrap" },
@@ -4794,6 +5046,17 @@ const styles = {
   pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
   themeRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
   themeBtn: { border: "1px solid", borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 600 },
+  eggRow: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 },
+  eggBtn: {
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "var(--ink2)",
+    borderRadius: 999,
+    padding: "6px 13px",
+    fontSize: 12.5,
+    fontWeight: 600,
+  },
+  bgRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 14 },
   themeHours: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 8 },
   versionRow: { fontSize: 11, color: "var(--mute)", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid var(--line)" },

@@ -185,7 +185,13 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   // реальные столбцы к нулю. Отметка цели рисуется, только если попадает в шкалу,
   // а точное её значение всегда видно в подписи под графиком.
   const maxHours = Math.max(0, ...buckets.map((b) => b.hours));
-  const scaleInfo = niceScale(Math.max(0.5, maxHours));
+  // Цель тоже просится в шкалу, иначе линия цели выходных обрывалась там, где
+  // упиралась в потолок. Но пускаем её не дальше, чем в полтора раза выше
+  // фактического максимума: цель за год — сотни часов, и она бы прижала все
+  // столбцы к нулю.
+  const maxGoal = Math.max(0, ...buckets.map((b) => b.goal));
+  const goalCeiling = maxHours > 0 ? Math.min(maxGoal, maxHours * 1.35) : maxGoal;
+  const scaleInfo = niceScale(Math.max(0.5, maxHours, goalCeiling));
   const maxValue = scaleInfo.top;
   const maxIndex = buckets.reduce((best, b, i) => (b.hours > buckets[best].hours ? i : best), 0);
 
@@ -218,13 +224,15 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
     buckets.forEach((b, i) => {
       const x1 = left + i * step;
       const x2 = x1 + step;
-      const visible = b.goal > 0 && b.goal <= maxValue;
+      const visible = b.goal > 0;
       if (!visible) {
         if (open) area += ` L${x1.toFixed(1)},${bottom} Z`;
         open = false;
         return;
       }
-      const y = yOf(b.goal);
+      // Цель выше потолка шкалы прижимается к нему: рвать линию хуже, чем
+      // показать, что она ушла за край.
+      const y = yOf(Math.min(b.goal, maxValue));
       line += `${open ? "L" : "M"}${x1.toFixed(1)},${y.toFixed(1)} L${x2.toFixed(1)},${y.toFixed(1)} `;
       area += open
         ? `L${x1.toFixed(1)},${y.toFixed(1)} L${x2.toFixed(1)},${y.toFixed(1)} `
