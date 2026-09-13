@@ -29,8 +29,13 @@ const VERSIONS = [
   { v: "0.2.0", commit: "694ed0d", expand: "Самостоятельное изучение" },
   { v: "0.3.0", commit: "8ddb6f5", expand: "Самостоятельное изучение" },
   { v: "0.4.0", commit: "78b8b19", expand: "Лицей КЭО" },
-  { v: "0.5.0", commit: "HEAD" },
+  { v: "0.5.0", commit: "dd7c2b8" },
+  { v: "0.7.0", commit: "HEAD" },
 ];
+
+// Пересняться должна не вся история, а обычно одна свежая версия:
+// ONLY=0.7.0 node scripts/make-version-shots.mjs
+const ONLY = process.env.ONLY ? process.env.ONLY.split(",") : null;
 
 // Одинаковые данные для всех версий: неделя занятий, событие и пара уроков.
 const DEMO = {
@@ -66,6 +71,7 @@ mkdirSync(TMP, { recursive: true });
 const browser = await chromium.launch({ executablePath: BROWSER });
 
 for (const { v, commit, expand } of VERSIONS) {
+  if (ONLY && !ONLY.includes(v)) continue;
   const dir = resolve(TMP, v);
   sh(`git worktree add --detach "${dir}" ${commit}`);
   // Зависимости одни и те же во всех версиях — ставить их заново не нужно.

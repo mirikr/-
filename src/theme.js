@@ -36,6 +36,33 @@ html, body { background: var(--bg); color: var(--ink); }
 }
 /* Ползунок масштаба под графиком часов. Системный вид у него слишком яркий
    и в ночной теме светится белым, поэтому дорожка и бегунок свои. */
+/* При живом фоне карточки становятся стеклом: переопределяем сами токены, а
+   не фон каждой карточки — иначе пришлось бы перебивать инлайновые стили, и
+   тёплые подсветки напоминаний потеряли бы цвет. */
+.ap-live-bg {
+  --panel: rgba(251, 249, 243, 0.78);
+  --panel2: rgba(255, 253, 248, 0.7);
+  --warmBg: rgba(251, 240, 210, 0.78);
+  --redBg: rgba(249, 226, 223, 0.78);
+  --neutralBg: rgba(241, 238, 228, 0.7);
+}
+.ap-live-bg[data-theme="night"] {
+  --panel: rgba(30, 28, 22, 0.74);
+  --panel2: rgba(33, 31, 25, 0.66);
+  --warmBg: rgba(42, 36, 23, 0.78);
+  --redBg: rgba(42, 29, 27, 0.78);
+  --neutralBg: rgba(33, 31, 25, 0.66);
+}
+.ap-live-bg .ap-card,
+.ap-live-bg .ap-dialog {
+  backdrop-filter: blur(14px) saturate(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+}
+
+/* Живой фон рисуется под интерфейсом. Колонка и экран статичны, а холст
+   позиционирован, поэтому без явного слоя он лёг бы поверх них. */
+.ap-rail, .ap-main, .ap-tabbar { position: relative; z-index: 1; }
+
 .ap-range { -webkit-appearance: none; appearance: none; height: 22px; background: none; }
 .ap-range:focus { outline: none; }
 .ap-range::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: var(--line); }

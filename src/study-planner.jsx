@@ -17,6 +17,7 @@ import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js"
 import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
 import IntroDialog from "./intro-dialog.jsx";
+import Background from "./background.jsx";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import SchedulePreset from "./lyceum-preset.jsx";
@@ -185,6 +186,27 @@ const INTRO_KEY = "planner-intro-version";
 // Про что именно рассказываем. Привязка к номеру приложения всплывала бы с
 // каждым обновлением, а рассказ один и тот же.
 const INTRO_VERSION = "0.6.0-schedule";
+// Живой фон — настройка устройства, а не данных: на слабом телефоне его можно
+// выключить, не трогая второй.
+const BG_KEY = "planner-background";
+
+function readBackgroundOn() {
+  try {
+    return localStorage.getItem(BG_KEY) !== "off";
+  } catch (e) {
+    return true;
+  }
+}
+
+// Номер недели по ISO: неделя начинается с понедельника, а у года их 52-53.
+function weekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d - start) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 // Встроенные предметы (право, экономика, политология, социология, философия,
@@ -468,6 +490,11 @@ export default function StudyPlanner() {
   // Событие, по которому считается план. Пусто — берётся самое приоритетное:
   // так было всегда, и для большинства этого достаточно.
   const [mainEventId, setMainEventId] = useState("");
+  // Неделя, на которую время уже распределено. Пока она не совпадает с текущей,
+  // на «Сегодня» висит напоминание: без него новая неделя начиналась с прошлых
+  // цифр, и план тихо расходился с жизнью.
+  const [weekPlanned, setWeekPlanned] = useState("");
+  const [backgroundOn, setBackgroundOn] = useState(readBackgroundOn);
   const [homework, setHomework] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
@@ -582,6 +609,7 @@ export default function StudyPlanner() {
           if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
           if (parsed.examPicks) setExamPicks(parsed.examPicks);
           if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
+          if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
         }
@@ -695,6 +723,7 @@ export default function StudyPlanner() {
           presetChoices,
           examPicks,
           mainEventId,
+          weekPlanned,
           openSections,
           homework,
         });
@@ -722,7 +751,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, weekPlanned, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1074,12 +1103,20 @@ export default function StudyPlanner() {
     });
   }
 
+  // Тронули распределение — значит неделю распланировали; отдельная кнопка
+  // «я всё сделал» нужна только тем, кого прошлые цифры устраивают как есть.
+  function markWeekPlanned() {
+    setWeekPlanned(weekKey(new Date()));
+  }
+
   function setAlloc(id, val) {
     setBudget((prev) => ({ ...prev, alloc: { ...prev.alloc, [id]: Math.max(0, Number(val) || 0) } }));
+    markWeekPlanned();
   }
 
   function setDailyGoal(key, minutes) {
     setBudget((prev) => ({ ...prev, daily: { ...prev.daily, [key]: Math.max(0, Number(minutes) || 0) } }));
+    markWeekPlanned();
   }
 
   function toggleNotesPanel(topicId) {
@@ -1096,7 +1133,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, weekPlanned, openSections, homework },
       null,
       2
     );
@@ -1129,6 +1166,7 @@ export default function StudyPlanner() {
       if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
       if (parsed.examPicks) setExamPicks(parsed.examPicks);
       if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
+      if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
       // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
@@ -1759,6 +1797,7 @@ export default function StudyPlanner() {
   // Уроки на сегодня: те же правила, что и в расписании, включая экзамены,
   // которые показываются только за неделю до даты.
   const todayKey = DOW_TO_KEY[new Date().getDay()];
+  const currentWeek = weekKey(new Date());
   const todayLessons = useMemo(
     () =>
       activeSchedule
@@ -1781,8 +1820,13 @@ export default function StudyPlanner() {
 
   // Тетради всех предметов в одном месте: свои предметы и предметы лицея.
   const notebookOwners = useMemo(() => {
-    const own = ALL_SUBJECTS.map((s) => ({ key: "subj:" + s.id, name: s.name, color: s.color }));
-    const lyceum = lyceumSubjectNames.map((name) => ({ key: "lyceum:" + name, name, color: lyceumColorOf(name) }));
+    const own = ALL_SUBJECTS.map((s) => ({ key: "subj:" + s.id, name: s.name, color: s.color, from: "own" }));
+    const lyceum = lyceumSubjectNames.map((name) => ({
+      key: "lyceum:" + name,
+      name,
+      color: lyceumColorOf(name),
+      from: "lyceum",
+    }));
     return own.concat(lyceum);
   }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors]);
 
@@ -1880,7 +1924,8 @@ export default function StudyPlanner() {
     : { ok: false, text: "только на этом устройстве" };
 
   return (
-    <div data-theme={theme} className="ap-shell" style={styles.shell}>
+    <div data-theme={theme} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
+      <Background theme={theme} enabled={backgroundOn} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&display=swap');
         ${THEME_CSS}
@@ -2042,6 +2087,31 @@ export default function StudyPlanner() {
 
         {screen === "today" && (
           <>
+            {weekPlanned !== currentWeek && (
+              <section className="ap-card" style={{ ...styles.card, ...styles.weekCard }}>
+                <div style={styles.reminderRow}>
+                  <div style={styles.reminderMark} aria-hidden="true">
+                    ↻
+                  </div>
+                  <div style={styles.reminderBody}>
+                    <div style={styles.reminderTitle}>Новая неделя — распределите время</div>
+                    <div style={styles.reminderText}>
+                      Сколько часов в неделю уходит на каждый предмет и сколько времени вы готовы отдавать учёбе
+                      по дням — от этих цифр считается весь план. С прошлой недели они могли устареть.
+                    </div>
+                    <div style={styles.weekActions}>
+                      <button onClick={() => goScreen("budget")} style={styles.weekGo}>
+                        Распределить
+                      </button>
+                      <button onClick={markWeekPlanned} style={styles.weekSkip}>
+                        Оставить как есть
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Напоминание крупным планом: строчкой внизу карточки его не замечали. */}
             <section
               className="ap-card"
@@ -3097,8 +3167,44 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>{currentNotebook ? "Тетрадь · " + currentNotebook.name : "Тетрадь"}</div>
-              <div style={styles.cardNote}>Блок — большая тема, внутри ветки с конспектом и вложениями</div>
+              <div style={styles.notebookHead}>
+                <div style={styles.cardTitle}>Тетрадь</div>
+                {/* Список предметов слева читается как оглавление, а не как выбор,
+                    поэтому тот же выбор стоит и здесь — там, где его ищут. Тетрадь
+                    одна и та же: и список, и этот выбор открывают одни и те же
+                    блоки, они же лежат в карточке предмета и в разделе лицея. */}
+                <select
+                  value={currentNotebook ? currentNotebook.key : ""}
+                  onChange={(e) => setNotebookOwner(e.target.value)}
+                  style={styles.notebookSelect}
+                  aria-label="Предмет тетради"
+                >
+                  <optgroup label="Самостоятельное изучение">
+                    {notebookOwners
+                      .filter((o) => o.from === "own")
+                      .map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                  {notebookOwners.some((o) => o.from === "lyceum") && (
+                    <optgroup label="Лицей КЭО">
+                      {notebookOwners
+                        .filter((o) => o.from === "lyceum")
+                        .map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+              <div style={styles.cardNote}>
+                Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке
+                предмета и в разделе лицея — записи везде одни.
+              </div>
               {currentNotebook ? (
                 <Notebook
                   blocks={notebooks[currentNotebook.key] || []}
@@ -3241,6 +3347,35 @@ export default function StudyPlanner() {
                 </select>
               </div>
               <div style={styles.mutedSmall}>{modeLabel}</div>
+
+              {/* Живой фон — украшение, а украшение должно выключаться: на слабом
+                  телефоне оно тратит батарею, а кому-то просто мешает. */}
+              <div style={styles.bgRow}>
+                <button
+                  onClick={() => {
+                    const next = !backgroundOn;
+                    setBackgroundOn(next);
+                    try {
+                      localStorage.setItem(BG_KEY, next ? "on" : "off");
+                    } catch (e) {
+                      /* приватный режим — переживёт до перезагрузки */
+                    }
+                  }}
+                  style={{
+                    ...styles.themeBtn,
+                    background: backgroundOn ? "var(--accent)" : "var(--panel2)",
+                    color: backgroundOn ? "var(--accentInk)" : "var(--ink2)",
+                    borderColor: backgroundOn ? "var(--accent)" : "var(--line)",
+                  }}
+                >
+                  Живой фон
+                </button>
+                <span style={styles.mutedSmall}>
+                  {backgroundOn
+                    ? "Кривые возможностей дышат за интерфейсом; на компьютере ведутся за курсором"
+                    : "Фон ровный, без анимации"}
+                </span>
+              </div>
             </section>
 
             <section className="ap-card" style={styles.card}>
@@ -4099,7 +4234,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
 const styles = {
   // Оболочка: колонка навигации слева, экран справа. На телефоне колонка
   // превращается в полосу сверху — это делает таблица стилей выше.
-  shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)" },
+  shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative" },
   main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
   grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: 16, marginBottom: 16 },
   grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 },
@@ -4139,6 +4274,18 @@ const styles = {
   streakBox: { textAlign: "center", minWidth: 78 },
   streakNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, lineHeight: 1, color: "var(--green)" },
   streakWord: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
+  weekCard: { borderColor: "var(--accent)" },
+  weekActions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
+  weekGo: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 9, padding: "8px 15px", fontSize: 13, fontWeight: 600 },
+  weekSkip: {
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "var(--ink2)",
+    borderRadius: 9,
+    padding: "8px 15px",
+    fontSize: 13,
+    fontWeight: 600,
+  },
   // Пропущенный день подсвечивается тёплым — это напоминание, а не выговор.
   pulseWarm: {
     background: "var(--warmBg)",
@@ -4153,6 +4300,18 @@ const styles = {
   taskText: { flex: "1 1 140px", minWidth: 0 },
   taskMeta: { fontSize: 12 },
   progressRow: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 },
+  notebookHead: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 5 },
+  notebookSelect: {
+    flex: "1 1 160px",
+    minWidth: 0,
+    padding: "7px 9px",
+    border: "1px solid var(--line)",
+    borderRadius: 8,
+    fontSize: 13.5,
+    fontWeight: 600,
+    background: "var(--panel2)",
+    color: "var(--ink)",
+  },
   notebookList: { display: "flex", flexDirection: "column", gap: 4 },
   notebookPick: {
     display: "flex",
@@ -4794,6 +4953,7 @@ const styles = {
   pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
   themeRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
   themeBtn: { border: "1px solid", borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 600 },
+  bgRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 14 },
   themeHours: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 8 },
   versionRow: { fontSize: 11, color: "var(--mute)", textAlign: "center", marginTop: 26, lineHeight: 1.5 },
   syncRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 20, paddingTop: 12, borderTop: "1px solid var(--line)" },

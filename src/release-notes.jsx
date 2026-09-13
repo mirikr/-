@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 
 // Коротко о том, что менялось. Подробная история — в CHANGELOG.md репозитория;
 // здесь по несколько строк на версию, чтобы понять, что нового, не уходя с сайта.
-// Снимки храним только для последнего перехода: между 0.4.0 и 0.5.0 разница
-// видна с первого взгляда, а у ранних версий менялось содержимое разделов —
-// на картинке это почти одна и та же страница, и полтора мегабайта ради этого
-// не стоят. Остальные шаги сравниваются словами.
-const SHOT_VERSIONS = ["0.4.0", "0.5.0"];
+// Снимки храним для одного перехода — от 0.4.0 к последней версии: там разница
+// видна с первого взгляда. У соседних версий менялось содержимое разделов, на
+// картинке это почти одна и та же страница, и мегабайты ради этого не стоят.
+// Остальные шаги сравниваются словами.
+const SHOT_VERSIONS = ["0.4.0", "0.7.0"];
 
 // Снимок версии лежит в public/versions. В предпросмотре, где приложение живёт
 // одной страницей без файлов рядом, снимки подкладываются в window сборщиком.
@@ -16,6 +16,21 @@ const shotUrl = (version) => {
 };
 
 const RELEASES = [
+  {
+    v: "0.7.0",
+    date: "13 сентября",
+    items: [
+      "Живой фон: кривые возможностей дышат за интерфейсом, на компьютере — вслед за курсором.",
+      "Карточки стали стеклом и размывают фон под собой.",
+      "Раз в неделю напоминание распределить время по предметам и дням.",
+      "Фон выключается в «Синхронизации» и не мешает тем, у кого включено «уменьшить движение».",
+      "В «Тетрадях» предмет выбирается прямо в шапке тетради.",
+    ],
+    changes: [
+      ["Фон был ровной заливкой", "Кривые возможностей дышат за интерфейсом и ведутся за курсором"],
+      ["Новая неделя начиналась со старых цифр, и план тихо расходился с жизнью", "Напоминание распределить время — раз в неделю, на «Сегодня»"],
+    ],
+  },
   {
     v: "0.6.3.2",
     date: "13 сентября",
@@ -222,6 +237,9 @@ const RELEASES = [
 // описания: видно саму разницу, а не рассказ о ней.
 function Wipe({ before, after, beforeLabel, afterLabel }) {
   const [pos, setPos] = useState(50);
+  // Снимки весят по сотне килобайт и в офлайн-кэш не кладутся: на медленной
+  // связи окно несколько секунд стояло пустым, будто сломалось.
+  const [ready, setReady] = useState(false);
   const boxRef = useRef(null);
   const dragging = useRef(false);
 
@@ -246,7 +264,20 @@ function Wipe({ before, after, beforeLabel, afterLabel }) {
       onPointerUp={() => (dragging.current = false)}
       onPointerCancel={() => (dragging.current = false)}
     >
-      <img src={after} alt={afterLabel} style={styles.wipeImg} draggable="false" />
+      {!ready && (
+        <div style={styles.wipeLoading}>
+          {beforeLabel} → {afterLabel}
+          <span style={styles.wipeLoadingNote}>снимки загружаются…</span>
+        </div>
+      )}
+      <img
+        src={after}
+        alt={afterLabel}
+        style={styles.wipeImg}
+        draggable="false"
+        onLoad={() => setReady(true)}
+        onError={() => setReady(true)}
+      />
       {/* Старая версия лежит сверху и обрезается ручкой — двигая её влево,
           вы «стираете» прошлое и видите нынешнее. */}
       <div style={{ ...styles.wipeClip, clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
@@ -280,8 +311,12 @@ function Wipe({ before, after, beforeLabel, afterLabel }) {
 function Compare({ onBack }) {
   const ordered = [...RELEASES].reverse();
   // «от» может быть и «до приложения» — это индекс -1, шаг перед первой версией.
-  const [from, setFrom] = useState(ordered.length - 2);
-  const [to, setTo] = useState(ordered.length - 1);
+  // Открываем на переходе, у которого есть снимки: сравнение словами доступно
+  // всегда, а картинками — только здесь, и показать его стоит сразу.
+  const shotFrom = ordered.findIndex((r) => r.v === SHOT_VERSIONS[0]);
+  const shotTo = ordered.findIndex((r) => r.v === SHOT_VERSIONS[1]);
+  const [from, setFrom] = useState(shotFrom >= 0 && shotTo > shotFrom ? shotFrom : ordered.length - 2);
+  const [to, setTo] = useState(shotFrom >= 0 && shotTo > shotFrom ? shotTo : ordered.length - 1);
 
   // Порядок концов не даём перепутать: выбрали «от» позже «до» — сдвигается
   // второй конец, а не появляется пустое сравнение задом наперёд.
@@ -514,6 +549,21 @@ const styles = {
   compareHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 },
   backBtn: { fontSize: 12.5, color: "var(--ink3)", border: "none", background: "none", padding: 0 },
   compareVersions: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 16 },
+  wipeLoading: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 3,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    background: "var(--panel2)",
+    color: "var(--ink3)",
+    fontSize: 14,
+    fontWeight: 600,
+  },
+  wipeLoadingNote: { fontSize: 11.5, fontWeight: 400, color: "var(--mute)" },
   wipe: {
     position: "relative",
     width: "100%",
