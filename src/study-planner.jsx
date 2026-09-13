@@ -22,9 +22,11 @@ import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import NowCard from "./now-card.jsx";
+import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import SchedulePreset from "./lyceum-preset.jsx";
 import ExamPreset from "./lyceum-exams-panel.jsx";
 import { KT_PRESET_ID, DEFAULT_KT } from "./lyceum-exams-10.js";
+import { VOSH_PRESET_ID, DEFAULT_VOSH } from "./lyceum-olympiads.js";
 import { PRESET_ID } from "./lyceum-schedule-10.js";
 
 // Duration is stored in minutes for each lesson.
@@ -499,6 +501,7 @@ export default function StudyPlanner() {
   const [presetChoices, setPresetChoices] = useState({ school: "", groups: {}, specs: [] });
   // Какие контрольные тесты человек сдаёт: даты общие, предметы у каждого свои.
   const [examPicks, setExamPicks] = useState(DEFAULT_KT);
+  const [voshPicks, setVoshPicks] = useState(DEFAULT_VOSH);
   // Событие, по которому считается план. Пусто — берётся самое приоритетное:
   // так было всегда, и для большинства этого достаточно.
   const [mainEventId, setMainEventId] = useState("");
@@ -623,6 +626,7 @@ export default function StudyPlanner() {
           if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
           if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
           if (parsed.examPicks) setExamPicks(parsed.examPicks);
+          if (parsed.voshPicks) setVoshPicks(parsed.voshPicks);
           if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
           if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
           if (parsed.openSections) setOpenSections(parsed.openSections);
@@ -737,6 +741,7 @@ export default function StudyPlanner() {
           lyceumSchedule,
           presetChoices,
           examPicks,
+          voshPicks,
           mainEventId,
           weekPlanned,
           openSections,
@@ -766,7 +771,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, weekPlanned, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, mainEventId, weekPlanned, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1148,7 +1153,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, mainEventId, weekPlanned, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, mainEventId, weekPlanned, openSections, homework },
       null,
       2
     );
@@ -1180,6 +1185,7 @@ export default function StudyPlanner() {
       if (parsed.lyceumSchedule) setLyceumSchedule(parsed.lyceumSchedule);
       if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
       if (parsed.examPicks) setExamPicks(parsed.examPicks);
+      if (parsed.voshPicks) setVoshPicks(parsed.voshPicks);
       if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
       if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
       if (parsed.openSections) setOpenSections(parsed.openSections);
@@ -1503,6 +1509,21 @@ export default function StudyPlanner() {
   function applyExams(entries) {
     setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== KT_PRESET_ID), ...entries]);
     if (entries.some((e) => e.day === "sun")) setShowSunday(true);
+  }
+
+  const presetOlympiads = useMemo(
+    () => lyceumSchedule.filter((e) => e.preset === VOSH_PRESET_ID).length,
+    [lyceumSchedule]
+  );
+
+  // Олимпиады заменяются целиком, как и тесты: отмеченный список — источник
+  // правды, иначе снятая галочка оставила бы запись в расписании навсегда.
+  function applyOlympiads(entries) {
+    setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== VOSH_PRESET_ID), ...entries]);
+  }
+
+  function clearOlympiads() {
+    setLyceumSchedule((prev) => prev.filter((e) => e.preset !== VOSH_PRESET_ID));
   }
 
   function clearExams() {
@@ -2840,6 +2861,15 @@ export default function StudyPlanner() {
               onApply={applyExams}
               onClear={clearExams}
               appliedCount={presetExams}
+              locked={presetLocked}
+              onSignIn={() => goScreen("settings")}
+            />
+            <OlympiadPreset
+              picked={voshPicks}
+              onPicked={setVoshPicks}
+              onApply={applyOlympiads}
+              onClear={clearOlympiads}
+              appliedCount={presetOlympiads}
               locked={presetLocked}
               onSignIn={() => goScreen("settings")}
             />

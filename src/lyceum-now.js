@@ -127,15 +127,23 @@ const DAY_IN = {
   sun: "в воскресенье",
 };
 
-// Когда сегодня уроков нет или они кончились, полезнее всего знать не то, что
-// их нет, а когда следующие.
-export function nextSchoolDay(fromDayKey) {
+// Ближайший день, про который что-то есть. Что именно «есть» — решает тот, кто
+// спрашивает: у своего расписания и у общей сетки выходные не совпадают.
+export function nextDayWith(fromDayKey, has) {
   const start = DOW_TO_KEY.indexOf(fromDayKey);
   if (start < 0) return null;
   for (let step = 1; step <= 7; step += 1) {
     const key = DOW_TO_KEY[(start + step) % 7];
-    const periods = periodsOfDay(key);
-    if (periods.length) return { day: key, when: step === 1 ? "завтра" : DAY_IN[key], first: periods[0] };
+    if (has(key)) return { day: key, when: step === 1 ? "завтра" : DAY_IN[key] };
   }
   return null;
 }
+
+// Когда сегодня уроков нет или они кончились, полезнее всего знать не то, что
+// их нет, а когда следующие.
+export function nextSchoolDay(fromDayKey) {
+  const found = nextDayWith(fromDayKey, (key) => periodsOfDay(key).length > 0);
+  return found ? { ...found, first: periodsOfDay(found.day)[0] } : null;
+}
+
+export const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat"];
