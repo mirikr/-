@@ -259,6 +259,23 @@ const SCHEDULE_EVENT_PREFIX = "sch-ev:";
 
 const JOURNAL_PAGE = 50;
 
+// Значок напоминания. Рисунок должен читаться рядом с заголовком в 19 пикселей
+// и двумя строками текста под ним — мелкий на этом фоне выглядел случайным.
+const MARK_SIZE = 46;
+
+// Урок в сетке повторяется каждую неделю, а у задания дата одна. Ближайший
+// такой день недели — сегодня, если он ещё не прошёл, иначе следующая неделя.
+function nextDateForDay(dayKey) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let step = 0; step < 7; step += 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + step);
+    if (DOW_TO_KEY[d.getDay()] === dayKey) return ymd(d);
+  }
+  return ymd(today);
+}
+
 function weekdayKeyFromDate(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + "T00:00:00");
@@ -355,6 +372,24 @@ function formatEventDate(dateStr) {
 
 function capitalizeFirst(text) {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
+// Голая цифра рядом с разделом ничего не говорит: «Сегодня 9» — девять чего?
+function plural(n, one, few, many) {
+  const last = n % 10;
+  const two = n % 100;
+  if (two >= 11 && two <= 14) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
+function lessonsWord(n) {
+  return plural(n, "урок", "урока", "уроков");
+}
+
+function eventsWord(n) {
+  return plural(n, "событие", "события", "событий");
 }
 
 function daysWord(n) {
@@ -841,10 +876,17 @@ export default function StudyPlanner() {
 
   const allEvents = useMemo(() => [...events, ...scheduleEvents], [events, scheduleEvents]);
 
+  // Событие сегодня — не строчка в списке «ближайших»: сегодня оно и есть день.
+  const todayEvents = useMemo(() => allEvents.filter((e) => e.date === todayStr()), [allEvents]);
+
   const upcomingEvents = useMemo(
     () => allEvents.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
     [allEvents]
   );
+
+  // Сегодняшнее событие показано отдельной карточкой наверху, поэтому в списке
+  // «ближайших» на том же экране его быть не должно — это одно и то же.
+  const laterEvents = useMemo(() => upcomingEvents.filter((e) => e.date !== todayStr()), [upcomingEvents]);
 
   const pastEvents = useMemo(
     () => allEvents.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
@@ -1377,6 +1419,22 @@ export default function StudyPlanner() {
 
   const scheduleDays = useMemo(() => (showSunday ? [...LYCEUM_DAYS, "sun"] : LYCEUM_DAYS), [showSunday]);
 
+  const homeworkOnDate = useCallback((iso) => homework.filter((h) => h.date === iso), [homework]);
+
+  // Всё, что карточке дня нужно знать про задания: чьи они, как добавить и как
+  // отметить сделанным. Одним объектом, чтобы не тянуть четыре пропса через
+  // каждый день недели.
+  const lessonTasks = useMemo(
+    () => ({
+      dueDate: (dayKey) => nextDateForDay(dayKey),
+      forLesson: (lessonId) => homework.filter((h) => h.lessonId === lessonId),
+      add: (entry, text, minutes) =>
+        addHomework(nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
+      toggle: (id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done }),
+    }),
+    [homework]
+  );
+
   const dayEntries = useCallback(
     (day) =>
       lyceumSchedule
@@ -1435,6 +1493,22 @@ export default function StudyPlanner() {
         next.splice(Math.min(index, next.length), 0, event);
         return next;
       });
+    });
+  }
+
+  // Прошедшие события копятся и мешают: их не удалишь по одному, когда их
+  // два десятка. Чистятся разом, с одной отменой на всю пачку — событие из
+  // расписания при этом уезжает вместе со своей записью, это одна и та же вещь.
+  function clearPastEvents() {
+    const goneOwn = events.filter((e) => e.date && daysUntilDate(e.date) < 0);
+    const goneSchedule = lyceumSchedule.filter((e) => e.kind === "exam" && e.date && daysUntilDate(e.date) < 0);
+    if (!goneOwn.length && !goneSchedule.length) return;
+    setEvents((prev) => prev.filter((e) => !goneOwn.includes(e)));
+    setLyceumSchedule((prev) => prev.filter((e) => !goneSchedule.includes(e)));
+    const total = goneOwn.length + goneSchedule.length;
+    showUndo(`Вы убрали ${total} ${eventsWord(total)}`, () => {
+      setEvents((prev) => [...prev, ...goneOwn]);
+      setLyceumSchedule((prev) => [...prev, ...goneSchedule]);
     });
   }
 
@@ -1632,12 +1706,24 @@ export default function StudyPlanner() {
     });
   }
 
-  function addHomework(date, subjectName, text, minutes) {
+  // lessonId связывает задание с уроком расписания. Раньше связь была только
+  // по названию предмета строкой, и «к какому именно уроку» приложение не знало —
+  // а спрашивают обычно именно это.
+  function addHomework(date, subjectName, text, minutes, lessonId) {
     if (!text.trim()) return;
     const id = "hw-" + Date.now() + "-" + Math.round(Math.random() * 1000);
     setHomework((prev) => [
       ...prev,
-      { id, date, subjectName, text: text.trim(), minutes: Math.max(0, Number(minutes) || 0), done: false, attachments: [] },
+      {
+        id,
+        date,
+        subjectName,
+        text: text.trim(),
+        minutes: Math.max(0, Number(minutes) || 0),
+        done: false,
+        attachments: [],
+        ...(lessonId ? { lessonId } : null),
+      },
     ]);
   }
 
@@ -1950,8 +2036,16 @@ export default function StudyPlanner() {
 
   const weeklyBudget = weeklyBudgetHours(budget);
   const navItems = [
-    { key: "today", label: "Сегодня", hint: todayLessons.length ? String(todayLessons.length) : "" },
-    { key: "events", label: "События", hint: upcomingEvents.length ? String(upcomingEvents.length) : "" },
+    {
+      key: "today",
+      label: "Сегодня",
+      hint: todayLessons.length ? todayLessons.length + " " + lessonsWord(todayLessons.length) : "",
+    },
+    {
+      key: "events",
+      label: "События",
+      hint: upcomingEvents.length ? upcomingEvents.length + " " + eventsWord(upcomingEvents.length) : "",
+    },
     { key: "budget", label: "Распределение", hint: Math.round(weeklyBudget) + " ч" },
     { key: "study", label: "Подготовка", hint: stats.totalAll ? stats.overallPct + "%" : "" },
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
@@ -2205,11 +2299,34 @@ export default function StudyPlanner() {
 
         {screen === "today" && (
           <>
+            {todayEvents.length > 0 && (
+              <section
+                className="ap-card"
+                style={{
+                  ...styles.card,
+                  borderColor: priorityInfo(todayEvents[0].priority).strong,
+                  background: priorityInfo(todayEvents[0].priority).tint,
+                }}
+              >
+                <div style={styles.todayEventHead}>Сегодня</div>
+                {todayEvents.map((e) => (
+                  <div key={e.id} style={styles.todayEventRow}>
+                    <PriorityMark value={e.priority} height={13} />
+                    <span style={styles.todayEventName}>{e.name}</span>
+                    {e.description && <span style={styles.todayEventNote}>{e.description}</span>}
+                  </div>
+                ))}
+                <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
+                  Все события
+                </button>
+              </section>
+            )}
+
             {weekPlanned !== currentWeek && (
               <section className="ap-card" style={{ ...styles.card, ...styles.weekCard }}>
                 <div style={styles.reminderRow}>
                   <div style={styles.reminderMark} aria-hidden="true">
-                    ↻
+                    <ReminderMark kind="week" />
                   </div>
                   <div style={styles.reminderBody}>
                     <div style={styles.reminderTitle}>Новая неделя — распределите время</div>
@@ -2241,15 +2358,11 @@ export default function StudyPlanner() {
             >
               <div style={styles.reminderRow}>
                 <div style={styles.reminderMark} aria-hidden="true">
-                  {studyStreakOn ? (
-                    <StreakFlame />
-                  ) : studyReminder.tone === "ok" ? (
-                    "✓"
-                  ) : studyReminder.tone === "warn" ? (
-                    "!"
-                  ) : (
-                    "·"
-                  )}
+                  <ReminderMark
+                    kind={
+                      studyStreakOn ? "streak" : studyReminder.tone === "ok" ? "ok" : studyReminder.tone === "warn" ? "warn" : "idle"
+                    }
+                  />
                 </div>
                 <div style={styles.reminderBody}>
                   <div style={styles.reminderTitle}>{studyReminder.title}</div>
@@ -2267,7 +2380,12 @@ export default function StudyPlanner() {
             </section>
 
             {/* Что идёт прямо сейчас — и у тебя, и у всей параллели. */}
-            <NowCard entriesFor={dayEntries} styles={styles} />
+            <NowCard
+              entriesFor={dayEntries}
+              tasksFor={lessonTasks.forLesson}
+              homeworkOn={homeworkOnDate}
+              styles={styles}
+            />
 
             {dueForReview.length > 0 && (
               <section className="ap-card" style={styles.card}>
@@ -2398,11 +2516,15 @@ export default function StudyPlanner() {
           <div className="ap-grid3" style={styles.grid3}>
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Ближайшие события</div>
-              {upcomingEvents.length === 0 ? (
-                <p style={styles.muted}>Событий пока нет — добавьте экзамен или олимпиаду в разделе «События».</p>
+              {/* Сегодняшнее событие показано отдельной карточкой наверху —
+                  здесь оно было бы вторым упоминанием об одном и том же. */}
+              {laterEvents.length === 0 ? (
+                <p style={styles.muted}>
+                  {todayEvents.length ? "Дальше пока ничего не назначено." : "Событий пока нет — добавьте экзамен или олимпиаду в разделе «События»."}
+                </p>
               ) : (
                 <div style={styles.todayList}>
-                  {upcomingEvents.slice(0, 4).map((e) => {
+                  {laterEvents.slice(0, 4).map((e) => {
                     const left = daysUntilDate(e.date);
                     const info = priorityInfo(e.priority);
                     return (
@@ -2626,6 +2748,7 @@ export default function StudyPlanner() {
                 onAdd={addEvent}
                 onUpdate={updateEvent}
                 onRemove={removeEvent}
+                onClearPast={clearPastEvents}
               />
             </section>
           </div>
@@ -3047,6 +3170,7 @@ export default function StudyPlanner() {
                   onAdd={(entry) => addScheduleEntry(todayKey, entry)}
                   onUpdate={updateScheduleEntry}
                   onRemove={removeScheduleEntry}
+                  tasks={lessonTasks}
                 />
               </div>
             ) : (
@@ -3073,6 +3197,7 @@ export default function StudyPlanner() {
                     onAdd={(entry) => addScheduleEntry(day, entry)}
                     onUpdate={updateScheduleEntry}
                     onRemove={removeScheduleEntry}
+                    tasks={lessonTasks}
                   />
                 ))}
               </div>
@@ -3755,7 +3880,7 @@ function PriorityPicker({ value, onChange }) {
   );
 }
 
-function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, onAdd, onUpdate, onRemove }) {
+function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, onAdd, onUpdate, onRemove, onClearPast }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState(todayStr());
   const [priority, setPriority] = useState(2);
@@ -3829,7 +3954,14 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
       </p>
 
       {upcoming.map((e) => row(e, false))}
-      {past.length > 0 && <div style={styles.pastLabel}>Прошедшие</div>}
+      {past.length > 0 && (
+        <div style={styles.pastHead}>
+          <span style={styles.pastLabel}>Прошедшие · {past.length}</span>
+          <button onClick={onClearPast} style={styles.pastClear} title="Убрать все прошедшие события">
+            🗑 очистить
+          </button>
+        </div>
+      )}
       {past.map((e) => row(e, true))}
 
       <div style={styles.eventAddRow}>
@@ -4085,12 +4217,17 @@ function AddSubjectForm({ onAdd, placeholder }) {
   );
 }
 
-function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove }) {
+function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks }) {
   const [examOpen, setExamOpen] = useState(false);
   const [examNote, setExamNote] = useState("");
   // Форма урока — шесть полей; развёрнутая в каждом дне, она делала неделю
   // стеной из полей, поэтому раскрывается по кнопке.
   const [addOpen, setAddOpen] = useState(false);
+  // Какому уроку сейчас пишут задание и что успели написать.
+  const [taskFor, setTaskFor] = useState(null);
+  const [taskText, setTaskText] = useState("");
+  const [taskMinutes, setTaskMinutes] = useState("30");
+  const due = tasks ? tasks.dueDate(day) : "";
 
   useEffect(() => {
     if (!examNote) return;
@@ -4133,9 +4270,70 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove }) 
           порядок дня по ней читался хуже, чем простым списком сверху вниз.
           Строка при этом однострочная, поэтому столбец выходит короткий. */}
       <div style={today ? styles.dayEntriesList : undefined}>
-        {entries.map((e) => (
-          <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} compact={today} />
-        ))}
+        {entries.map((e) => {
+          const list = tasks ? tasks.forLesson(e.id) : [];
+          return (
+            <div key={e.id}>
+              <ScheduleEntryRow
+                entry={e}
+                onUpdate={onUpdate}
+                onRemove={() => onRemove(e.id)}
+                compact={today}
+                onAddTask={tasks ? () => setTaskFor(taskFor === e.id ? null : e.id) : null}
+              />
+              {list.length > 0 && (
+                <div style={styles.lessonTasks}>
+                  {list.map((h) => (
+                    <label key={h.id} style={styles.lessonTaskRow}>
+                      <input type="checkbox" checked={!!h.done} onChange={() => tasks.toggle(h.id)} />
+                      <span style={{ ...styles.lessonTaskText, textDecoration: h.done ? "line-through" : "none" }}>
+                        {h.text}
+                      </span>
+                      <span style={styles.lessonTaskMeta}>
+                        {h.minutes ? h.minutes + " мин" : ""}
+                        {h.date && h.date !== due ? " · " + h.date.slice(8) + "." + h.date.slice(5, 7) : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {taskFor === e.id && (
+                <div style={styles.lessonTaskForm}>
+                  <AutoGrow
+                    placeholder="Что задали?"
+                    value={taskText}
+                    onChange={(ev) => setTaskText(ev.target.value)}
+                    onEnter={() => {
+                      tasks.add(e, taskText, taskMinutes);
+                      setTaskText("");
+                      setTaskFor(null);
+                    }}
+                    style={styles.lessonTaskInput}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={taskMinutes}
+                    onChange={(ev) => setTaskMinutes(ev.target.value)}
+                    style={styles.lessonTaskMinutes}
+                    title="Сколько минут займёт"
+                  />
+                  <button
+                    onClick={() => {
+                      tasks.add(e, taskText, taskMinutes);
+                      setTaskText("");
+                      setTaskFor(null);
+                    }}
+                    style={styles.rowDone}
+                  >
+                    К {due.slice(8)}.{due.slice(5, 7)}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <Collapsible open={addOpen}>
         <AddScheduleForm
@@ -4152,9 +4350,51 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove }) 
 // Серия занятий — огонёк вместо восклицательного знака. Смайлик рядом с
 // шрифтовой засечкой смотрелся чужеродно, поэтому пламя нарисовано теми же
 // цветами, что и остальное приложение: золото снаружи, горячее ядро внутри.
-function StreakFlame() {
+// Значок напоминания. Раньше это была буква — «!», «✓» или «·» шрифтом на
+// 44 пикселя. Буква в строке выравнивается по базовой линии, а не по своим
+// чернилам: у «!» вся краска сверху, у «·» посередине, у «✓» своя высота — и
+// каждый значок вставал на свою высоту, то есть криво. Огонёк рядом был
+// рисунком и сидел ровно, отчего разнобой был ещё заметнее.
+//
+// Теперь все четыре — рисунки в одной сетке 24×24, и центр у них общий.
+function ReminderMark({ kind }) {
+  if (kind === "streak") return <StreakFlame />;
   return (
-    <svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width={MARK_SIZE} height={MARK_SIZE} aria-hidden="true">
+      {kind === "warn" && (
+        <g fill="currentColor">
+          <path d="M9.4 1.8h5.2l-.8 13.4h-3.6L9.4 1.8z" />
+          <circle cx="12" cy="20" r="2.4" />
+        </g>
+      )}
+      {kind === "ok" && (
+        <path
+          d="M3.4 12.6l5.4 5.8L20.6 4.6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {kind === "idle" && <circle cx="12" cy="12" r="4.2" fill="currentColor" />}
+      {/* Новая неделя: круг со стрелкой — «начать заново». */}
+      {kind === "week" && (
+        <g fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+          <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+          <path d="M20.4 3.4v4.2h-4.2" strokeLinejoin="round" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+function StreakFlame({ size = MARK_SIZE }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      {/* Пламя узкое и в исходной сетке занимало меньше места, чем остальные
+          значки, — рядом с ними оно выглядело мельче. Растягиваем от центра. */}
+      <g transform="translate(12 12) scale(1.32) translate(-12 -12)">
       <path
         d="M12 2.2c3.4 3.6 5.6 6.5 5.6 10.2 0 3.5-2.5 6.3-5.6 6.3S6.4 15.9 6.4 12.4c0-2.1.9-3.8 2.1-5.4.3 1.5.9 2.4 1.6 2.9-.2-2.8.6-5.6 1.9-7.7z"
         fill="var(--gold)"
@@ -4164,6 +4404,7 @@ function StreakFlame() {
         fill="var(--redStrong)"
         opacity="0.85"
       />
+      </g>
     </svg>
   );
 }
@@ -4258,7 +4499,7 @@ function AddExamForm({ onAdd }) {
   );
 }
 
-function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
+function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
   const isExam = entry.kind === "exam";
   // Урок читают куда чаще, чем правят, поэтому обычный вид — три короткие
   // строки, а поля появляются по «изменить». Раньше каждый урок был формой из
@@ -4294,6 +4535,11 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
             )}
             <span style={styles.listRight}>
               <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+              {onAddTask && !isExam && (
+                <button onClick={onAddTask} style={styles.rowEditInline}>
+                  + задание
+                </button>
+              )}
               <button onClick={() => setEditing(true)} style={styles.rowEditInline}>
                 изменить
               </button>
@@ -4317,6 +4563,11 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
         )}
         <div style={styles.rowBottom}>
           <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+          {onAddTask && !isExam && (
+            <button onClick={onAddTask} style={styles.rowEditInline}>
+              + задание
+            </button>
+          )}
           <button onClick={() => setEditing(true)} style={styles.rowEdit}>
             изменить
           </button>
@@ -4677,17 +4928,30 @@ const styles = {
   nowAllWho: { fontSize: 11, fontWeight: 400, color: "var(--mute)" },
   nowAllItems: { display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12.5, color: "var(--ink3)" },
   nowAllItem: { whiteSpace: "nowrap" },
+  todayEventHead: {
+    fontSize: 11.5,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "var(--mute)",
+    marginBottom: 8,
+  },
+  todayEventRow: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 4 },
+  todayEventName: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, color: "var(--ink)" },
+  todayEventNote: { fontSize: 12.5, color: "var(--ink3)" },
+  nowTaskRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 12.5, marginTop: 2, marginLeft: 2 },
+  nowTaskText: { color: "var(--ink2)", minWidth: 0, overflowWrap: "anywhere" },
+  nowTomorrowTasks: { marginTop: 8, display: "flex", flexDirection: "column", gap: 2 },
   todayName: { fontSize: 13.5, fontWeight: 600, flex: "1 1 120px", minWidth: 0 },
   todayMeta: { fontSize: 12, color: "var(--ink3)" },
   quickLog: { borderTop: "1px solid var(--line2)", paddingTop: 10, marginTop: 4 },
   reminderWarn: { background: "var(--warmBg)", borderColor: "var(--warmLine)" },
   reminderOk: { borderColor: "var(--green)" },
   reminderRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  // Квадрат под значок: одинаковый для всех состояний, чтобы текст рядом не
+  // сдвигался, когда напоминание меняется.
   reminderMark: {
-    fontFamily: "'PT Serif', Georgia, serif",
-    fontSize: 44,
-    lineHeight: 1,
-    width: 46,
+    width: 54,
+    height: 54,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -5059,7 +5323,16 @@ const styles = {
     textDecoration: "underline",
   },
   mainBadge: { fontSize: 11, color: "var(--green)", fontWeight: 600 },
-  pastLabel: { fontSize: 11.5, color: "var(--mute)", margin: "10px 0 6px" },
+  pastHead: { display: "flex", alignItems: "baseline", gap: 10, margin: "12px 0 6px", flexWrap: "wrap" },
+  pastLabel: { fontSize: 11.5, color: "var(--mute)" },
+  pastClear: {
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "var(--ink3)",
+    borderRadius: 8,
+    padding: "4px 10px",
+    fontSize: 11.5,
+  },
   overallBar: { marginBottom: 24 },
   overallTrack: { height: 9, background: "var(--line)", borderRadius: 999, overflow: "hidden" },
   overallFill: { height: "100%", background: "var(--accent)", borderRadius: 999 },
@@ -5152,6 +5425,31 @@ const styles = {
   },
   todayDayWrap: { marginBottom: 16 },
   dayEntriesList: { display: "flex", flexDirection: "column", gap: 6 },
+  // Задания живут под своим уроком: «к какому уроку» — это первое, что
+  // спрашивают, а раньше они лежали отдельным списком и связи не было видно.
+  lessonTasks: { display: "flex", flexDirection: "column", gap: 3, margin: "3px 0 2px 14px" },
+  lessonTaskRow: { display: "flex", alignItems: "baseline", gap: 7, fontSize: 12.5, cursor: "pointer" },
+  lessonTaskText: { flex: 1, minWidth: 0, color: "var(--ink2)", overflowWrap: "anywhere" },
+  lessonTaskMeta: { fontSize: 11.5, color: "var(--mute)", whiteSpace: "nowrap" },
+  lessonTaskForm: { display: "flex", alignItems: "center", gap: 6, margin: "4px 0 6px 14px", flexWrap: "wrap" },
+  lessonTaskInput: {
+    flex: "1 1 180px",
+    minWidth: 0,
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    borderRadius: 8,
+    padding: "6px 9px",
+    fontSize: 12.5,
+    resize: "none",
+  },
+  lessonTaskMinutes: {
+    width: 62,
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    borderRadius: 8,
+    padding: "6px 8px",
+    fontSize: 12.5,
+  },
   // Строка одного дня: время, предмет, подробности и справа — важность с
   // «изменить». В узкой колонке недели те же данные идут в три строки, но
   // здесь ширины хватает, и день умещается в экран целиком.
