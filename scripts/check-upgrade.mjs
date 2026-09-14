@@ -66,7 +66,11 @@ const OLD_STATE = {
   lyceumSchedule: [
     { id: "s1", day: "mon", kind: "lesson", subjectName: "Алгебра", level: "prof", priority: 2, start: "08:30", end: "09:10", room: "каб. 402", teacher: "Гранкина И.В.", place: "", url: "", date: "" },
     { id: "s2", day: "wed", kind: "exam", examKind: "olympiad", subjectName: "Олимпиада по праву", level: "base", priority: 3, start: "10:00", end: "13:00", room: "", teacher: "", place: "ЮФУ", url: "", date: inDays(5) },
+    // Урок из готового расписания прошлого выпуска: приложение должно пересобрать
+    // его само, не тронув две записи выше — они добавлены руками.
+    { id: "sch-lyceum10-tue-3-1", day: "tue", kind: "lesson", subjectName: "Русский язык", level: "base", priority: 1, start: "10:20", end: "11:00", room: "каб. 401", teacher: "Петращук В.В.", place: "", url: "", date: "", preset: "lyceum10" },
   ],
+  presetChoices: { school: "law", groups: { rus: "timoshkova", eng: "ivanova", math: "base" }, specs: [] },
   notebooks: {
     "subj:law": [{ id: "b1", name: "ТГП", branches: [{ id: "br1", name: "Источники права", html: "<p>Конспект</p>", notes: [], files: [] }] }],
   },
@@ -106,7 +110,11 @@ if (!after) {
 } else {
   want("записи дневника", after.journal?.length, 2);
   want("события", after.events?.length, 1);
-  want("уроки и экзамены", after.lyceumSchedule?.length, 2);
+  // Свои записи не должны пострадать от пересборки готового расписания.
+  want("свой урок на месте", !!after.lyceumSchedule?.some((e) => e.id === "s1"), true);
+  want("своя олимпиада на месте", !!after.lyceumSchedule?.some((e) => e.id === "s2"), true);
+  want("готовое расписание пересобралось", after.lyceumSchedule?.length > 3, true);
+  want("новый урок подтянулся сам", !!after.lyceumSchedule?.some((e) => /Основы ИИ/.test(e.subjectName)), true);
   want("блоки тетради", after.notebooks?.["subj:law"]?.length, 1);
   want("конспект внутри ветки", after.notebooks?.["subj:law"]?.[0]?.branches?.[0]?.html, "<p>Конспект</p>");
   want("свои предметы", after.customSubjects?.length, 1);

@@ -27,9 +27,9 @@ import { dueTopics, reviewHours, agoWord } from "./repetition.js";
 import { search as searchAll } from "./search.js";
 import SchedulePreset from "./lyceum-preset.jsx";
 import ExamPreset from "./lyceum-exams-panel.jsx";
-import { KT_PRESET_ID, DEFAULT_KT } from "./lyceum-exams-10.js";
-import { VOSH_PRESET_ID, DEFAULT_VOSH } from "./lyceum-olympiads.js";
-import { PRESET_ID } from "./lyceum-schedule-10.js";
+import { KT_PRESET_ID, DEFAULT_KT, buildExams } from "./lyceum-exams-10.js";
+import { VOSH_PRESET_ID, DEFAULT_VOSH, buildOlympiads } from "./lyceum-olympiads.js";
+import { LYCEUM_REVISION, PRESET_ID, buildSchedule } from "./lyceum-schedule-10.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -541,6 +541,8 @@ export default function StudyPlanner() {
   // Какие контрольные тесты человек сдаёт: даты общие, предметы у каждого свои.
   const [examPicks, setExamPicks] = useState(DEFAULT_KT);
   const [voshPicks, setVoshPicks] = useState(DEFAULT_VOSH);
+  // Какой выпуск встроенных данных лицея уже разложен в расписании.
+  const [lyceumRevision, setLyceumRevision] = useState(LYCEUM_REVISION);
   const [query, setQuery] = useState("");
   // Сколько записей дневника показано. Разом рисовать весь год — это
   // полсекунды на телефоне при переходе на экран, а дальше первого десятка
@@ -691,6 +693,7 @@ export default function StudyPlanner() {
           if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
           if (parsed.examPicks) setExamPicks(parsed.examPicks);
           if (parsed.voshPicks) setVoshPicks(parsed.voshPicks);
+          setLyceumRevision(Number(parsed.lyceumRevision) || 0);
           if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
           if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
           if (parsed.openSections) setOpenSections(parsed.openSections);
@@ -806,6 +809,7 @@ export default function StudyPlanner() {
           presetChoices,
           examPicks,
           voshPicks,
+          lyceumRevision,
           mainEventId,
           weekPlanned,
           openSections,
@@ -835,7 +839,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, mainEventId, weekPlanned, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1224,7 +1228,7 @@ export default function StudyPlanner() {
 
   function buildExportPayload() {
     return JSON.stringify(
-      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, mainEventId, weekPlanned, openSections, homework },
+      { data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework },
       null,
       2
     );
@@ -1257,6 +1261,7 @@ export default function StudyPlanner() {
       if (parsed.presetChoices) setPresetChoices(parsed.presetChoices);
       if (parsed.examPicks) setExamPicks(parsed.examPicks);
       if (parsed.voshPicks) setVoshPicks(parsed.voshPicks);
+      setLyceumRevision(Number(parsed.lyceumRevision) || 0);
       if (parsed.mainEventId !== undefined) setMainEventId(parsed.mainEventId);
       if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
       if (parsed.openSections) setOpenSections(parsed.openSections);
@@ -1628,6 +1633,61 @@ export default function StudyPlanner() {
   function clearOlympiads() {
     setLyceumSchedule((prev) => prev.filter((e) => e.preset !== VOSH_PRESET_ID));
   }
+
+  // Встроенные данные лицея поправили — расписание подтягивается само.
+  // Раньше новый урок появлялся, только если вспомнить про «Обновить
+  // расписание», а без этого его в расписании просто не было.
+  useEffect(() => {
+    if (!loaded || lyceumRevision === LYCEUM_REVISION) return;
+    const mine = lyceumSchedule.filter((e) => e.preset);
+    if (!mine.length) {
+      setLyceumRevision(LYCEUM_REVISION);
+      return;
+    }
+    const has = (preset) => mine.some((e) => e.preset === preset);
+    const fresh = [
+      ...(has(PRESET_ID) && presetChoices.school ? buildSchedule(presetChoices) : []),
+      ...(has(KT_PRESET_ID) ? buildExams(examPicks) : []),
+      ...(has(VOSH_PRESET_ID) ? buildOlympiads(voshPicks) : []),
+    ];
+    if (!fresh.length) {
+      setLyceumRevision(LYCEUM_REVISION);
+      return;
+    }
+
+    // Важность и роль урока человек мог поменять под себя — переносим их на
+    // новые записи, а не сбрасываем на умолчание.
+    const key = (e) => e.day + "|" + e.start + "|" + e.subjectName;
+    const was = new Map(mine.map((e) => [key(e), e]));
+    const next = fresh.map((e) => {
+      const old = was.get(key(e));
+      return old ? { ...e, priority: old.priority, level: old.level } : e;
+    });
+    // Задание привязано к уроку по идентификатору: если урок пересобрался под
+    // новым, привязку надо перенести, иначе задание повиснет в пустоте.
+    const moved = new Map();
+    next.forEach((e) => {
+      const old = was.get(key(e));
+      if (old && old.id !== e.id) moved.set(old.id, e.id);
+    });
+
+    const before = lyceumSchedule;
+    setLyceumSchedule((prev) => [...prev.filter((e) => !e.preset), ...next]);
+    if (moved.size) {
+      setHomework((prev) => prev.map((h) => (moved.has(h.lessonId) ? { ...h, lessonId: moved.get(h.lessonId) } : h)));
+    }
+    setLyceumRevision(LYCEUM_REVISION);
+
+    const added = next.filter((e) => !was.has(key(e))).length;
+    const gone = mine.filter((e) => !next.some((n) => key(n) === key(e))).length;
+    if (added || gone) {
+      const parts = [added ? "добавилось " + added : "", gone ? "убралось " + gone : ""].filter(Boolean);
+      showUndo("Расписание лицея обновлено: " + parts.join(", "), () => {
+        setLyceumSchedule(before);
+        setLyceumRevision(LYCEUM_REVISION);
+      });
+    }
+  }, [loaded, lyceumRevision, lyceumSchedule, presetChoices, examPicks, voshPicks, showUndo]);
 
   function clearExams() {
     setLyceumSchedule((prev) => prev.filter((e) => e.preset !== KT_PRESET_ID));
