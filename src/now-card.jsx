@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   bellState,
   dayKeyOf,
@@ -17,7 +17,7 @@ import {
 // Вторая половина — не украшение: спрашивают обычно не про своё расписание.
 // «А что у вас сейчас?» — и ответить нечего, если у друга другая академическая
 // школа. Поэтому сетка берётся целиком, без фильтра по своему выбору.
-export default function NowCard({ entriesFor, styles }) {
+export default function NowCard({ entriesFor, tasksFor, homeworkOn, styles }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -55,6 +55,21 @@ export default function NowCard({ entriesFor, styles }) {
   const rows = shown ? lessonsAt(dayKey, shown.n) : [];
   const mine = shown ? (entriesFor(dayKey) || []).filter((e) => e.start === shown.start) : [];
 
+  // Вечером полезнее знать, что завтра, чем то, что уже отработано.
+  const over =
+    state.phase === "off" ||
+    state.phase === "after" ||
+    (me.hasOwn && (!me.firstToday || (me.lastEndToday && nowMin > minutesOfTime(me.lastEndToday))));
+  const tomorrow = useMemo(() => {
+    if (!over) return null;
+    const next = new Date(now);
+    next.setDate(next.getDate() + 1);
+    const key = dayKeyOf(next);
+    const iso = next.getFullYear() + "-" + pad(next.getMonth() + 1) + "-" + pad(next.getDate());
+    const lessons = [...(entriesFor(key) || [])].sort((a, b) => String(a.start).localeCompare(String(b.start)));
+    return { lessons, tasks: homeworkOn ? homeworkOn(iso) : [] };
+  }, [over, now, entriesFor, homeworkOn]);
+
   const head = headline(state, dayKey, me, nowMin);
 
   return (
@@ -68,11 +83,23 @@ export default function NowCard({ entriesFor, styles }) {
         <div style={styles.nowMine}>
           {mine.length ? (
             mine.map((e) => (
-              <div key={e.id} style={styles.nowMineRow}>
-                <span style={styles.nowMineTag}>{state.phase === "lesson" ? "у тебя" : "у тебя дальше"}</span>
-                <span style={styles.nowMineName}>{e.subjectName}</span>
-                {e.room && <span style={styles.nowMineMeta}>{e.room}</span>}
-                {e.teacher && <span style={styles.nowMineMeta}>{e.teacher}</span>}
+              <div key={e.id}>
+                <div style={styles.nowMineRow}>
+                  <span style={styles.nowMineTag}>{state.phase === "lesson" ? "у тебя" : "у тебя дальше"}</span>
+                  <span style={styles.nowMineName}>{e.subjectName}</span>
+                  {e.room && <span style={styles.nowMineMeta}>{e.room}</span>}
+                  {e.teacher && <span style={styles.nowMineMeta}>{e.teacher}</span>}
+                </div>
+                {/* Задание к этому же уроку — здесь, а не в отдельном списке:
+                    «что задали на сейчас» спрашивают вместе с «что сейчас». */}
+                {(tasksFor ? tasksFor(e.id) : []).map((h) => (
+                  <div key={h.id} style={styles.nowTaskRow}>
+                    <span style={{ ...styles.nowTaskText, textDecoration: h.done ? "line-through" : "none" }}>
+                      задано: {h.text}
+                    </span>
+                    {h.minutes ? <span style={styles.nowMineMeta}>{h.minutes} мин</span> : null}
+                  </div>
+                ))}
               </div>
             ))
           ) : (
@@ -81,6 +108,45 @@ export default function NowCard({ entriesFor, styles }) {
               <span style={styles.nowMineMeta}>
                 {entriesFor(dayKey).length ? "в это время окно" : "расписание не выбрано — раздел «Лицей»"}
               </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {over && tomorrow && (
+        <div style={styles.nowAll}>
+          <div style={styles.nowAllTitle}>Завтра</div>
+          {tomorrow.lessons.length === 0 ? (
+            <div style={styles.nowMineMeta}>уроков нет</div>
+          ) : (
+            <>
+              <div style={styles.nowMineRow}>
+                <span style={styles.nowMineName}>
+                  {tomorrow.lessons.length} {lessonsWord(tomorrow.lessons.length)}
+                </span>
+                <span style={styles.nowMineMeta}>
+                  с {tomorrow.lessons[0].start} до {tomorrow.lessons[tomorrow.lessons.length - 1].end}
+                </span>
+              </div>
+              <div style={styles.nowAllItems}>
+                {tomorrow.lessons.map((e) => (
+                  <span key={e.id} style={styles.nowAllItem}>
+                    {e.start} {e.subjectName}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+          {tomorrow.tasks.length > 0 && (
+            <div style={styles.nowTomorrowTasks}>
+              {tomorrow.tasks.map((h) => (
+                <div key={h.id} style={styles.nowTaskRow}>
+                  <span style={{ ...styles.nowTaskText, textDecoration: h.done ? "line-through" : "none" }}>
+                    задано: {h.text}
+                  </span>
+                  {h.subjectName ? <span style={styles.nowMineMeta}>{h.subjectName}</span> : null}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -159,4 +225,15 @@ function headline(state, dayKey, me, nowMin) {
     };
   }
   return { title: "Уроки на сегодня закончились", note: later() };
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+
+function lessonsWord(n) {
+  const last = n % 10;
+  const two = n % 100;
+  if (two >= 11 && two <= 14) return "уроков";
+  if (last === 1) return "урок";
+  if (last >= 2 && last <= 4) return "урока";
+  return "уроков";
 }

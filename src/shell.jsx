@@ -50,21 +50,27 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
         <Countdowns next={next} main={main} tone="rail" />
       </div>
 
+      {/* «Сегодня» — не такой же пункт, как остальные: с него начинают день и
+          на него возвращаются. Поэтому он стоит отдельно, крупнее и отделён
+          чертой от списка разделов. */}
       <nav style={styles.nav}>
         {items.map((item) => {
           const on = item.key === screen;
+          const home = item.key === "today";
           return (
-            <button
-              key={item.key}
-              // Цвет и подложка — в таблице стилей: инлайновый стиль перебивал :hover,
-              // и подсветка под курсором не появлялась вовсе.
-              className={"ap-nav" + (on ? " is-on" : "")}
-              onClick={() => onGo(item.key)}
-              style={styles.navBtn}
-            >
-              {item.label}
-              {item.hint ? <span style={styles.navHint}>{item.hint}</span> : null}
-            </button>
+            <React.Fragment key={item.key}>
+              <button
+                // Цвет и подложка — в таблице стилей: инлайновый стиль перебивал :hover,
+                // и подсветка под курсором не появлялась вовсе.
+                className={"ap-nav" + (on ? " is-on" : "")}
+                onClick={() => onGo(item.key)}
+                style={home ? styles.navHome : styles.navBtn}
+              >
+                {item.label}
+                {item.hint ? <span style={styles.navHint}>{item.hint}</span> : null}
+              </button>
+              {home && <div style={styles.navDivider} />}
+            </React.Fragment>
           );
         })}
       </nav>
@@ -303,6 +309,8 @@ const styles = {
   railToday: { fontSize: 12.5, color: "var(--railInk2)", marginTop: 6 },
   nav: { display: "flex", flexDirection: "column", gap: 2 },
   navBtn: { display: "flex", alignItems: "center", gap: 10, fontSize: 14.5, textAlign: "left", whiteSpace: "nowrap" },
+  navHome: { display: "flex", alignItems: "center", gap: 10, fontSize: 16.5, fontWeight: 600, textAlign: "left", whiteSpace: "nowrap" },
+  navDivider: { height: 1, background: "var(--railActive)", margin: "6px 12px 8px" },
   navHint: { marginLeft: "auto", fontSize: 12, color: "var(--railInk2)", paddingLeft: 10, whiteSpace: "nowrap" },
   version: {
     display: "block",
