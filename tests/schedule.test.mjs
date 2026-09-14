@@ -10,7 +10,7 @@ function check(name, fn) {
 
 const mathStudent = {
   school: "math",
-  groups: { eng: "yazykova", alg: "grankina", geom: "mikhailova", rus: "pobortseva", ai: "g1" },
+  groups: { eng: "yazykova", alg: "grankina", geom: "mikhailova", rus: "pobortseva" },
   specs: ["econsoc", "lawschool"],
 };
 
@@ -73,17 +73,22 @@ check("у каждой строки сетки есть звонок и кому
   });
 });
 
-check("английский: у базы два урока в неделю, у профиля четыре", () => {
+check("английский: база и профиль различаются уровнем и числом уроков", () => {
   const eng = VARIANTS.find((v) => v.id === "eng");
   assert.equal(tierOfOption(eng, "ivanova"), "base");
   assert.equal(tierOfOption(eng, "yazykova"), "prof");
-  const only = (g) => buildSchedule({ school: "hum", groups: { eng: g }, specs: [] }).filter((e) => e.subjectName.startsWith("Англ"));
-  const base = only("ivanova");
-  const prof = only("yazykova");
-  assert.equal(base.length, 2);
-  assert.equal(prof.length, 4);
-  assert.ok(base.every((e) => e.level === "base"));
-  assert.ok(prof.every((e) => e.level === "prof"));
+  const only = (school, g) =>
+    buildSchedule({ school, groups: { eng: g }, specs: [] }).filter((e) => e.subjectName.startsWith("Англ"));
+
+  // Второй урок вторника у бизнеса, гуманитариев и права занят «Основами ИИ»,
+  // и английский этого часа до них не доходит — отсюда разница между школами.
+  // Это следствие графика, а не разбора: если в лицее иначе, правится в SLOTS.
+  assert.equal(only("math", "ivanova").length, 2);
+  assert.equal(only("hum", "ivanova").length, 1);
+  assert.equal(only("hum", "yazykova").length, 4);
+  assert.ok(only("hum", "ivanova").every((e) => e.level === "base"));
+  assert.ok(only("hum", "yazykova").every((e) => e.level === "prof"));
+  assert.ok(only("hum", "yazykova").length > only("hum", "ivanova").length);
 });
 
 check("общая пара идёт обоим спецкурсам и не задваивается", () => {
@@ -110,4 +115,19 @@ check("математика: базовая у одного преподават
   assert.equal(prof.filter((n) => n === "Геометрия").length, 2);
 });
 
-console.log(`\nвсе проверки расписания прошли (${passed})`);
+
+// «Основы ИИ» не спрашиваются отдельно: группу определяет академическая школа.
+check("группа по основам ИИ берётся из школы, а не из выбора", () => {
+  assert.ok(!VARIANTS.some((v) => v.id === "ai"), "варианта «Основы ИИ» в выборе быть не должно");
+  const ai = (school) =>
+    buildSchedule({ school, groups: {}, specs: [] })
+      .filter((e) => e.subjectName.startsWith("Основы ИИ"))
+      .map((e) => e.start + " " + e.subjectName + " · " + e.teacher);
+  assert.deepStrictEqual(ai("math"), ["08:30 Основы ИИ (гр. 2) · Лебедев А.И."]);
+  assert.deepStrictEqual(ai("med"), ["08:30 Основы ИИ (гр. 2) · Лебедев А.И."]);
+  assert.deepStrictEqual(ai("biz"), ["09:25 Основы ИИ (гр. 1) · Лебедев А.И."]);
+  assert.deepStrictEqual(ai("hum"), ["09:25 Основы ИИ (гр. 1) · Лебедев А.И."]);
+  assert.deepStrictEqual(ai("law"), ["09:25 Основы ИИ (гр. 3) · Датенко В.И."]);
+});
+
+console.log("\nвсе проверки расписания прошли (" + passed + ")");
