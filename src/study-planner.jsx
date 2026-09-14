@@ -4129,9 +4129,10 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove }) 
       </Collapsible>
 
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
-      {/* В колонке недели урок за уроком читается нормально, а у отдельного дня
-          столбец из семи карточек пришлось бы листать — там они идут сеткой. */}
-      <div style={today ? styles.dayEntriesWide : undefined}>
+      {/* Один день — столбцом: сетка раскладывала уроки по строкам и колонкам, и
+          порядок дня по ней читался хуже, чем простым списком сверху вниз.
+          Строка при этом однострочная, поэтому столбец выходит короткий. */}
+      <div style={today ? styles.dayEntriesList : undefined}>
         {entries.map((e) => (
           <ScheduleEntryRow key={e.id} entry={e} onUpdate={onUpdate} onRemove={() => onRemove(e.id)} compact={today} />
         ))}
@@ -4276,15 +4277,39 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact }) {
     const facts = isExam
       ? [entry.date ? formatEventDate(entry.date) : "", entry.place]
       : [levelInfo(entry.level).short, entry.room, entry.teacher];
+    const title = entry.subjectName || (isExam ? "Экзамен" : "Урок");
+    const details = facts.filter(Boolean).join(" · ") || "без подробностей";
+
+    if (compact) {
+      return (
+        <div style={box}>
+          <div style={styles.listRow}>
+            <span style={styles.rowTime}>{entry.start}</span>
+            <span style={styles.rowName}>{title}</span>
+            <span style={styles.listFacts}>{details}</span>
+            {isExam && entry.url && (
+              <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
+                ссылка
+              </a>
+            )}
+            <span style={styles.listRight}>
+              <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
+              <button onClick={() => setEditing(true)} style={styles.rowEditInline}>
+                изменить
+              </button>
+            </span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={box}>
         <div style={styles.rowTop}>
           <span style={styles.rowTime}>{entry.start}</span>
-          <span style={styles.rowName}>
-            {entry.subjectName || (isExam ? "Экзамен" : "Урок")}
-          </span>
+          <span style={styles.rowName}>{title}</span>
         </div>
-        <div style={styles.rowFacts}>{facts.filter(Boolean).join(" · ") || "без подробностей"}</div>
+        <div style={styles.rowFacts}>{details}</div>
         {isExam && entry.url && (
           <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
             Открыть ссылку
@@ -5126,12 +5151,13 @@ const styles = {
     color: "var(--accent)",
   },
   todayDayWrap: { marginBottom: 16 },
-  dayEntriesWide: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))",
-    gap: 8,
-    alignItems: "start",
-  },
+  dayEntriesList: { display: "flex", flexDirection: "column", gap: 6 },
+  // Строка одного дня: время, предмет, подробности и справа — важность с
+  // «изменить». В узкой колонке недели те же данные идут в три строки, но
+  // здесь ширины хватает, и день умещается в экран целиком.
+  listRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%" },
+  listFacts: { flex: "1 1 220px", minWidth: 0, fontSize: 12, color: "var(--ink3)", overflowWrap: "anywhere" },
+  listRight: { display: "flex", alignItems: "center", gap: 10, marginLeft: "auto", flexShrink: 0 },
   mutedSmall: { fontSize: 12, color: "var(--mute)" },
   scheduleEntry: {
     display: "flex",
@@ -5148,6 +5174,15 @@ const styles = {
   rowName: { fontSize: 13.5, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" },
   rowFacts: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.45, overflowWrap: "anywhere" },
   rowBottom: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 },
+  rowEditInline: {
+    border: "none",
+    background: "none",
+    padding: 0,
+    fontSize: 11.5,
+    color: "var(--ink3)",
+    textDecoration: "underline",
+    whiteSpace: "nowrap",
+  },
   rowEdit: {
     marginLeft: "auto",
     border: "none",
