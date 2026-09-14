@@ -259,6 +259,10 @@ const SCHEDULE_EVENT_PREFIX = "sch-ev:";
 
 const JOURNAL_PAGE = 50;
 
+// Значок напоминания. Рисунок должен читаться рядом с заголовком в 19 пикселей
+// и двумя строками текста под ним — мелкий на этом фоне выглядел случайным.
+const MARK_SIZE = 46;
+
 function weekdayKeyFromDate(dateStr) {
   if (!dateStr) return null;
   const d = new Date(dateStr + "T00:00:00");
@@ -2241,15 +2245,11 @@ export default function StudyPlanner() {
             >
               <div style={styles.reminderRow}>
                 <div style={styles.reminderMark} aria-hidden="true">
-                  {studyStreakOn ? (
-                    <StreakFlame />
-                  ) : studyReminder.tone === "ok" ? (
-                    "✓"
-                  ) : studyReminder.tone === "warn" ? (
-                    "!"
-                  ) : (
-                    "·"
-                  )}
+                  <ReminderMark
+                    kind={
+                      studyStreakOn ? "streak" : studyReminder.tone === "ok" ? "ok" : studyReminder.tone === "warn" ? "warn" : "idle"
+                    }
+                  />
                 </div>
                 <div style={styles.reminderBody}>
                   <div style={styles.reminderTitle}>{studyReminder.title}</div>
@@ -4152,9 +4152,44 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove }) 
 // Серия занятий — огонёк вместо восклицательного знака. Смайлик рядом с
 // шрифтовой засечкой смотрелся чужеродно, поэтому пламя нарисовано теми же
 // цветами, что и остальное приложение: золото снаружи, горячее ядро внутри.
-function StreakFlame() {
+// Значок напоминания. Раньше это была буква — «!», «✓» или «·» шрифтом на
+// 44 пикселя. Буква в строке выравнивается по базовой линии, а не по своим
+// чернилам: у «!» вся краска сверху, у «·» посередине, у «✓» своя высота — и
+// каждый значок вставал на свою высоту, то есть криво. Огонёк рядом был
+// рисунком и сидел ровно, отчего разнобой был ещё заметнее.
+//
+// Теперь все четыре — рисунки в одной сетке 24×24, и центр у них общий.
+function ReminderMark({ kind }) {
+  if (kind === "streak") return <StreakFlame />;
   return (
-    <svg viewBox="0 0 24 24" width="38" height="38" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width={MARK_SIZE} height={MARK_SIZE} aria-hidden="true">
+      {kind === "warn" && (
+        <g fill="currentColor">
+          <path d="M9.4 1.8h5.2l-.8 13.4h-3.6L9.4 1.8z" />
+          <circle cx="12" cy="20" r="2.4" />
+        </g>
+      )}
+      {kind === "ok" && (
+        <path
+          d="M3.4 12.6l5.4 5.8L20.6 4.6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {kind === "idle" && <circle cx="12" cy="12" r="4.2" fill="currentColor" />}
+    </svg>
+  );
+}
+
+function StreakFlame({ size = MARK_SIZE }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      {/* Пламя узкое и в исходной сетке занимало меньше места, чем остальные
+          значки, — рядом с ними оно выглядело мельче. Растягиваем от центра. */}
+      <g transform="translate(12 12) scale(1.32) translate(-12 -12)">
       <path
         d="M12 2.2c3.4 3.6 5.6 6.5 5.6 10.2 0 3.5-2.5 6.3-5.6 6.3S6.4 15.9 6.4 12.4c0-2.1.9-3.8 2.1-5.4.3 1.5.9 2.4 1.6 2.9-.2-2.8.6-5.6 1.9-7.7z"
         fill="var(--gold)"
@@ -4164,6 +4199,7 @@ function StreakFlame() {
         fill="var(--redStrong)"
         opacity="0.85"
       />
+      </g>
     </svg>
   );
 }
@@ -4683,11 +4719,11 @@ const styles = {
   reminderWarn: { background: "var(--warmBg)", borderColor: "var(--warmLine)" },
   reminderOk: { borderColor: "var(--green)" },
   reminderRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  // Квадрат под значок: одинаковый для всех состояний, чтобы текст рядом не
+  // сдвигался, когда напоминание меняется.
   reminderMark: {
-    fontFamily: "'PT Serif', Georgia, serif",
-    fontSize: 44,
-    lineHeight: 1,
-    width: 46,
+    width: 54,
+    height: 54,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
