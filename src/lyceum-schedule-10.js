@@ -354,8 +354,26 @@ function fits(slot, school, groups, specs) {
 
 export const PRESET_ID = "lyceum10";
 
+// Номер выпуска встроенных данных лицея: расписания, графика КТ и олимпиад.
+// Приложение сравнивает его с тем, что записано у человека, и, если сетку
+// здесь поправили, обновляет его расписание само — раньше для этого нужно было
+// вспомнить про кнопку «Обновить расписание», а без неё новый урок не
+// появлялся вовсе. Поднимается при любой правке в SLOTS, KT_EXAMS или VOSH.
+export const LYCEUM_REVISION = 2;
+
 // Собирает личное расписание: школа, группы и спецкурсы на входе — готовые
 // записи расписания на выходе.
+// Устойчивый идентификатор урока: день, номер и отпечаток самого урока. Раньше
+// в него входил порядковый номер строки, и стоило добавить урок в начало сетки,
+// как у всех последующих менялись идентификаторы — а вместе с ними терялись
+// привязанные задания.
+function lessonId(slot) {
+  const stamp = [slot.subject, slot.teacher, slot.room].join("|");
+  let hash = 0;
+  for (let i = 0; i < stamp.length; i += 1) hash = (Math.imul(31, hash) + stamp.charCodeAt(i)) | 0;
+  return "sch-" + PRESET_ID + "-" + slot.day + "-" + slot.n + "-" + (hash >>> 0).toString(36);
+}
+
 export function buildSchedule(choices) {
   const school = (choices && choices.school) || "";
   const groups = (choices && choices.groups) || {};
@@ -378,7 +396,7 @@ export function buildSchedule(choices) {
     const bell = BELLS[slot.n] || ["08:30", "09:10"];
     const level = levelOf(slot);
     out.push({
-      id: "sch-" + PRESET_ID + "-" + slot.day + "-" + slot.n + "-" + out.length,
+      id: lessonId(slot),
       day: slot.day,
       kind: "lesson",
       subjectName: slot.subject,
