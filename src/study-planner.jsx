@@ -2046,7 +2046,7 @@ export default function StudyPlanner() {
       label: "События",
       hint: upcomingEvents.length ? upcomingEvents.length + " " + eventsWord(upcomingEvents.length) : "",
     },
-    { key: "budget", label: "Распределение (КПВ)", short: "Время", hint: Math.round(weeklyBudget) + " ч" },
+    { key: "budget", label: "Распределение", hint: Math.round(weeklyBudget) + " ч" },
     { key: "study", label: "Подготовка", hint: stats.totalAll ? stats.overallPct + "%" : "" },
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
