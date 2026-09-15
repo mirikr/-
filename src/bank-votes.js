@@ -15,6 +15,17 @@ const TABLE = "bank_answers";
 let cache = { at: 0, rows: [] };
 const FRESH_MS = 60 * 1000;
 
+// Состояние общей копилки, чтобы приложение могло честно сказать, считается
+// счёт по всему классу или только по своим ответам.
+//   "off"     — облака нет или вход не выполнен
+//   "ready"   — таблица отвечает
+//   "missing" — таблицы в базе нет
+//   "error"   — ответила ошибкой
+let state = "off";
+export function votesState() {
+  return state;
+}
+
 async function client() {
   if (!cloudConfigured) return null;
   try {
@@ -30,10 +41,19 @@ async function client() {
 export async function loadVotes(force) {
   if (!force && Date.now() - cache.at < FRESH_MS) return cache.rows;
   const conn = await client();
-  if (!conn) return cache.rows;
+  if (!conn) {
+    state = "off";
+    return cache.rows;
+  }
   try {
     const { data, error } = await conn.db.from(TABLE).select("task_id,user_id,answer,matches,fipi");
-    if (error) return cache.rows;
+    if (error) {
+      // Postgres отвечает 42P01, PostgREST — PGRST205: таблицы просто нет.
+      const code = String((error && error.code) || "");
+      state = code === "42P01" || code === "PGRST205" ? "missing" : "error";
+      return cache.rows;
+    }
+    state = "ready";
     cache = {
       at: Date.now(),
       rows: (data || []).map((r) => ({
@@ -46,6 +66,7 @@ export async function loadVotes(force) {
     };
     return cache.rows;
   } catch (e) {
+    state = "error";
     return cache.rows;
   }
 }

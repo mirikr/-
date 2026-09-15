@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Проверка подключения к Supabase: отвечает ли проект, включён ли вход по почте,
-// создана ли таблица planner_kv и закрыта ли она политикой RLS.
+// созданы ли таблицы planner_kv и bank_answers и закрыты ли они политикой RLS.
 //
 //   node scripts/check-supabase.mjs                # только чтение, ничего не меняет
 //   node scripts/check-supabase.mjs --write-probe  # плюс попытка анонимной записи
@@ -118,6 +118,27 @@ if (table.status === 200) {
 } else {
   warn(`неожиданный ответ ${table.status}`);
   info(JSON.stringify(table.body).slice(0, 300));
+}
+
+// 2.5. Общая копилка ответов тренажёра.
+console.log("\nТаблица bank_answers (общий счёт ответов тренажёра)");
+const votes = await req(`${URL_}/rest/v1/bank_answers?select=task_id&limit=1`);
+if (votes.status === 200) {
+  ok("таблица есть и отвечает по API");
+  if (Array.isArray(votes.body) && votes.body.length > 0) {
+    bad("анонимный запрос вернул строки — читать их должны только вошедшие");
+    info("выполните SQL из docs/supabase-setup.md, раздел «Копилка ответов тренажёра»");
+  } else {
+    ok("анонимному читателю строк не видно (так и должно быть)");
+  }
+} else if (votes.status === 404 || (votes.body && votes.body.code === "PGRST205")) {
+  bad("таблицы нет — «трое из четверых» будет считаться только по своим ответам");
+  info("выполните SQL из docs/supabase-setup.md, раздел «Копилка ответов тренажёра»");
+} else if ((votes.status === 401 || votes.status === 403) && votes.body && typeof votes.body === "object") {
+  ok("доступ анонимному пользователю закрыт (RLS работает)");
+} else {
+  warn(`неожиданный ответ ${votes.status}`);
+  info(JSON.stringify(votes.body).slice(0, 300));
 }
 
 // 3. Необязательная проверка: пускает ли таблица анонимную запись.
