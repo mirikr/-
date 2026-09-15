@@ -105,6 +105,42 @@ html, body { background: var(--bg); color: var(--ink); }
 }
 .ap-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--corridorLine); }
 
+/* Условие задания из банка ФИПИ: у них вёрстка на таблицах, и ломать её нельзя —
+   в информатике таблица и есть половина задания, а в обществознании два столбца
+   «А-Б-В» и «1-2-3» только так и читаются. Поэтому разметка приходит как есть, а
+   здесь ей задаётся вид: раскладочные таблицы остаются невидимыми, а таблицы с
+   данными получают сетку. */
+.ap-fipi { font-size: 15px; line-height: 1.6; overflow-x: auto; }
+.ap-fipi p { margin: 0 0 9px; }
+.ap-fipi p:last-child { margin-bottom: 0; }
+.ap-fipi table { border-collapse: collapse; max-width: 100%; }
+.ap-fipi td, .ap-fipi th { vertical-align: top; text-align: left; padding: 0 8px 0 0; }
+.ap-fipi td:last-child, .ap-fipi th:last-child { padding-right: 0; }
+.ap-fipi table.t { margin: 11px 0; border: 1px solid var(--line); border-radius: 6px; }
+.ap-fipi table.t td, .ap-fipi table.t th { border: 1px solid var(--line2); padding: 5px 9px; }
+.ap-fipi table.t tr:first-child td { background: var(--neutralBg); font-weight: 600; }
+.ap-fipi img {
+  display: block; max-width: 100%; height: auto; margin: 10px 0;
+  background: #fff; border: 1px solid var(--line2); border-radius: 8px; padding: 6px;
+}
+.ap-fipi b, .ap-fipi strong { font-weight: 600; }
+.ap-fipi sub, .ap-fipi sup { font-size: 0.75em; line-height: 0; }
+.ap-fipi u { text-underline-offset: 3px; }
+.ap-fipi math { font-size: 1.05em; }
+/* Два столбца задания на соответствие: при сборке набора они переписаны из
+   таблицы в колонки, каждая со своей шапкой. На широком экране стоят рядом,
+   на телефоне — друг под другом, и шапка остаётся при своём списке. */
+.ap-fipi .cols { display: flex; gap: 28px; align-items: flex-start; margin: 10px 0; }
+.ap-fipi .col { flex: 1 1 0; min-width: 0; }
+.ap-fipi .col > b { display: block; margin-bottom: 8px; }
+/* На телефоне широкая таблица с данными прокручивается сама, а не растягивает карточку. */
+@media (max-width: 700px) {
+  .ap-fipi { font-size: 14.5px; }
+  .ap-fipi table.t { display: block; overflow-x: auto; }
+  .ap-fipi .cols { display: block; }
+  .ap-fipi .col + .col { margin-top: 16px; }
+}
+
 .ap-balance-tip { position: absolute; }
 /* На телефоне накладка перекрыла бы весь график, поэтому разбор встаёт под ним. */
 @media (max-width: 700px) {

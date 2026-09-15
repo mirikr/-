@@ -145,6 +145,30 @@ want("отметка о ключе сохранилась", saved.marks === 1, "
 const afterReload = await page.locator("#root").innerText();
 want("итоги на месте после перезагрузки", /прорешано/.test(afterReload) && /Спорные ключи/.test(afterReload));
 
+// Разметка условия: таблица должна остаться таблицей, а не строкой слов.
+const structured = await page.evaluate(() => {
+  const el = document.querySelector("section.ap-card .ap-fipi");
+  if (!el) return null;
+  return { tables: el.querySelectorAll("table").length, cells: el.querySelectorAll("td").length };
+});
+want("условие показано разметкой, а не сплошным текстом", !!structured, structured ? JSON.stringify(structured) : "разметки нет");
+want("в условии есть таблица", structured && structured.tables > 0, structured ? structured.tables + " шт." : "");
+
+// Жалоба на само задание: кнопка есть, отмечается и попадает в список.
+const beforeBroken = await card.innerText();
+want("есть кнопка жалобы на задание", /Пожаловаться на задание/.test(beforeBroken));
+await page.getByRole("button", { name: "Пожаловаться на задание" }).click();
+await page.waitForTimeout(250);
+want("жалоба отмечается", /Пожаловались на задание/.test(await card.innerText()));
+want("задание попало в список жалоб", /Задания, на которые пожаловались/.test(await page.locator("#root").innerText()));
+await page.waitForTimeout(1400);
+const brokenSaved = await page.evaluate(() => {
+  const raw = localStorage.getItem("planner:planner-state-v5");
+  const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+  return (value.bankMarks || []).filter((m) => m.kind === "broken").length;
+});
+want("жалоба на задание сохранилась", brokenSaved === 1, "записей: " + brokenSaved);
+
 // Предметы переключаются, и набор меняется.
 for (const name of bank.BANK_SUBJECTS.slice(1)) {
   await page.getByRole("button", { name: new RegExp("^" + name) }).first().click();

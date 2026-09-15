@@ -105,7 +105,8 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
 
   const stats = useMemo(() => trainerStats(log, new Set(mine.map((t) => t.id))), [log, mine]);
   const streak = streakOf(log);
-  const myMark = task ? (marks || []).find((m) => m.taskId === task.id) : null;
+  const myMark = task ? (marks || []).find((m) => m.taskId === task.id && (m.kind === "ok" || m.kind === "wrong")) : null;
+  const myBroken = task ? (marks || []).find((m) => m.taskId === task.id && m.kind === "broken") : null;
 
   // Свой голос считаем из своих же записей: так он виден сразу, даже если
   // облако недоступно и в общую копилку он ещё не уехал.
@@ -114,6 +115,16 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     return task ? strangers.concat(myVote(log, marks, task.id)) : strangers;
   }, [votes, me, log, marks, task]);
   const key = task ? consensus(allVotes, task.id) : null;
+
+  const broken = useMemo(() => {
+    const out = [];
+    (marks || []).forEach((m) => {
+      if (m.kind !== "broken") return;
+      const t = BANK_TASKS.find((x) => x.id === m.taskId);
+      if (t && !out.some((x) => x.id === t.id)) out.push(t);
+    });
+    return out;
+  }, [marks]);
 
   const disputed = useMemo(() => {
     const out = [];
@@ -139,6 +150,9 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   function mark(kind) {
     if (!task) return;
     onMark({ taskId: task.id, kind });
+    // «Криво показано» — жалоба на задание, а не ответ банка, поэтому в общий
+    // счёт ключей она не уходит.
+    if (kind === "broken") return;
     const same = myMark && myMark.kind === kind;
     saveVote({ taskId: task.id, answer: value, matches: !!(result && result.ok), fipi: same ? "" : kind })
       .then((sent) => sent && loadVotes(true).then(setVotes));
@@ -237,17 +251,13 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
             </div>
             {task.kes && <div style={S.kes}>{task.kes}</div>}
             {task.lead && <div style={S.lead}>{task.lead}</div>}
-            <div style={S.text}>{task.text}</div>
-            {task.pictures.map((p, i) => (
-              <img
-                key={i}
-                src={p.data}
-                alt={"Рисунок к заданию " + task.id}
-                style={S.picture}
-                width={p.w || undefined}
-                height={p.h || undefined}
-              />
-            ))}
+            {task.body ? (
+              // Разметка условия приходит из нашего же набора, собранного из банка,
+              // и чистится при сборке: ни скриптов, ни чужих ссылок в ней не остаётся.
+              <div className="ap-fipi" style={S.body} dangerouslySetInnerHTML={{ __html: task.body }} />
+            ) : (
+              <div style={S.text}>{task.text}</div>
+            )}
 
             <div style={S.answerRow}>
               <input
@@ -267,9 +277,17 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
               )}
             </div>
 
-            {!result && (
-              <button onClick={next} className="ap-row" style={S.skip}>Пропустить</button>
-            )}
+            <div style={S.underRow}>
+              {!result && <button onClick={next} className="ap-row" style={S.skip}>Пропустить</button>}
+              <button
+                onClick={() => mark("broken")}
+                className="ap-row"
+                style={{ ...S.report, ...(myBroken ? S.reportOn : null) }}
+                title="Условие показано криво, непонятно или не хватает рисунка"
+              >
+                {myBroken ? "Пожаловались на задание ✓" : "Пожаловаться на задание"}
+              </button>
+            </div>
 
             {result && (
               <div style={{ ...S.verdict, ...(result.ok ? S.verdictOk : S.verdictBad) }}>
@@ -361,6 +379,18 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
           </div>
         )}
 
+        {broken.length > 0 && (
+          <div style={S.disputed}>
+            <div style={S.disputedTitle}>Задания, на которые пожаловались — их надо переснять или переписать</div>
+            {broken.map((t) => (
+              <div key={t.id} style={S.disputedRow}>
+                <span style={S.code}>№ {t.id}</span>
+                <span style={S.disputedText}>{t.subject} · {t.text.slice(0, 70)}…</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <p style={S.source}>{BANK_SOURCE}</p>
       </section>
     </>
@@ -401,9 +431,13 @@ const S = {
   },
   headSection: { fontSize: 12.5, color: "var(--ink3)" },
   clock: { marginLeft: "auto", fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 600, color: "var(--ink2)" },
-  kes: { fontSize: 12, color: "var(--mute)", marginBottom: 8, lineHeight: 1.45 },
+  kes: {
+    fontSize: 12, color: "var(--mute)", marginBottom: 8, lineHeight: 1.45,
+    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+  },
   lead: { fontSize: 13, color: "var(--ink3)", marginBottom: 6 },
   text: { fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 14 },
+  body: { marginBottom: 14 },
 
   answerRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
   input: {
@@ -415,10 +449,16 @@ const S = {
     border: "1px solid var(--ink)", background: "var(--ink)", color: "var(--bg)", borderRadius: 9,
     padding: "9px 16px", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
   },
+  underRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 9 },
   skip: {
-    marginTop: 8, border: "none", background: "none", color: "var(--mute)", font: "inherit",
+    border: "none", background: "none", color: "var(--mute)", font: "inherit",
     fontSize: 13, cursor: "pointer", padding: 0,
   },
+  report: {
+    marginLeft: "auto", border: "none", background: "none", color: "var(--mute)", font: "inherit",
+    fontSize: 13, cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 3,
+  },
+  reportOn: { color: "var(--ink2)", textDecoration: "none", fontWeight: 600 },
 
   verdict: { marginTop: 12, borderRadius: 10, padding: "11px 13px", border: "1px solid" },
   verdictOk: { borderColor: "var(--green)", background: "var(--panel)" },

@@ -53,7 +53,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "отцы моложе 23 лет на момент рождения ребёнка: 22 (1940) → ребёнок 32 (1960), это 20 лет, и 35 (1965) → ребёнок 33 (1987), это 22 года. Остальные пары «отец — ребёнок» дают 25 лет и больше",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ниже представлены два фрагмента таблиц из базы данных о жителях микрорайона. Каждая строка таблицы 2 содержит информацию о ребёнке и об одном из его родителей. Информация представлена значением поля ID в соответствующей строке таблицы 1. Определите на основании приведённых данных, у скольких детей на момент их рождения отцам было меньше 23 полных лет. При вычислении ответа учитывайте только информацию из приведённых фрагментов таблиц. </p><table class=\"t\"><tbody><tr><td valign=\"bottom\" colspan=\"4\"><p align=\"center\"><b>Таблица 1</b></p></td><td valign=\"bottom\"></td><td valign=\"bottom\" colspan=\"2\"><p align=\"center\"><b>Таблица 2</b></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><b>ID</b></p></td><td valign=\"top\"><p><b>Фамилия_И.О.</b></p></td><td valign=\"top\"><p align=\"center\"><b>Пол</b></p></td><td valign=\"top\"><p align=\"center\"><b>Год_рождения</b></p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><b>ID_Родителя</b></p></td><td valign=\"top\"><p align=\"center\"><b>ID_Ребёнка</b></p></td></tr><tr><td valign=\"top\"><p align=\"center\">15</p></td><td valign=\"bottom\"><p align=\"center\">Петрова Н.А.</p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td><p align=\"center\">1944</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">22</p></td><td valign=\"top\"><p align=\"center\">23</p></td></tr><tr><td valign=\"top\"><p align=\"center\">22</p></td><td valign=\"bottom\"><p align=\"center\">Иваненко И.М.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">1940</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">42</p></td><td valign=\"top\"><p align=\"center\">23</p></td></tr><tr><td valign=\"top\"><p align=\"center\">23</p></td><td valign=\"top\"><p align=\"center\">Иваненко М.И.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">1968</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">23</p></td><td valign=\"top\"><p align=\"center\">24</p></td></tr><tr><td valign=\"top\"><p align=\"center\">24</p></td><td valign=\"bottom\"><p align=\"center\">Иваненко М.М.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">1993</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">73</p></td><td valign=\"top\"><p align=\"center\">24</p></td></tr><tr><td valign=\"top\"><p align=\"center\">32</p></td><td valign=\"bottom\"><p align=\"center\">Будай А.И.</p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td><p align=\"center\">1960</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">22</p></td><td valign=\"top\"><p align=\"center\">32</p></td></tr><tr><td valign=\"top\"><p align=\"center\">33</p></td><td valign=\"bottom\"><p align=\"center\">Будай В.С.</p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td><p align=\"center\">1987</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">42</p></td><td valign=\"top\"><p align=\"center\">32</p></td></tr><tr><td valign=\"top\"><p align=\"center\">35</p></td><td valign=\"bottom\"><p align=\"center\">Будай С.С.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">1965</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">32</p></td><td valign=\"top\"><p align=\"center\">33</p></td></tr><tr><td valign=\"top\"><p align=\"center\">42</p></td><td valign=\"bottom\"><p align=\"center\">Коладзе А.С.</p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td><p align=\"center\">1941</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">35</p></td><td valign=\"top\"><p align=\"center\">33</p></td></tr><tr><td valign=\"top\"><p align=\"center\">43</p></td><td valign=\"bottom\"><p align=\"center\">Коладзе Л.А.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">1955</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">15</p></td><td valign=\"top\"><p align=\"center\">35</p></td></tr><tr><td valign=\"top\"><p align=\"center\">44</p></td><td valign=\"bottom\"><p align=\"center\">Родэ О.С.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">1990</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">32</p></td><td valign=\"top\"><p align=\"center\">44</p></td></tr><tr><td valign=\"top\"><p align=\"center\">46</p></td><td valign=\"bottom\"><p align=\"center\">Родэ М.О.</p></td><td valign=\"top\"><p align=\"center\">М</p></td><td><p align=\"center\">2010</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">35</p></td><td valign=\"top\"><p align=\"center\">44</p></td></tr><tr><td valign=\"top\"><p align=\"center\">52</p></td><td valign=\"bottom\"><p align=\"center\">Ауэрман А.М.</p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td><p align=\"center\">1995</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">23</p></td><td valign=\"top\"><p align=\"center\">52</p></td></tr><tr><td valign=\"top\"><p align=\"center\">73</p></td><td valign=\"bottom\"><p align=\"center\">Антонова М.А.</p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td><p align=\"center\">1967</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">73</p></td><td valign=\"top\"><p align=\"center\">52</p></td></tr><tr><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "FDF14C",
@@ -69,7 +70,8 @@ export const BANK_TASKS = [
   "answer": "26",
   "accept": [],
   "why": "Аганян Б.Г. — ID 37, её родитель 36 (Аганян Т.А.); родители 36 — это 26 (Виеру А.В., М) и 46 (Баурн А.С., Ж); отец родителя, то есть дедушка, — 26",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ниже представлены две таблицы из базы данных. Каждая строка таблицы 2 содержит информацию о ребёнке и об одном из его родителей. Информация представлена значением поля ID в соответствующей строке таблицы 1. Определите на основании приведённых данных <span>ID</span>дедушки Аганян Б.Г. </p><p><i>Примечание.</i> Дедушка –&nbsp;это отец одного из родителей.</p><table class=\"t\"><tbody><tr><td colspan=\"3\" valign=\"bottom\"><p align=\"center\"><b>Таблица 1</b></p></td><td valign=\"bottom\"></td><td colspan=\"2\" valign=\"bottom\"><p align=\"center\"><b>Таблица 2</b></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><b>ID</b></p></td><td valign=\"top\"><p><b>Фамилия_И.О.</b></p></td><td valign=\"top\"><p align=\"center\"><b>Пол</b></p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><b>ID_Родителя</b></p></td><td valign=\"top\"><p align=\"center\"><b>ID_Ребёнка</b></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>16</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Дурново И.М.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>26</span></p></td><td valign=\"top\"><p align=\"center\"><span>27</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>26</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Виеру А.В.</span></p></td><td valign=\"top\"><p align=\"center\">М</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>46</span></p></td><td valign=\"top\"><p align=\"center\"><span>27</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>27</span></p></td><td valign=\"top\"><p align=\"center\"><span>Виеру В.А.</span></p></td><td valign=\"top\"><p align=\"center\">М</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>27</span></p></td><td valign=\"top\"><p align=\"center\"><span>28</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>28</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Виеру В.В.</span></p></td><td valign=\"top\"><p align=\"center\">М</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>66</span></p></td><td valign=\"top\"><p align=\"center\"><span>28</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>36</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Аганян Т.А.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>26</span></p></td><td valign=\"top\"><p align=\"center\"><span>36</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>37</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Аганян Б.Г.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>46</span></p></td><td valign=\"top\"><p align=\"center\"><span>36</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>38</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Аганян Г.Г.</span></p></td><td valign=\"top\"><p align=\"center\">М</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>36</span></p></td><td valign=\"top\"><p align=\"center\"><span>37</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>46</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Баурн А.С.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>38</span></p></td><td valign=\"top\"><p align=\"center\"><span>37</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>47</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Баурн В.А.</span></p></td><td valign=\"top\"><p align=\"center\">М</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>16</span></p></td><td valign=\"top\"><p align=\"center\"><span>38</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>48</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Альберт К.Г.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>36</span></p></td><td valign=\"top\"><p align=\"center\"><span>48</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>49</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Альберт И.К.</span></p></td><td valign=\"top\"><p align=\"center\">М</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>38</span></p></td><td valign=\"top\"><p align=\"center\"><span>48</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>56</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Лещенко Н.В.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>27</span></p></td><td valign=\"top\"><p align=\"center\"><span>56</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\"><span>66</span></p></td><td valign=\"bottom\"><p align=\"center\"><span>Чивадзе Г.В.</span></p></td><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\"><span>66</span></p></td><td valign=\"top\"><p align=\"center\"><span>56</span></p></td></tr><tr><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"bottom\"></td><td valign=\"top\"><p align=\"center\">…</p></td><td valign=\"top\"><p align=\"center\">…</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "0FDA4F",
@@ -85,7 +87,8 @@ export const BANK_TASKS = [
   "answer": "134",
   "accept": [],
   "why": "1 — третий закон Ньютона; 3 — поляризация диэлектрика; 4 — W = LI²/2. Ошибки: 2 — конденсация это пар→жидкость; 5 — свойства перепутаны местами",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><span>Выберите все верные утверждения о физических явлениях, величинах и&nbsp;закономерностях. Запишите цифры, под которыми они указаны.</span></p></td></tr></tbody></table></div>"
  },
  {
   "id": "826D45",
@@ -101,7 +104,8 @@ export const BANK_TASKS = [
   "answer": "35",
   "accept": [],
   "why": "3 — заряд на поверхности проводника; 5 — изотопы. Ошибки: 1 — силы одной природы; 2 — при адиабатном процессе теплообмена нет; 4 — поляризация наблюдается",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите все верные утверждения о физических явлениях, величинах и&nbsp;закономерностях. Запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "A11646",
@@ -117,7 +121,8 @@ export const BANK_TASKS = [
   "answer": "24",
   "accept": [],
   "why": "2 — конвекция; 4 — дифракция при сравнимых размерах. Ошибки: 1 — это равномерное движение; 3 — одноимённые отталкиваются; 5 — у изотопов одинаковы протоны",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите все верные утверждения о физических явлениях, величинах изакономерностях. Запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "C2CF4D",
@@ -133,7 +138,8 @@ export const BANK_TASKS = [
   "answer": "145",
   "accept": [],
   "why": "1, 4, 5 верны. Ошибки: 2 — при изохорном процессе работа нулевая; 3 — при последовательном соединении на большем R напряжение больше",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите все верные утверждения о физических явлениях, величинах и закономерностях. Запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "48F84F",
@@ -149,7 +155,8 @@ export const BANK_TASKS = [
   "answer": "98.83.255.254",
   "accept": [],
   "why": "маска 255.252.0.0 даёт сеть 98.80.0.0 и широковещательный адрес 98.83.255.255; последний назначаемый компьютеру — на единицу меньше",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В терминологии сетей TCP/IP маской сети называют двоичное число, которое показывает, какая часть IP-адреса узла сети относится к адресу сети, а какая – к адресу узла в этой сети. Адрес сети получается в результате применения поразрядной конъюнкции к заданному адресу узла и его маске.</p><p>Широковещательным адресом называется специализированный адрес, в котором на месте нулей в маске стоят единицы. Адрес сети и широковещательный адрес не могут быть использованы для адресации сетевых устройств.</p><p>Сеть задана IP-адресом одного из входящих в неё узлов 98.81.154.195 и сетевой маской 255.252.0.0.</p><p>Найдите наибольший в данной сети IP-адрес, который может быть назначен компьютеру. В ответе укажите найденный IP-адрес без разделителей.</p><p><i>Например</i>, если бы найденный адрес был равен 111.22.3.44, то в ответе следовало бы записать 11122344.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "76254F",
@@ -165,7 +172,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "200 Кбайт = 1 638 400 бит на 614 400 пикселей — 2,67 бита на пиксель, целых битов только 2, значит цветов 2² = 4",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Автоматическая камера производит растровые изображения размером 600×1024 пикселей. Для кодирования цвета каждого пикселя используется одинаковое количество бит, коды пикселей записываются в файл один за другим без промежутков. Объём файла с изображением не может превышать 200 Кбайт без учёта размера заголовка файла. Какое максимальное количество цветов можно использовать в палитре?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "05D648",
@@ -181,7 +189,8 @@ export const BANK_TASKS = [
   "answer": "1,5",
   "accept": [],
   "why": "в среде λ = λ0/n, значит λвозд/λстекл = n = 1,5",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Зелёный свет (<span>λ</span>&nbsp;=&nbsp;550 нм) переходит из стекла с показателем преломления 1,5 в воздух. Определите отношение длины волны фотона в воздухе к его длине волны в стекле.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "29eB4c",
@@ -197,7 +206,8 @@ export const BANK_TASKS = [
   "answer": "3,5",
   "accept": [],
   "why": "30 суток = три периода по 10 ⇒ 28/2³ = 3,5 мг",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Период полураспада изотопа актиния <span>22589𝐴⁢𝑐</span>&nbsp;равен 10 суткам. Какая масса этого изотопа осталась через 30 суток в образце, содержавшем первоначально 28 мг <span>22589𝐴⁢𝑐</span>?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "2B1449",
@@ -217,7 +227,8 @@ export const BANK_TASKS = [
    "50;69"
   ],
   "why": "¹¹⁹₅₀Sn: протонов 50, нейтронов 119 − 50 = 69",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Сколько протонов и сколько нейтронов содержится в ядре 11950𝑆⁢𝑛?</p><table><tbody><tr><td><p align=\"center\">Число протонов </p></td><td><p align=\"center\">Число нейтронов</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "4C2E4A",
@@ -233,7 +244,8 @@ export const BANK_TASKS = [
   "answer": "15",
   "accept": [],
   "why": "54 мин = три периода по 18 мин ⇒ 120/2³ = 15 мг",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Период полураспада <i>Т</i> изотопа селена 8134Se&nbsp;равен 18 мин. Какая масса этого изотопа осталась в образце, содержавшем первоначально 120 мг 8134Se,&nbsp;через <br> 54 мин.?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "51A14C",
@@ -249,7 +261,8 @@ export const BANK_TASKS = [
   "answer": "88",
   "accept": [],
   "why": "по массовым числам: 1 + 235 = A + 145 + 3 ⇒ A = 88",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В результате реакции <span>10⁢𝑛+ 23592⁢U→ AZ⁢X+ 14555⁢Cs+ ⁢310⁢𝑛</span>&nbsp;образуется ядро химического элемента <span>AZX</span>. Каково массовое число <span>A</span>образовавшегося ядра?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "7D7448",
@@ -265,7 +278,8 @@ export const BANK_TASKS = [
   "answer": "24",
   "accept": [],
   "why": "λ = h/p — формула 2; ν = E/h — формула 4",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между физическими величинами и формулами, по которым их можно рассчитать (<i><span>E</span></i>–&nbsp;энергия фотона; <i><span>h</span></i>–&nbsp;постоянная Планка; <br><i>р </i>–&nbsp;импульс фотона). </p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>А)</b>&nbsp;</td><td><p>длина волны фотона</p></td></tr><tr valign=\"middle\"><td><b>Б)</b>&nbsp;</td><td><p>частота фотона</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>1)</b>&nbsp;</td><td><p>𝑝ℎ</p></td></tr><tr valign=\"middle\"><td><b>2)</b>&nbsp;</td><td><p>ℎ𝑝</p></td></tr><tr valign=\"middle\"><td><b>3)</b>&nbsp;</td><td><p><i>𝐸𝑝</i></p></td></tr><tr valign=\"middle\"><td><b>4)</b>&nbsp;</td><td><p>𝐸ℎ</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "A1AF4F",
@@ -281,7 +295,8 @@ export const BANK_TASKS = [
   "answer": "2,5",
   "accept": [],
   "why": "E = hν, энергия фотона упала в 2,5 раза ⇒ и частота в 2,5 раза",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>При замене одного лазера на другой мощность испускаемого светового пучка увеличилась в 1,5 раза, а энергия каждого испускаемого фотона уменьшилась <br> в 2,5 раза. Во сколько раз уменьшилась при этом частота испускаемого света?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "B00348",
@@ -307,7 +322,8 @@ export const BANK_TASKS = [
    "31;38"
   ],
   "why": "у галлия (Z = 31) изотопы 69 (60 %) и 71 (40 %); у самого распространённого — ⁶⁹Ga — протонов 31, нейтронов 69 − 31 = 38",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На рисунке представлен фрагмент Периодической системы элементов Д.И.&nbsp;Менделеева. Под названием каждого элемента приведены массовые числа его основных стабильных изотопов. При этом нижний индекс около массового числа указывает (в процентах) распространённость изотопа <br> в природе.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\"><img src=\"data:image/gif;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>Запишите <u>в таблицу</u> число протонов и число нейтронов в ядре самого распространённого изотопа галлия.</p><table><tbody><tr><td><p align=\"center\">Число протонов </p></td><td><p align=\"center\">Число нейтронов</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "B2864C",
@@ -323,7 +339,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "p = h/λ, длина волны вдвое меньше ⇒ импульс вдвое больше",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В вакууме длина волны света от первого источника в 2 раза меньше, чем длина волны света от второго источника. Определите отношение импульсов <br> фотонов 𝑝1𝑝2,&nbsp;испускаемых этими источниками.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "BA68F8",
@@ -343,7 +360,8 @@ export const BANK_TASKS = [
    "109;78"
   ],
   "why": "нейтронов 187 − 78 = 109; электронов столько же, сколько протонов, — 78",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Сколько нейтронов содержится в ядре изотопа платины 18778Pt&nbsp;и сколько электронов в электронной оболочке нейтрального атома этого изотопа?</p><table><tbody><tr><td><p align=\"center\">Число нейтронов</p></td><td><p align=\"center\">Число электронов</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "BD7F43",
@@ -359,7 +377,8 @@ export const BANK_TASKS = [
   "answer": "32",
   "accept": [],
   "why": "альфа-распад — уравнение 3 (Ac → Fr + ⁴₂He); бета-распад — уравнение 2 (Np → Pu + e⁻ + антинейтрино)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p><span>Установите соответствие между видами радиоактивного распада <br> и уравнениями, описывающими этот процесс</span>.</p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ВИДЫ РАСПАДА</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">альфа-распад</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>бета-распад</p></td></tr></tbody></table></div><div class=\"col\"><b><u>УРАВНЕНИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>23892U⁢ + ⁢2210Ne → ⁢256102No + ⁢4⁢10𝑛</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>23893Np → 23894Pu + ⁢0−1𝑒&nbsp;+ ̃𝑣𝑒</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>22789Ac → 22387Fr + ⁢42He</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>20983Bi + ⁢21H⁢ → ⁢10543Tc + ⁢10241N⁢b + ⁢4⁢10𝑛</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "C49040",
@@ -375,7 +394,8 @@ export const BANK_TASKS = [
   "answer": "31",
   "accept": [],
   "why": "β⁻-распад: массовое число не меняется, заряд +1",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Как изменятся при <span>β</span><sup>–</sup>-распаде массовое число ядра и его заряд?</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличится</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшится</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменится</p></td></tr></tbody></table><p>Запишите <u>в таблицу</u> выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td><p align=\"center\">Массовое число ядра</p></td><td><p align=\"center\">Заряд ядра</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "E42042",
@@ -391,7 +411,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "60 дней = два периода полураспада ⇒ в 4 раза",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Период полураспада изотопа цезия 13755Cs&nbsp;равен 30 дням. Во сколько раз уменьшится количество атомов этого изотопа цезия в образце, содержавшем первоначально 1 мкмоль изотопа, за 60 дней?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "00AE47",
@@ -407,7 +428,8 @@ export const BANK_TASKS = [
   "answer": "39528",
   "accept": [],
   "why": "перебор всех 7⁶ слов алфавита А-Ж-И-М-Н-У-Ч: чётных номеров, не начинающихся с Ж и содержащих не больше одной Ч, ровно 39 528",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Все шестибуквенные слова, составленные из букв М, У, Ж, Ч, И, Н, А, записаны в алфавитном порядке и пронумерованы.</p><p>Вот начало списка:</p><p>1.&nbsp; АААААА</p><p>2.&nbsp; АААААЖ</p><p>3.&nbsp; АААААИ</p><p>4.&nbsp; АААААМ</p><p>5.&nbsp; АААААН</p><p>6.&nbsp; АААААУ</p><p>7.&nbsp; АААААЧ</p><p>……</p><p>Определите в этом списке количество слов с чётными номерами, которые не начинаются с буквы Ж и при этом содержат в своей записи не более одной буквы Ч.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "1DB74E",
@@ -423,7 +445,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "каналов вчетверо меньше, разрешение вдвое больше, частота в 1,5 раза меньше: 12 · ¼ · 2 · ⅔ = 4 Мбайт",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Музыкальный фрагмент был записан в формате квадро (четырёхканальная &nbsp;запись), оцифрован и сохранён в виде файла без использования сжатия данных. Размер полученного файла без учёта размера заголовка файла –&nbsp;<br> 12 Мбайт. Затем тот же музыкальный фрагмент был записан повторно <br> в формате моно и оцифрован с разрешением в 2 раза выше и частотой дискретизации в 1,5 раза меньше, чем в первый раз. Сжатие данных <br> не производилось. Укажите размер в Мбайт файла, полученного при повторной записи. В ответе запишите только целое число, единицу измерения писать не нужно. Искомый объём не учитывает размера заголовка файла.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "21EE42",
@@ -439,7 +462,8 @@ export const BANK_TASKS = [
   "answer": "12",
   "accept": [],
   "why": "поток 4·96000·24 = 9 216 000 бит/с; 792 Мбайт дают 720,9 с, то есть примерно 12 минут",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Производилась четырёхканальная (квадро) звукозапись с частотой дискретизации 96 кГц и 24-битным разрешением. <br> В результате был получен файл размером 792 Мбайт, без учёта размера заголовка и без сжатия данных. Определите длительность звукозаписи (в минутах). В качестве ответа укажите ближайшее к полученному времени записи целое число.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "439C49",
@@ -455,7 +479,8 @@ export const BANK_TASKS = [
   "answer": "256",
   "accept": [],
   "why": "1 Мбайт = 8·2²⁰ бит на 2²⁰ пикселей — ровно 8 бит на пиксель, значит цветов 2⁸ = 256",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Для хранения произвольного растрового изображения размером <br> 1024×1024 пикселей отведён 1 Мбайт памяти без учёта размера заголовка файла. Для кодирования цвета каждого пикселя используется одинаковое количество бит, коды пикселей записываются в файл один за другим без промежутков. Какое максимальное количество цветов можно использовать <br> в изображении?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "734D40",
@@ -471,7 +496,8 @@ export const BANK_TASKS = [
   "answer": "10",
   "accept": [],
   "why": "в кодовом дереве свободна одна ветка — 0111; чтобы получить два кода, её приходится разделить на 01110 и 01111, суммарная длина 5 + 5 = 10",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>По каналу связи передаются сообщения, содержащие только восемь букв: А, Б, В, Г, Д, Е, Ж и З. Для передачи используется двоичный код, удовлетворяющий условию Фано. Кодовые слова для некоторых букв известны: </p><table><tbody><tr><td valign=\"top\"><p align=\"center\">В</p></td><td valign=\"top\"><p align=\"center\">00</p></td></tr><tr><td valign=\"top\"><p align=\"center\">Г</p></td><td valign=\"top\"><p align=\"center\">10</p></td></tr><tr><td valign=\"top\"><p align=\"center\">Д</p></td><td valign=\"top\"><p align=\"center\">010</p></td></tr><tr><td valign=\"top\"><p align=\"center\">Е</p></td><td valign=\"top\"><p align=\"center\">110</p></td></tr><tr><td valign=\"top\"><p align=\"center\">Ж</p></td><td valign=\"top\"><p align=\"center\">0110</p></td></tr><tr><td valign=\"top\"><p align=\"center\">З</p></td><td valign=\"top\"><p align=\"center\">111</p></td></tr></tbody></table><p>Какое <b>наименьшее </b>количество двоичных знаков потребуется для кодирования двух оставшихся букв? </p><p>В ответе запишите суммарную длину кодовых слов для букв: А, Б.</p><p><i>Примечание</i>. Условие Фано означает, что никакое кодовое слово не является началом другого кодового слова.<br> Это обеспечивает возможность однозначной расшифровки закодированных сообщений.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "7C6443",
@@ -487,7 +513,8 @@ export const BANK_TASKS = [
   "answer": "2160",
   "accept": [],
   "why": "перебор пятизначных чисел: цифры различны и чётность чередуется — подходит 2160 чисел",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><span>Сколько существует десятичных пятизначных чисел, в которых все цифры различны и никакие две чётные или две нечётные цифры не стоят рядом?</span></p></td></tr></tbody></table></div>"
  },
  {
   "id": "B83748",
@@ -503,7 +530,8 @@ export const BANK_TASKS = [
   "answer": "5058",
   "accept": [],
   "why": "перебор слов алфавита А-К-О-Р-С-Т: последнее подходящее — РТООТ под номером 5058",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Все пятибуквенные слова, составленные из букв С, Т, Р, О, К, А, записаны в алфавитном порядке и пронумерованы.</p><p>Вот начало списка:</p><p>1.&nbsp; ААААА</p><p>2.&nbsp; ААААК</p><p>3.&nbsp; ААААО</p><p>4.&nbsp; ААААР</p><p>5.&nbsp; ААААС</p><p>6.&nbsp; ААААТ</p><p>……</p><p>Определите, под каким номером в этом списке стоит последнее слово с чётным номером, которое не начинается с букв А, С или Т и при этом содержит в своей записи ровно две буквы О.</p><p><i>Примечание</i>. Слово – последовательность идущих подряд букв, не обязательно осмысленная.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F47F49",
@@ -519,7 +547,8 @@ export const BANK_TASKS = [
   "answer": "229",
   "accept": [],
   "why": "алфавит А-Б-З-И, слово ИЗБА = 3·4³ + 2·4² + 1·4 + 0, плюс единица за нумерацию с первого: 229",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><span>Все четырёхбуквенные слова, составленные из букв А, Б, З, И, записаны в алфавитном порядке и пронумерованы<br> начиная с 1.</span></p><p><span>Ниже приведено начало списка.</span></p><p><span>1.&nbsp; АААА</span></p><p><span>2.&nbsp; АААБ</span></p><p><span>3.&nbsp; АААЗ</span></p><p><span>4.&nbsp; АААИ</span></p><p><span>5.&nbsp; ААБА</span></p><p><span>…</span></p><p><span>Под каким номером стоит слово ИЗБА?</span></p></td></tr></tbody></table></div>"
  },
  {
   "id": "FBDD40",
@@ -535,7 +564,8 @@ export const BANK_TASKS = [
   "answer": "23334",
   "accept": [],
   "why": "перебором по алфавиту Е-И-О-Р-Т-Я: первое подходящее слово — РЕЕЕЕЯ, его номер 23334 (чётный, начинается не с Е/И/О, ровно одна Я)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Все шестибуквенные слова, составленные из букв Т, Е, О, Р, И, Я, записаны в алфавитном порядке и пронумерованы.</p><p>Вот начало списка:</p><p>1.&nbsp; ЕЕЕЕЕЕ</p><p>2.&nbsp; ЕЕЕЕЕИ</p><p>3.&nbsp; ЕЕЕЕЕО</p><p>4.&nbsp; ЕЕЕЕЕР</p><p>5.&nbsp; ЕЕЕЕЕТ</p><p>6.&nbsp; ЕЕЕЕЕЯ</p><p>……</p><p>Определите, под каким номером в этом списке стоит первое слово с чётным номером, которое не начинается с букв Е, И или О и при этом содержит в своей записи ровно одну букву Я.</p><p><i>Примечание</i>. Слово – последовательность идущих подряд букв, не обязательно осмысленная.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "FBEF42",
@@ -551,7 +581,8 @@ export const BANK_TASKS = [
   "answer": "658",
   "accept": [],
   "why": "палитра 16384 цветов = 14 бит на пиксель; снимок 1280·1024·14 = 18 350 080 бит; за 128 с передаётся 94 371 840·128 бит — помещается 658 снимков",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Прибор автоматической фиксации нарушений правил дорожного движения делает цветные фотографии размером 1280×1024 пикселей, используя палитру из 16&nbsp;384 цветов. Снимки сохраняются в памяти камеры, группируются в пакеты по несколько штук, а затем передаются в центр обработки информации со скоростью передачи данных 94371840 бит/с. Каково максимально возможное число снимков в одном пакете, если на передачу одного пакета отводится не более 128 секунд? </p><p>В ответе запишите целое число.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "008243",
@@ -573,7 +604,8 @@ export const BANK_TASKS = [
   "answer": "37,5",
   "accept": [],
   "why": "первые 2,5 с скорость 5 м/с — это 12,5 м; дальше за 2,5 с разгон с 5 до 15 м/с — трапеция (5+15)/2·2,5 = 25 м; всего 37,5 м",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На рисунке приведён график зависимости проекции скорости тела 𝜐𝑥&nbsp;от времени <i><span>t</span></i>.</p><table><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>Определите путь тела за первые 5 секунд движения.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "11044D",
@@ -605,7 +637,8 @@ export const BANK_TASKS = [
   "answer": "43",
   "accept": [],
   "why": "груз отпущен из покоя: при t = 0 скорость и кинетическая энергия равны нулю. График А — два горба за период, начинается с нуля ⇒ кинетическая энергия (4); график Б — синусоида с нуля ⇒ проекция скорости (3)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHEAAAClCAMAAABcD+LbAAAAAXNSR0ICQMB9xQAAAFRQTFRFAAAADQsKBAAAGhcbAAAECgsNBAgNDQgECgQAAAMICwsNDQsLCAMAAAQKAwYLCwYDDQoIAwAAAAADCAoNDQgIAwMACAYKCwYEAwADCgQEsbO0////DiSl2QAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAICSURBVHja7drrUsIwFATgwApVEYrifd//PW3tUES5pGmyB2J2hs4wUD5ympP2Rxy983ki/r9CV8QiFrGIRfw/Ik4kF/GXzsAUMQEYLFIrwkCkVoSB2B6yFmEgUivCQOSouMAhSkXmLvZFhU6kVoSBSK0IA5Gjc+EiDERqRRiIP99kKcJApFaMM2+GidSKMBCZu/inqEgvUivCQKRWhIHIaLlQEQYiteLBISKtSK0IA5G5i1Fbw1OkVoSBSK0IA/HYB9mIMBCpFePPm/MitSIMROYuniwq0ojUijAQqRVhIDJJLkiEgUiteHaIiC9SK8JAZO5istY4IVIrwkCkVoSB6HEirlPc7i2Qiq3mdxVjiMN2v8UR2/2Eg3fcjRa3qEBEL36bEvHTVBTMHBiIw4oaWxT0IwxEzUw9JjK9CANRVdTDItOLAUVFPBEqsUc9ixpjBehMqETunjqYNntPj3qRqZ/HD4npc0UiiljE0h1lBShi/2Xoxd2N10EavQhVd+xVVSSWNccjk6m7mSnFyXTOKpAME2/v7rl4WOrEyXTVHOshg1w/zptX80fDxPZ0snraeJ9RObesWi9QrNy8P/qmdssRVQ0Ru7pwVFXrAVVlM9FW2pnD55fuMsq6Y/G67d8wsS3rkCHWy7fN+n3zMQsWG3LQKle7VVOTbqaVe0cRi3gsX/zKYthl3wLgAAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p><span>Груз, привязанный к нити, отклонили от положения равновесия и в момент 𝑡 =0&nbsp;отпустили из состояния покоя </span>(см.&nbsp;рисунок). На графиках А и Б представлены изменения физических величин, характеризующих движение груза после этого. <i><span>T</span></i>–&nbsp;период колебаний.</p><p>Установите соответствие между графиками и физическими величинами, зависимости которых от времени эти графики могут представлять. Потенциальную энергию принять равной нулю в положении равновесия груза. Трением пренебречь.</p><p><span>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите <u>в таблицу</u> выбранные цифры под соответствующими буквами.</span></p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALkAAABjBAMAAAA1JrwmAAAAAXNSR0ICQMB9xQAAACdQTFRFAAAAAAAAFBUWDQsODRAQDQ8PDQ4ODQsNDQ0ODQ0NDRAODQ4NDQ4QD9MlzQAAAAF0Uk5TAEDm2GYAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAAZdEVYdFNvZnR3YXJlAE1pY3Jvc29mdCBPZmZpY2V/7TVxAAACkElEQVRo3u2ZQW7bMBBFZxQg1UILTk5A+wxGb9ACRtcqkKyyy9YHyNIt0HSjW3jbQxQFmlM1kh1YpDX8pCgXECDCgOzx/MeZT9o0LKLZDztfenFd+nq+9PWV6Xa29Dnv94W+0Bf6Qv/vdBEgEDGj6SIAz5KCt57WUFjcJshIektmCZbeZo2lExB3jbEZRT/KAuJTXzKKLgTE3K8ikf4uYt2Y03UUnVBphijJGjtQmSrmq9KFYHcq/SxhYEy08fbSdrW0XliS6UJA3KNHWmOH+lasYRpP7wuGxUKUaI0drteEFzWdLgTETkM8OV2dKoJuEF0IeqfS3WIY2J5Kdw+8gca9kKTRCZTm0TmF7hcrwPa4ZdXol+IsOiGxIdSdThcE40npguicQDcExELQO5V+mQo3UQodbm+4RQN0QR/8gUojfgtb9VtDEJ1z6K4Yf2nqdL4unRDdZNAH8wR5zJH0wfVhBMLLavW0fnTYhEg6jaNLFF3JMsgDjqIrHQrCQONtIImRBXl0g5ZPIuhqjqAaOYKu9seoRGSNDaW8v6MzBNIDGYIq5PD0Ntjd8b3A9Mcji0fSBZnbHVDq9NY7MAtfXPgnnPXnt84fNs6dFP+fosIv/s4/Pq03v6ycjGJ9upfSPhFZB8cb/S6YsJLVZYJSiV/7QMCGA0X/NtD09GDupCOTfvOpruuvu36obLrL5mGXTS8P5Rf66YRuu7nKbXnIpt/uqi39cELfO3r1SH8m8L06uK839X13aehll79wm0f39Ye/3WXftI/ssf/lrcR2Svpvj1E+TUl/9dytjk69+f6a7/vNZy/w3NB5z+SO8t5fh4bO+z13PG+9wMvHoyH7h3xjqrp+ciPfJih5GcuYevwDLZ1Mis+SEt0AAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALkAAABUBAMAAAAsWYszAAAAAXNSR0ICQMB9xQAAACdQTFRFAAAAAAAAFBUWDQsODRAQDQ8PDQ4ODQsNDQ0ODQ0NDRAODQ4NDQ4QD9MlzQAAAAF0Uk5TAEDm2GYAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAAZdEVYdFNvZnR3YXJlAE1pY3Jvc29mdCBPZmZpY2V/7TVxAAACDklEQVRYw+2YsW7CMBBA7VQqGRhivuDgG6J+QiXUmUrtxMaaD+iYdmDyX7DyEbRS+aqCE4RxuPNZdipFygkROMrzk+/qYAsx+IDh0rN+6Yvh0hc902Gw9CH3+0gf6SN9pI/0ALpSRV90qUwUvdDPcPNc9ECXZ3ba2YEuPCEerHqmry3cg7vvounSsU0jDwhNqoT0LiyJPGCsJPKAFjGFPKCkFPKGLu9qJpAHnJNAHghMvDwQlHh5oCDR8kAxouWBRMTKA0mQ8XTq48ipAVovcmqAtous69yRy2LlM+rbLl3O7q4deCKzd+9K0HQRTm9PB04v5rOFL3x/Me+mADPpuGfK466ImQFvldzKgNtVQK4znvA0pfSsYr4gm1KqcnWKzTWTa3Mp3ysWnZRXxbaq9/n+mnmszBjLfMfbe5B0sREH3fqa+DL06Vr88OjEUmQ+OlZWply9mYsW24pHV2RNHp7tzOTXXGp9fnDoeF3NuPmLncqXoXRU3gw7Xd7QN6F0TL4Zdbqzc6dytvN+rJh0RL4ZtFzbuQ8twnoGk2/H/NR2stYirN8x+WbIyeGGvn1q+rNm/q9i8u2I36tXu98/d2HrDCbPuCly6V0W54bOprubQsm5n7Pp7u6HtaPl02/nhrddDqDbcyF5v3MC6NbpARMednKl2vmQ3GOEILpQlxB90C9nW6IfemCM9H+m/wE7f02U5UPEzgAAAABJRU5ErkJggg==\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p><span>координата <i>х</i></span></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p><span>потенциальная энергия<i> Е</i><sub>п</sub></span></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p><span>проекция скорости </span><i><span>υ</span><sub>х</sub></i></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p><span>кинетическая энергия<i> Е</i><sub>к</sub></span></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "11254B",
@@ -632,7 +665,8 @@ export const BANK_TASKS = [
   "answer": "41",
   "accept": [],
   "why": "x = 5 − 4t² ⇒ υx = −8t, ax = −8 — постоянная отрицательная (график А, горизонтальная линия ниже нуля, это 4); Sx = −4t² — парабола вниз (график Б, это 1)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Тело движется вдоль оси <i>Ох</i>, <span>при этом его координата изменяется с течением времени в соответствии с формулой 𝑥⁡(𝑡) =5 −4⁢𝑡2&nbsp;</span>(все величины выражены в СИ)<span>.</span></p><p>Установите соответствие между графиками и физическими величинами, зависимости которых от времени эти графики могут представлять. </p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите <u>в таблицу</u> выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJsAAACABAMAAADuXgbnAAAAAXNSR0ICQMB9xQAAACFQTFRFDQ8PDQsODRAQDRAODQsNDQ0ODQ0NDQ4ODQ4QDQ4N////EQVjZQAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAADfSURBVGje7dcxCsIwFMbxgODQsYs36Al6COlU6uAdOndyVNA7OFVosLxTakl0ccxXUfp/hJDpB8n7EogzZfUuLrKf5pyU65fFZUrOLYtzSk4cYzg4ODg4ODg4ODg4ODi4/+ACJOSm//o0C0vLSTcrPbvsL3KXryoB59vA3QpfCrh7FbixGy4Cbh+5/GqnKpnL3TpwTWvPkcoN59iKurU6nfOFluvsvdljOjceTNmKbWvKoDQvzhejIMa7TcydNYpLVpczPQFwcHBwcHBwn1ziB2Vmjs7CwcHBwX2X01T/ADKJuQEanNqgAAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJsAAACsCAMAAABbwC6rAAAAAXNSR0ICQMB9xQAAAEVQTFRFEhMUDQ8PDQsQERMUExMRDgsNDQ4REA0NEQ4NDhARDhAUExERDQsOEBEUExAQERAODhATDQ0RExMTERMTDgsQERER////LcNN2wAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAKFSURBVHja7dzbcoIwEAbgIIrWU7WHvP+jFjs6QscS2Py7WeXPjcPdN0lIyO7GEP228Dw2V1TaMDZPuOexBdpe0eYI9zS2QBtt1jY/OO6ntNFGG2200fZ6ti7An+3+KRT+tKptwUV7bLu24rhHY3rnlRrTkJpvRXzd7+7hd6FU7419T8vpWsuiDsvV0Bpi2XnNumtb1JvY3HD/rG92urdV17bdreL+cEytvTa6Zte1Ler39ud07bihfUEf186uEDZ327m+PDQf66TNQLc/bLrvQvMLba7cxH6qPbDnz7XYpt11vel2G9PTqDFV122P3acJ74I+rj/dxq8hfZ3FdGttl0E9JdZeo65rll/fvbW3xSX2LDNcc4dcbb1uHP1NbrBLyM8L+ttExllGHZd1zlLG5Z0BdXGZ51NVXO7ZWROXfa5XxOXHHPRwgHiIGg4Rq9HCQeJISjhMjEsHB4q/qeBQsUENHCxuqYDDxVTxOGC8F45DxqLROGicHIzDxvCxuPnYsDh0XgaJg+eMgDh8PguHU8i1wXAaeUAUTiVHCcLp5E8xuPnZMDitnDgCp5avB+BmaQPgFGswsnEztWXjVOtqMnG6NT95uPna8nDadVw5OPUaswzcrG0ZOIO6QTHOoqZRipu7TYqzqVOV4WiT4axqjyU42mQ42mQ4wzr8yTjaZDjTuxUTcbTJcLTJcNb3jKbgaJPh7O+OjcfRJsPRJsMVuUc5EkebDEebDEebDEebDFfuDnsaR5sMR5sMR5sMR5sMR5sMV/p/V4ZwtMlwtMlwtMlwtMlwtMlwtMlwtKVtlVtb9G2r3Nqib1vl1hZ92yq3tujbVrm1Rd+2yq0tJmxFW2JMXbUf1BCZRPRb5UYAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>проекция перемещения тела <i><span>S</span><sub>х</sub></i></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проекция скорости тела 𝜐𝑥</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>модуль равнодействующей →𝐹&nbsp;сил, действующих на тело</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>проекция ускорения тела <i>а<sub>х</sub></i></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "17F546",
@@ -648,7 +682,8 @@ export const BANK_TASKS = [
   "answer": "35",
   "accept": [],
   "why": "нужна одинаковая длина нити и разная масса: №3 и №5 — оба L = 1,0 м, V = 5 см³, но сталь и алюминий",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ученик изучает свободные колебания маятника. В его распоряжении имеется пять маятников, характеристики которых указаны в таблице. Какие <b>два</b> маятника необходимо взять ученику для того, чтобы на опыте выяснить, зависит ли период свободных колебаний маятника от массы шарика? </p><table class=\"t\"><tbody><tr><td valign=\"top\"><p align=\"center\">№&nbsp;маятника</p></td><td valign=\"top\"><p align=\"center\">Длина нити маятника, м</p></td><td valign=\"top\"><p align=\"center\">Объём шарика, </p><p align=\"center\">см<sup>3</sup></p></td><td valign=\"top\"><p align=\"center\">Материал, из которого сделан шарик</p></td></tr><tr><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">2,0</p></td><td valign=\"top\"><p align=\"center\">8</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">0,5</p></td><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">3</p></td><td valign=\"top\"><p align=\"center\">1,0</p></td><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">сталь</p></td></tr><tr><td valign=\"top\"><p align=\"center\">4</p></td><td valign=\"top\"><p align=\"center\">1,5</p></td><td valign=\"top\"><p align=\"center\">8</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">1,0</p></td><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr></tbody></table><p>Запишите в ответе номера выбранных маятников.</p><table><tbody><tr><td><p>Ответ:</p></td><td valign=\"top\"></td><td valign=\"top\"></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "1B3E4D",
@@ -680,7 +715,8 @@ export const BANK_TASKS = [
   "answer": "23",
   "accept": [],
   "why": "график А — постоянная положительная величина: горизонтальная скорость не меняется, это проекция импульса на x (2); график Б — линейно убывает и меняет знак: py = m(υ₀sinα − gt), это проекция импульса на y (3)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKIAAACnCAMAAACl4XeaAAAAAXNSR0ICQMB9xQAAAIFQTFRFAAAAAAADCAoNCgQAAAMICwsNDQgEAwYLAAAECgsNDQoIAwAADQsLCAQICAMAAAQKCAgNDQgICwsKBAQKCwYDBAQEBAgNCgQDCAMDAwQKCwoIAwMIDQsKBAADAwAECAQEBAMABAAACAYECwsLAwMDAwADCwYEAwMACAYKCgQE////6jlwwAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAMzSURBVHja7d1/k5owEAbgNSqcSPVsU67t0R/2eteW7/8BS0BCwJszIGzWzps/mNFzxmcSskCy61EhvhGIIII4hBgtVFEsV2u5xCVRXB7vNoJ7MdmWxPTdWujYG0+625fO++YdqUSnEyUSzVQ5qEI48f2H9h1pxoqj7z5uHKFIImXFYOKD4iQenG8jX2P6SfERk8894RtETU6LeYjR6svj2p8Yohc19S7OvrOF91wcReSd0SAGININEIlVeg2RQPyvB7r5AJVPFAslmUhF/lUl3zZyieUhKp8ndplYojno8qlsGUsk2rteHYslNu0GiHLPRdvMjH5ciyZ24uJ815qJbsbmfLKdgkjzPntfTSSaWTgVUex0uSViIZg4fx9eS6x8c9/aXkXkWee7gsi1EjmeyLZWOprIt5g7ksi53DyOyLogPorIu2I/6vGKd/FsOJF912MwkX9bZiAxxMbRMGKQra1BxDB7bwOIoXYH/YnB9i+9ieE2WD2JIbeA/YhBN6m9iGF30T2IbRdGRPtCL5Q0Yis0+Tw6Zk+Lukh0BtkkRKXff+xlDbT7mJwfTf9FTHv5vsQaSF1iJolIdv+iJWr29Lc3iO0YU3su5scgxHRHTiCxrvYstDEnK0POz8xmwHH2onYCid0npbOuLuPiQtXjzU2ssgM7xO4VL2wqQvXtyTbrEvvXZApONMm0Nl/HLMedXWGCE5erp10c1VPm1UXN4MR0Fz+oJuC5QsulHt19MfYP7QsPYrL9ldms6akl0xCj8harjMlxPxwKaYazNGdh1ERvidlOdf/Z6C2RmDyrKnq/KLHEairnx+Y+EJl3IIIIIogggggiiCCCCCKIIIIIIogggggiiCCCCCKIIIIIIogggggiiCCCCCKIIIII4tSmbq6sVOJ5hcMrHxDRLDE/klMiIgtYE/NjVkSCfmiazoswTNJ5p1gjOLE/o09J0+J+r9vUjyTb1ZqaUpKIuwLxUjN1kZFJNqemJo2/Mu1i07Q/DbRY4qlSyA60ljbQVZGL8OlSHH5XdQ8Sg07TiX/qYE2nMRfXiXr/opJn9XfTVLCRuGHWFJsaygz/UwNEEEFkbv8AtuWUAQjPakIAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>Мячик бросают с начальной скоростью →𝜐0&nbsp;под <br> углом α&nbsp;к горизонту с балкона высотой <i>h</i><br> (см. рисунок). Графики А и Б представляют собой зависимости физических величин, характеризующих движение мячика в процессе полёта, от времени <i><span>t</span></i>. Установите соответствие между графиками и&nbsp;физическими величинами, зависимости которых от времени эти графики могут представлять. Сопротивлением воздуха пренебречь. Потенциальная энергия мячика отсчитывается от уровня <i><span>y</span></i>= 0. </p><p>К каждой позиции первого столбца подберите соответствующую позицию из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAI4AAACACAMAAADqKaFKAAAAAXNSR0ICQMB9xQAAAEtQTFRFAAAADQsKBAAAAAAECgsNDQgICAoNBAgNDQgECgQECgQAAAMICwsNDQsLCAMAAAQKAwYLCwYDDQoIAwAAAAADAwADCgsKBAMI////DSf09QAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAEMSURBVHja7dfLEoIwDEDRAAoVBQR88P9fanFKy8rRhZOgNxtglTNJmg4ymQp5+QnHNEcscQTOZjgi2h44n3HEDMfa3oEDBw4cOHDgwIEDBw4cOHDgwIEDBw4cOHDg/C7n67FpDrMDBw4cOHDgwIEDBw4cOFvnrHOa4KR/UzEUxjhip1khsQ0OB/1dTpZLsdPl7MvIyfJqcotHiXOI5Zjq42lq2k6T4zwh5M/ys3/0oTwaHD8sIlXgDOP85i6lXnWatoqj7J4wF3gqnOFaWuKk0Vma1Ws2q+7S3tEf5dXoWDjoq9HxnLlbveYadMXtHveO1426l4RL6bnR4cCBAwcOHDhw4MCBA+evONrxAAqcW4XQuWBgAAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJwAAACACAMAAADJcvCfAAAAAXNSR0ICQMB9xQAAAEtQTFRFAAAADQsKBAAAAAAECgsNDQgICAoNBAgNDQgECgQECgQAAAMICwsNDQsLCAMAAAQKAwYLCwYDDQoIAwAAAAADAwADCgsKBAMI////DSf09QAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAHpSURBVHja7dptc4IwDAfwgg6qmzrUbXz/T7q6w6PseGqTtBn788bjTfidlLRpalrFl5m9BW4jOFU688sG3PZwxujSAceHU6T7Q3kOOOCAAw444IADDjjggAMOOOCAAw444IADDjjggAMOOOA2hFPb0tTWcR3DqdGNjDk9vLEPQo1u/GtVwptIJTp0k3lOA286CSvQzc0Q2Xmz01du3cLcmpe3NPFn1S2vSjLyViyZ8ulWredy8dYtNjPp1q6Es/BWL9Nz6AJqiPS8kAInuS6s+krMCywN0+qC69aUvPCiOqEupuIX5fmho7YjJHV+4WzUXqpxhrLLJPRujbcjQtgCk9H5QUn7c9JZhbZ5KKxzsYvS7PZxOAHeS+XjirJu7VMX/iRu3WHv446vb+3pfInFMfOs0/SRi/Ld/TTdXxf1GD6dG2HG1H3g6+1xY+9VPI6RdzrXflj7I7WdN/YZXLrrR8WP4+INhtzztTa018qmO14GIRk+CD7ecMhxpBJG3XDIOdzjvTbxSZiVZ3efX36ec9wbYfri1dle0uGGscljmnHCEGhp8ulE+q1cPJlmMJNOqlPNwhNro3PoBHv8dJ7kAQSyTvZ0BJEnfHSDphM/V0LhyR96oSwRxXF6xxxwwAEHHHDA/Xecrusbfu//BZC06TAAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>координата <i><span>x</span></i>мячика</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проекция импульса мячика на ось <i><span>x</span></i></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>проекция импульса мячика на ось <i><span>y</span></i></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>потенциальная энергия мячика</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "1ccc46",
@@ -696,7 +732,8 @@ export const BANK_TASKS = [
   "answer": "3",
   "accept": [],
   "why": "закон Гука линеен: 6/9 · 4,5 = 3 см",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Под действием силы величиной 9&nbsp;Н пружина удлинилась на 4,5&nbsp;см. Каким станет удлинение пружины под действием силы, равной по модулю 6 Н?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "277542",
@@ -718,7 +755,8 @@ export const BANK_TASKS = [
   "answer": "0",
   "accept": [],
   "why": "с 1,5 до 2,5 с скорость держится на 2 м/с, значит в момент 2 с ускорение равно нулю",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На рисунке показан график зависимости проекции <span>𝜐𝑥</span>&nbsp;скорости тела <span>от времени </span><i><span>t</span></i><span>. Какова проекция </span><span>𝑎𝑥</span><span>&nbsp;ускорения этого тела в момент времени 2&nbsp;</span><span>c</span><span>?</span></p><table><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "288E45",
@@ -740,7 +778,8 @@ export const BANK_TASKS = [
   "answer": "34",
   "accept": [],
   "why": "g(μcosα + sinα) — торможение при движении вверх, это модуль ускорения вверх (3); μmg·cosα — сила трения (4)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p align=\"left\"><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANcAAABcCAMAAADK1NCcAAAAAXNSR0ICQMB9xQAAAKtQTFRFAAAAGhcbExMuLhMTPz8mPyY/PCYqJyY9IiJOTiIiXUw1Q1h4Xn6XeFhDcE9waWmGaoOal35eiG5wh3qSmYNrhYWFm5CQmZmtgo6kmay9nKy8pJCHpI6CpZulvayZvKydpaWbuLi/sbO0xrev2c7Cws7Z3NzT187ExM7X09fg3OPm3OLl4NfT5uPc5OHb+Pn57/Ly+fn46uzn+Pj38fHu7vHx9/j48vLv////fnhmxQAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAANOSURBVHja7duJctowEADQFfSAQtrSmx6mpaZJTSjQi/3/L6tkY+pLsmTLWKuxJ2E8QRPnZVdrHQbQzwMGF2EXG1y0XN7AhCscRYiL2V64fIFx1wJgyV8nB89cuBtz1/FTEi9PYMJ1vJlz3HdMXH7AUlccLs9combcR5i6vICdXT/fIvoXr2Dy+uClCzaXHxB0sf9H3pV0LvquQrx27/KNqLpyeRjOvj3b51vRV3FXALM9knWVetZuvOHfsz1UNSWFyoUiBJiHIlBQ1bzJRT5se0IVjgDmad2w4vr1Yts/6pyIMpc+bJW5d7D31+xSsrePN0uJq1nArhMvVjuCvX8Q10Frriv0L51R+fFLKCbIEpeDFVFrqhHMv0a7h9HHqHr90DmX7vwpgCXvYGK0S8DVaFIocTkDazrTBWwdMHAOZckFXehYuzUJmYv16mKtF1oAWwcMLGejlcWj9i6w6rK1IiZ1MTMXuIRS/D0GruTlx6PHW1dQVlw8YPyX/H76h385glK6zK5y+xzx1Z0jKFW/MLzQik++VndNTbl5PAajiLYrRV0uJXasguWisJJk2WUEE3loNgXLBOpyJbG5eHzzZN5hHhoGTNSNl3+bdqnz2WkqIhXC0h0X3jLtOl+uEwXXpltXJ5OVyuKXcwWTQ5euVrNLZoDKNBf96zR1yMUKh7yJ8t8gUjAYfd7Em93duZrCzFDZ8PL71yhK0rEzV9OAaWdfbdo65TJGdQJTu1hLlfbI76ouzYDJepbJcLZXl7wgYOkRpCw0M2DKnlS8V9sctZrXu1j2fL1WpVm+bd9LkIA6AYtR65xLXfx6X1fVcKWojMtxlIYrg0ph6nuvAyad/pVTcRcJFNaM54Wj7HIfhar1w9RRgFFAoXS/MhMgpcvZBxZBhVK73Cl+Gq4CQ5qITqMq41WClV0EHpc1dTHXA6XvYuRQVS5pwAih9F20UJouciisfp6NZKEwcZGMVJ2LrkniQkYdhdJxL/kPdICMRRmF1eP5C+o0BRt7G464Lqen6QZDojDV+obYv44/o+iX6zQV+7wBzYApXMkT9qGFhyncciX711Z2sQfX1fIw8C4Pfa0bvtb5OBGJhku977Ab+zOO8uQYXINrcA0u0+MfQir0TC1/1xUAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>После удара шайба массой <i><span>m</span></i> начала скользить с начальной скоростью <span>→𝜐0</span>&nbsp;вверх по плоскости, установленной под углом α к горизонту (см. рисунок). Переместившись вдоль оси <i>Ox</i> на расстояние <i><span>s</span></i>, шайба соскользнула в исходное положение. Коэффициент трения шайбы о плоскость равен <span>μ.</span>&nbsp;Формулы А и Б позволяют рассчитать значения физических величин, характеризующих движение шайбы.</p><p>Установите соответствие между формулами и физическими величинами, значение которых можно рассчитать по этим формулам.</p><p>К каждой позиции первого столбца подберите соответствующую позицию из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><span>𝑔⁡(𝜇⁢cos⁡α+sinα)</span></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><span>𝜇⁢𝑚⁢𝑔⁡cosα</span></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>модуль проекции силы тяжести на ось <i>Oy</i></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p align=\"left\">модуль ускорения шайбы <br> при её движении вниз</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p align=\"left\">модуль ускорения шайбы <br> при её движении вверх</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>модуль силы трения</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "2cB64F",
@@ -756,7 +795,8 @@ export const BANK_TASKS = [
   "answer": "0,15",
   "accept": [],
   "why": "a = F/m; при силе ½F и массе 2m ускорение вчетверо меньше: 0,6/4 = 0,15 м/с²",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В инерциальной системе отсчёта сила <span>→𝐹</span>&nbsp;сообщает телу массой <i>m</i><br> ускорение, модуль которого равен 0,6&nbsp;м/с<sup>2</sup>. Чему равен модуль ускорения тела массой 2<i>m</i> под действием силы <span>12⁢→𝐹</span>&nbsp;в этой системе отсчёта?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "420AF5",
@@ -772,7 +812,8 @@ export const BANK_TASKS = [
   "answer": "45",
   "accept": [],
   "why": "линейка — удлинение, весы — масса цилиндра, чтобы найти силу F = mg",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Необходимо собрать экспериментальную установку, с помощью которой можно определить жёсткость резинового жгута. Для этого школьник взял штатив с лапкой, резиновый жгут и стальной цилиндр. Какие <b>два</b> предмета из приведённого ниже перечня оборудования необходимо дополнительно использовать для проведения этого эксперимента?</p></td></tr><tr><td><table><tbody><tr><td><br><div>В ответ запишите номера выбранных предметов.</div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "46D7FD",
@@ -788,7 +829,8 @@ export const BANK_TASKS = [
   "answer": "25",
   "accept": [],
   "why": "линейка — удлинение, динамометр — сила",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Необходимо собрать экспериментальную установку, с помощью которой можно определить жёсткость резинового жгута. Для этого школьник взял штатив с лапкой и резиновый жгут. Какие <b>два</b> предмета из приведённого ниже перечня оборудования необходимо дополнительно использовать для проведения этого эксперимента?</p></td></tr><tr><td><table><tbody><tr><td><br><div>В ответе запишите номера выбранных предметов.</div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "50AA4D",
@@ -825,7 +867,8 @@ export const BANK_TASKS = [
   "answer": "41",
   "accept": [],
   "why": "формулы по порядку: 1) ωR, 2) ω/2π, 3) ω²R, 4) 2π/ω. Период T = 2π/ω — это 4; линейная скорость υ = ωR — это 1",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Материальная точка движется по окружности радиусом <i>R</i> с постоянной угловой скоростью ω. </p><p>Установите соответствие между физическими величинами, характеризующими движение материальной точки, и формулами, <br> по которым их можно рассчитать. </p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>А)</b>&nbsp;</td><td><p>период обращения</p></td></tr><tr valign=\"middle\"><td><b>Б)</b>&nbsp;</td><td><p><span>линейная скорость</span></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>1)</b>&nbsp;</td><td><p><sub><span><img src=\"data:image/gif;base64,R0lGODlhHQAUAHcAMSH+GlNvZnR3YXJlOiBNaWNyb3NvZnQgT2ZmaWNlACH5BAEAAAAALAIABAAYAAwAhAAAAAAAAA0IBAAABAoLDQ0KCAMAAAMGCwMAAwgKDQsGAwQIDQ0LCgQAAA0LCwgDAAAAAwAECgoEAAADCAsLDQMABAgECAQEBAECAwECAwECAwECAwECAwECAwECAwECAwV2ICCOJCkEaDoQZVsWxiHCq2sXSDIqwSIyjR7gVNsVHQ+IDhYpSZQiZBOADMiQEwoAp8NqgalAdhYTnXwABVQAlRS35aEw3R6fRzDZtsKiJ6Q/DVMAQFMOFloAbgQwaIpvajoKFzJMilBmAYOKKDI8micpemA9IQA7\" align=\"ABSMIDDLE\" alt=\"\"></span></sub></p></td></tr><tr valign=\"middle\"><td><b>2)</b>&nbsp;</td><td><p><sub><span><img src=\"data:image/gif;base64,R0lGODlhHQAsAHcAMSH+GlNvZnR3YXJlOiBNaWNyb3NvZnQgT2ZmaWNlACH5BAEAAAAALAMACQAWACAAhQAAAAAAAAQAAA0LCgQIDQ0IBAAABAoLDQ0KCAMAAAAECgoEAAAAAwgKDQ0LCwgDAAADCAsLDQMAAwMGCwsGAwMABAgECAQEBAgDAw0KCgoKDQoEAwgDBAQAAwMDCAQDCAsGBAgGCgECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwa9QIBwCBgIAgRAIWA4EJ9DRELxXDAaUKLjAYkAEBLstpsVSifCZRJAuZa/CbQSKWxjy2dzxcl2l41UAA4WXgALTW99WBQXaFKBiQsBAWgUk5CJmZqbnJ2en0+ToqOkpZOgqKmqq5pbk36bDhhYRrCZGRpRcahGcq6lck9gdxsNDhwHRmtZC8FCx8kdd1AIHoVDAx8Rw1my00MFXdxQC8tEC1QFiFXLIHdLaAW2hqRkRnRqDiFCkqRyRohcuQkCADs=\" align=\"ABSMIDDLE\" alt=\"\"></span></sub></p></td></tr><tr valign=\"middle\"><td><b>3)</b>&nbsp;</td><td><p><sub><span><img src=\"data:image/gif;base64,R0lGODlhJwAbAHcAMSH+GlNvZnR3YXJlOiBNaWNyb3NvZnQgT2ZmaWNlACH5BAEAAAAALAIABAAiABMAhAAAAAAAAAgDAA0LCwAAAwgKDQsGBAoEAAADCAsLDQ0KCAMABAoLDQMDCA0IBAMGCw0LCgQDCAoEBAsGAwQIDQQGCwAABAMAAAMAAwQAAAAECggECAQEBAECAwECAwECAwWpICCOJDkIAVGUbOuOxnogyWvfgLIweM8qjZpvCHA8iENIRIjESXhN3ISSq5AcgazWAu0dtKqS4nLMXbjRH2YlmgSoAEjmXQyge5P7KTzWlA5hNyd+ACcBRyc0OWuFAoo2cloBj2NlWHATgS8OYQd3ZpZ0AJlsLzM1lyOVIjpQpDaDInKEcRmEAxtCnl0tY3AAuyOvExxHfTeApVi0wFlHbgHMLFhaZZFvIQA7\" align=\"ABSMIDDLE\" alt=\"\"></span></sub></p></td></tr><tr valign=\"middle\"><td><b>4)</b>&nbsp;</td><td><p><sub><span><img src=\"data:image/gif;base64,R0lGODlhHQAsAHcAMSH+GlNvZnR3YXJlOiBNaWNyb3NvZnQgT2ZmaWNlACH5BAEAAAAALAMABgAWACMAhQAAAAAAAAgDAA0LCwAAAwgKDQgDAw0LCgQAAA0KCgoKDQ0KCAMAAAMGCwMAAwoEAwgDBAoLDQQIDQoEAAQAAwMDCAsLDQQDCA0IBAADCAAECgAABAsGBAgGCgsGAwMABAgECAQEBAECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwbAQABgIAgECAWhcskcGpIHBLJJBSQUygWjUe0Ko9xh0UgOhJkLRxLwKAwgkaikOzkL33HKurmoWJgHFxZpe0sDT00YGYNqVBNzTRMaABgbEZGQABxrGGaUU0sTZQGLAFEBc50SAx1CoqNhUZZiR4Vet7i5uru8vKO/wGW9w8TFxsfIycSnqQGzt1qToaBVRKWEYqVVWmGqQh7UfFtC3gDgtkvcQgsfl+bhgAjSAyB/ABPPVefmIVzRuK+4eDAibUkQADs=\" align=\"ABSMIDDLE\" alt=\"\"></span></sub></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "60DF4D",
@@ -841,7 +884,8 @@ export const BANK_TASKS = [
   "answer": "12",
   "accept": [],
   "why": "весы дают массу, мензурка — объём по вытесненной воде",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Необходимо собрать экспериментальную установку, с помощью которой можно определить плотность алюминия. Для этого школьник взял стакан <br> с водой и алюминиевый шарик с крючком. </p><p>Какое дополнительное оборудование необходимо использовать для проведения этого эксперимента? Из приведённого ниже перечня оборудования выберите две позиции.</p></td></tr><tr><td><table><tbody><tr><td><br><div>В ответе запишите номера выбранных позиций.</div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "65444B",
@@ -873,7 +917,8 @@ export const BANK_TASKS = [
   "answer": "42",
   "accept": [],
   "why": "плоскость гладкая, полная энергия постоянна — под графики не подходит. График А — парабола вверх и обратно: координата y (4); график Б — линейно убывающая проекция импульса py (2)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p align=\"left\"><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJsAAACQCAMAAAAoeOl9AAAAAXNSR0ICQMB9xQAAAKJQTFRFAAAAAAADCAoNCgQAAAMICwsNGhcbDQgEAwYLAAAECgsNDQoIAwAADQsLCAQICAMAAAQKCAgNDQgICwsKBAQKCwYDBAQEBAgNAwQKCwoIAwMIERMYFA0NDQsQFBUYEBEYFxEQDQ0UFxcbGRcYDQsRFRcXEQsNDRAXGRMRERMbFRANFRUUEAsNDQsKBAAAAwMACAYKCwYEAwADCgQEsbO0////awSTWQAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAK6SURBVHja7dwLk9IwEAfwyEEKFBRPKz5Q1Ds9PQVf3e//1UxISxNKe5KmzY7zz/DsDNPfZJOlMNkI4tsEbLANbUsejYiuxhNzSHKyXQkxVY+zuaGxslG6ULbl4wlH2/LJSgGfEldb2W3KxgVn5qmaB9ejI42b7dlzYmrLZi/mbG1ibdG44IytHGwMbelL6winHJKMX72eMLVlYmzTuOVegg022GCDDTbYYIMNNthggw022GCDDTbYYIMNNthggw022GCDDTbYYOtse7Pha3v7bsPMtpVWe49++7/GG3IIbMPYxPlP8rGFxtXPy8R2dpUnB1vT+lMfmwg53loWxnrZzNOHjzebEC4Zci7ofhN0++mzuvUG8x1vh0/dfSH6eh8+kl1tum3VBdL2vjdYDNsFi8L9bTqml14mXbZa3d+m58K3773BOtnoTl6QQ3zW9w9xHSI9Cw96t0n/ioiutuNPrmCRDGCTbgsO69Rv7bIQtS1BbH3Awtj6gfnbmjotaJmSj60A1Bih66dabY1DSZYvQ6QxD5s6U57nsgF2eNsnrNlmYI6tz2zx77YjrLINDztns2EFLgqsZtOwU1skmGsreqxuiwKzbFUoT2y5jAMrbc4Ya7XJIetTRX3wN9rkwIWzypbnrbYCF6GgV8VUPmyLU2n8oE3KaCXQ7baIsGKeNsyFuLAWW3RYky0izD6ryb1MBj+5OdS1SU7NtrGCybLfSLIY+1VMrfFGTGDk/soTxGvvi9PvhQK224vZnJvNvNrt15SwwlXX5HpfqcNmRPxsu/2U9MY1DDouXazVfTwR9oFiZ67ILRFileg9TUR1ZH18jN0ysXJiyslmYkgnMc0YxFTvwTXlOhfo+sdhCx2OOWT50+RZ4QSZQ7dlq1+j9Pfoz9z+PyRdsPjOysRUxU/PSezTCBtssHVpfwEYxzIeysMqgQAAAABJRU5ErkJggg==\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>После удара в момент 𝑡 =0&nbsp;шайба начала скользить вверх по гладкой наклонной плоскости со <br> скоростью →𝜐0,&nbsp;как показано на рисунке. В момент <i><span>t</span></i><sub>0</sub> шайба вернулась в исходное положение. Графики А <br> и Б отображают изменение с течением времени физических величин, характеризующих движение шайбы.</p><p>Установите соответствие между графиками и физическими величинами, изменение которых со временем эти графики могут отображать. </p><p>К каждой позиции первого столбца подберите соответствующую позицию из&nbsp;второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALUAAAB0BAMAAAAxyW6LAAAAAXNSR0ICQMB9xQAAACRQTFRFFBUWDQ8PDQ0ODQ0NDQ4ODQsNDQsODRAQDRAODQ4QDQ4N////6bdxYAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAImSURBVGje7dq/bsIwEAZw70zekDwWic4dumTO1CdAeQrE0CeAF4CJp4gjFQn55RpQqXDsO/85n6tK8drcj+8+JWmlIgzb6QW/3XPai9me2oLTFrM9sXvO3KzPzmzP9mzPdi1bSsVia/k4qrR9Vx+fUNTWz2l1SvSgPY2aED1kuzl1NB6wvU4sjtuAEtk5amsoYByO2SA9/kQRbQTQkmaj2bSi2IFoEa3AdmDriFZAO7h0uBXIjoglc+2IOoMfD9gxt0Hw8wE77o0hc+yo2MHL/Hbkiy7HjowdyuC1o3+z4CF8dnTsQAqijV7qs1P+TpBpdkJs/GKPnRIbvdq1k2Lz2sjlrp1WCXa9YyfGxgYcOzU2qw1PTO3kSpCRqZ0eG56paGdUAg9N7JzY4FQ9O6sScKyenVcJNFfNzqwEGrTs3Nistn/y2c6uBBitZedX4p+tZBMq8Q9XsimVeKcr2Ypka8zWRFthtqEdzJZEWyK2Itr6b2xq3Z7Cq9iSbD8LvWUrsq2tyAtGW4jF3RYsZ8H0/wa7E1P+/A/7hdFuffZluy9gD62zx2ivm9eObF+2spnuMdonc/2g5940zh69uOzMsKfb68bZoxfDaO/o9qpz9ihmn9w9StlfRzN8NvYe976v9L7HeJv31t6j1H0yHNqVOVp7/N7f5Edn2Z3N2drjZg+357LAse1DW/J7Yba97EraVt8/76pSZ/PWstn2/W3qfA9vtivZ32oYO81xEgm2AAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALIAAABpBAMAAABsXWS3AAAAAXNSR0ICQMB9xQAAACRQTFRFFBUWDQ0ODQ0NDQsODRAQDQ8PDRAODQsNDQ4ODQ4QDQ4N////5583lwAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAIQSURBVGje7dk/TsMwFAbwt3dDEeqKGLP2BBUcgV6AgTNEOUAGtg4o6iliMSDky0EKaWL7Of73uQLJGVrJin5D/D37OSGZ66Lz71DkhUybIl9BHoj+nVwq5VpytjwPGQI9yXh6es54+jKD8GKZs4GmZxld4os8g+llpWCzp9QglFarG5k9bd0A0vqKhKONtQ4WEHMVRdGmjIo1s/KDaG5PwcSa3a0gNL8PIrJn2WEBtG3vTp9Fa1eQTFvl5OzZO5lUeqVHSqTXuq+0WK/2dUn0eseYEmtHL5pAu7rc+Fl09s/RtFOOzp6754+lPU4TkbTPOSUu1l4noFCavOXQWJ9vp/E/x+V9HnTOotoMUcBJ00Ur8kYGyMHZ8z8dr9A33AjJ3aH1O3fb6Y4bIbEXL54nelusRceN0Oer7H3fFfD0++NTzYzQrpa3re9bCL5imlqfqnGEqlpWtff7DZauDLkKl9lYb1tdHkdCZY7upXhQiX688fs5v7UBspm9j6Ns7rtBHQnMBk+LvdzK46COhOXZkj3x3J3kaVBHxhqsfGvQRotDq8uHNvKtmpE9TQ5ckdZo7TknyDrd3HUoWYu1nucU2agYnKzHGifrNFDWYo2UVRoqK9nDyksaLC9otDzHGi5faLw8xRovT3QG+TfWOeQfOovM9zeYb0AcDfq6RGaDg/pulU+W+WRZ5CIXuch/V/4CNM+2JdxKADEAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>кинетическая энергия <i><span>E</span></i><sub>к</sub></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проекция импульса <i><span>p<sub>y</sub></span></i></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>полная механическая энергия <i><span>E</span></i><sub>мех</sub></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>координата <i>у</i></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "6EC247",
@@ -895,7 +940,8 @@ export const BANK_TASKS = [
   "answer": "150",
   "accept": [],
   "why": "за первые 4 с разгон до 15 м/с — треугольник ½·4·15 = 30 м; дальше 8 с равномерно: 15·8 = 120 м; всего 150 м",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На рисунке представлен график зависимости модуля скорости <span>𝜐</span>&nbsp;тела от&nbsp;времени <i><span>t</span></i>. Найдите путь, пройденный телом за время от 0 до 12 с.</p><table><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "72B8F7",
@@ -911,7 +957,8 @@ export const BANK_TASKS = [
   "answer": "25",
   "accept": [],
   "why": "нужны одинаковые жёсткость и масса при разном объёме: №2 и №5 — k = 60 Н/м, m = 200 г, объём 60 и 80 см³",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ученику необходимо на опыте выяснить, зависит ли частота свободных колебаний пружинного маятника от объёма груза. У него имеется пять пружинных маятников, характеристики которых приведены в таблице. Какие <b>два</b> маятника необходимо взять ученику, чтобы провести данное исследование?</p><table class=\"t\"><tbody><tr><td valign=\"top\"><p align=\"center\">№ маятника</p></td><td valign=\"top\"><p align=\"center\">Жёсткость пружины,</p><p align=\"center\">Н/м</p></td><td valign=\"top\"><p align=\"center\">Объём груза,</p><p align=\"center\">см<sup>3</sup></p></td><td valign=\"top\"><p align=\"center\">Масса груза, г</p></td></tr><tr><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">40</p></td><td valign=\"top\"><p align=\"center\">30</p></td><td valign=\"top\"><p align=\"center\">100</p></td></tr><tr><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">200</p></td></tr><tr><td valign=\"top\"><p align=\"center\">3</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">30</p></td><td valign=\"top\"><p align=\"center\">100</p></td></tr><tr><td valign=\"top\"><p align=\"center\">4</p></td><td valign=\"top\"><p align=\"center\">80</p></td><td valign=\"top\"><p align=\"center\">30</p></td><td valign=\"top\"><p align=\"center\">100</p></td></tr><tr><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">80</p></td><td valign=\"top\"><p align=\"center\">200</p></td></tr></tbody></table><p>Запишите в ответе номера выбранных маятников.</p><table><tbody><tr><td><p>Ответ:</p></td><td valign=\"top\"></td><td valign=\"top\"></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "72C7F7",
@@ -927,7 +974,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "p₁/p₂ = (m₁/m₂)(υ₁/υ₂): 5 = 2,5·(υ₁/υ₂) ⇒ υ₁/υ₂ = 2",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><span>Отношение импульса легкового автомобиля к импульсу мотоцикла <span>𝑝1𝑝2=5</span><span>. Каково отношение их скоростей <span>𝜐1𝜐2,</span><span>&nbsp;если отношение массы легкового автомобиля к массе мотоцикла <span>𝑚1𝑚2=2,5</span><span>?</span></span></span></span></p></td></tr></tbody></table></div>"
  },
  {
   "id": "8A3445",
@@ -943,7 +991,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "v = √(aR) = √(2·2) = 2 м/с",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Материальная точка равномерно движется по окружности радиусом 2&nbsp;м <br>с центростремительным ускорением, равным 2 м/с<sup>2</sup>. Определите скорость точки.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "9F5549",
@@ -959,7 +1008,8 @@ export const BANK_TASKS = [
   "answer": "80",
   "accept": [],
   "why": "F = Gm²/r²; при массах 2m: 4/r'² = 1/r² ⇒ r' = 2r = 80 см",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Два маленьких шарика массой <i><span>m</span></i>каждый находятся на расстоянии 40 см друг от друга. Каково расстояние между шариками вдвое большей массы, если модуль сил гравитационного взаимодействия между ними такой же, как и&nbsp;между первыми двумя шариками?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "ADA046",
@@ -975,7 +1025,8 @@ export const BANK_TASKS = [
   "answer": "18",
   "accept": [],
   "why": "E ∝ x²: при 6 см E = 6·4 = 24 Дж, прирост 24 − 6 = 18 Дж",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>При упругой деформации, равной 3 см, потенциальная энергия пружины равна 6 Дж. На сколько изменится потенциальная энергия этой пружины при увеличении упругой деформации ещё на 3 см?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "B02B49",
@@ -991,7 +1042,8 @@ export const BANK_TASKS = [
   "answer": "36",
   "accept": [],
   "why": "Δp = F·Δt = 12·3 = 36 кг·м/с",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На тело, движущееся прямолинейно в инерциальной системе отсчёта, в течение 3 с в направлении движения действует постоянная сила 12&nbsp;Н. Каково увеличение импульса тела за это время?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "B5CFF9",
@@ -1007,7 +1059,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "a = ω²R: (½)²·2 = ½ ⇒ уменьшится вдвое",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Шарик движется по окружности радиусом <i><span>R</span></i> с угловой скоростью <span>ω</span>. <br> Во сколько раз уменьшится центростремительное ускорение шарика, если радиус окружности увеличить в 2&nbsp;раза, а угловую скорость уменьшить <br> в 2 раза?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "BA974A",
@@ -1023,7 +1076,8 @@ export const BANK_TASKS = [
   "answer": "0,25",
   "accept": [],
   "why": "равномерно ⇒ F = μmg, μ = 25/(10·10) = 0,25",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ящик массой 10 кг равномерно движется по прямой по горизонтальной поверхности под действием постоянной горизонтальной силы тяги величиной 25&nbsp;Н. Каков коэффициент трения между ящиком и поверхностью?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "BBFB41",
@@ -1045,7 +1099,8 @@ export const BANK_TASKS = [
   "answer": "-8",
   "accept": [],
   "why": "с 5 до 6 с скорость меняется от 0 до −8 м/с, значит a = (−8−0)/1 = −8 м/с²",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>На рисунке показан график зависимости от времени для проекции 𝜐𝑥&nbsp;скорости тела. Какова проекция 𝑎𝑥&nbsp;ускорения этого тела в интервале времени от 5 до 6&nbsp;<span>c</span>? </p></td></tr></tbody></table></div>"
  },
  {
   "id": "C36A4C",
@@ -1061,7 +1116,8 @@ export const BANK_TASKS = [
   "answer": "3",
   "accept": [],
   "why": "ν ∝ 1/√L: длина ×9 ⇒ частота ÷3; масса на период не влияет",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><span>Во сколько раз уменьшится частота малых свободных колебаний математического маятника, если длину нити увеличить в 9 раз, а массу груза уменьшить в 4 раза?</span></p></td></tr></tbody></table></div>"
  },
  {
   "id": "CE0949",
@@ -1077,7 +1133,8 @@ export const BANK_TASKS = [
   "answer": "24",
   "accept": [],
   "why": "2: g = v₂²/2R = 5020²/(2·3,397·10⁶) ≈ 3,7 м/с². 4: v₁ = v₂/√2 = 10,36/1,41 ≈ 7,33 км/с. Остальные: у Сатурна v₁ ≈ 25 км/с; у Урана период больше ⇒ угловая скорость меньше; объём Марса меньше земного в 6,6 раза",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Рассмотрите таблицу, содержащую характеристики планет Солнечной системы.</p><table class=\"t\"><tbody><tr><td valign=\"top\"><p>Название планеты</p></td><td valign=\"top\"><p>Диаметр в районе экватора, км</p></td><td valign=\"top\"><p>Период обращения вокруг Солнца</p></td><td valign=\"top\"><p>Период вращения вокруг оси</p></td><td valign=\"top\"><p>Вторая космическая скорость,&nbsp; км/с</p></td></tr><tr><td valign=\"top\"><p>Меркурий</p></td><td valign=\"top\"><p align=\"center\">4878</p></td><td valign=\"top\"><p align=\"center\">87,97 суток</p></td><td valign=\"top\"><p align=\"center\">58,6 суток</p></td><td valign=\"top\"><p align=\"center\">4,25</p></td></tr><tr><td valign=\"top\"><p>Венера</p></td><td valign=\"top\"><p align=\"center\">12&nbsp;104</p></td><td valign=\"top\"><p align=\"center\">224,7 суток</p></td><td valign=\"top\"><p align=\"center\">243 суток </p><p align=\"center\">0 часов </p><p align=\"center\">27 минут</p></td><td valign=\"top\"><p align=\"center\">10,36</p></td></tr><tr><td valign=\"top\"><p>Земля</p></td><td valign=\"top\"><p align=\"center\">12 756</p></td><td valign=\"top\"><p align=\"center\">365,3 суток</p></td><td valign=\"top\"><p align=\"center\">23 часа </p><p align=\"center\">56 минут</p></td><td valign=\"top\"><p align=\"center\">11,18</p></td></tr><tr><td valign=\"top\"><p>Марс</p></td><td valign=\"top\"><p align=\"center\">6794</p></td><td valign=\"top\"><p align=\"center\">687 суток</p></td><td valign=\"top\"><p align=\"center\">24 часа </p><p align=\"center\">37 минут</p></td><td valign=\"top\"><p align=\"center\">5,02</p></td></tr><tr><td valign=\"top\"><p>Юпитер</p></td><td valign=\"top\"><p align=\"center\">142 800</p></td><td valign=\"top\"><p align=\"center\">11 лет </p><p align=\"center\">315 суток</p></td><td valign=\"top\"><p align=\"center\">9 часов </p><p align=\"center\">53,8 минут</p></td><td valign=\"top\"><p align=\"center\">59,54</p></td></tr><tr><td valign=\"top\"><p>Сатурн</p></td><td valign=\"top\"><p align=\"center\">120 660</p></td><td valign=\"top\"><p align=\"center\">29 лет </p><p align=\"center\">168 суток</p></td><td valign=\"top\"><p align=\"center\">10 часов </p><p align=\"center\">38 минут</p></td><td valign=\"top\"><p align=\"center\">35,49</p></td></tr><tr><td valign=\"top\"><p>Уран</p></td><td valign=\"top\"><p align=\"center\">51&nbsp;118</p></td><td valign=\"top\"><p align=\"center\">84 года </p><p align=\"center\">5 суток</p></td><td valign=\"top\"><p align=\"center\">17 часов </p><p align=\"center\">12 минут</p></td><td valign=\"top\"><p align=\"center\">21,29</p></td></tr><tr><td valign=\"top\"><p>Нептун</p></td><td valign=\"top\"><p align=\"center\">49&nbsp;528</p></td><td valign=\"top\"><p align=\"center\">164 года </p><p align=\"center\">290 суток</p></td><td valign=\"top\"><p align=\"center\">16 часов </p><p align=\"center\">4 минуты</p></td><td valign=\"top\"><p align=\"center\">23,71</p></td></tr></tbody></table><p>Выберите <b>два</b> утверждения, которые соответствуют характеристикам планет.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "DF724F",
@@ -1093,7 +1150,8 @@ export const BANK_TASKS = [
   "answer": "11",
   "accept": [],
   "why": "ν = √(k/m)/2π растёт; vmax = Aω тоже растёт",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Подвешенный на пружине груз совершает свободные вертикальные гармонические колебания. Пружину заменили на другую, жёсткость которой больше, оставив массу груза и амплитуду колебаний неизменными. Как при этом изменятся частота свободных колебаний груза и его максимальная скорость?</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличится</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшится</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменится</p></td></tr></tbody></table><p>Запишите <u>в таблицу</u> выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Частота свободных колебаний груза</p></td><td valign=\"top\"><p align=\"center\">Максимальная скорость груза</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "E52945",
@@ -1125,7 +1183,8 @@ export const BANK_TASKS = [
   "answer": "42",
   "accept": [],
   "why": "график А — парабола от нуля до нуля с максимумом: это координата y (4); график Б — линейно убывает и меняет знак: py = m(υ₀ − gt), это проекция импульса (2)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAACYCAMAAACh6lsqAAAAAXNSR0ICQMB9xQAAAJBQTFRFAAAAAAADCAoNCgQAAAMICwsNDQgEAwYLAAAECgsNGhcbDQoIAwAADQsLCAQICAMAAAQKCAgNDQgICwsKBAQKCwYDBAQEBAgNAwQKCwoIAwMIERMYFA0NDQsQFBUYEBEYFxEQDQ0UFxcbGRcYDQsRFRcXEQsNDRAXGRMRERMbFRANFRUUEAsNDQsKBAAA////p4e5+wAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAFUSURBVFjD7dgLb4IwEADgmw+EA92TuQdTN7e5F9z//3drkWgXae8SMZvLNWAifOm1vUbTAxI2OCIYnfSI+oMhB/sAI/MZJ/YLYqDHNDNwPBmycHx6ZvQ5iWDTYRjaiVz0GtcmHXh5RRKYx9eJDMKURLAZ4Nq1yM063pAARoPbOyd56E1hDj+SjNLdo1ChQoUKFSpUqFDhf4f3hRA+zAoPrOUcnbYIQHGPkjGibNbMMeWA0DnOAGyJB6IDCbqGntDoQuIhbmM+Pi0LDtq3zy+v5hKkcPVG9P4hgPOFuTuFNrTZaDy0k/n8kuzHFS6L/TauQoV/CYbLODs/AMhA5y/j4LB5gIFWr8NvjpGorCBOBOtYVlOKdmRLZmy9s64+MrkuqxHZEmBC4QZpZot/dS01DKO6ShhtaoX7w3XonA8tnkzL8nigjc13aFOYZsC7oyqcdwe/AY8LEQQUdp/ZAAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>В момент времени 𝑡 =0&nbsp;мяч брошен вверх с поверхности Земли со скоростью →𝜐0,&nbsp;как показано на рисунке. Графики А и Б отображают <span>изменение с течением времени физических величин, характеризующих</span> движение мяча.</p><p>Установите соответствие между графиками и физическими величинами, изменение которых со временем эти графики могут отображать. Сопротивлением воздуха пренебречь. <i><span>t</span></i><sub>0</sub> –&nbsp;время полёта мяча.</p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите <u>в таблицу</u> выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKgAAAB0CAMAAAAmaYnSAAAAAXNSR0ICQMB9xQAAAFdQTFRFAAAAERIRDQgICAoNCgQECgsNDQgEAAMICwsNDQsKBAAAAAAEBAgNDQoIAwAADQsLCAMACgQAAAQKAwADAAADBAADAwAECwYDCgsKBAMIAwYLAwMI////lcUO4gAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAKFSURBVHja7dzrVsMgDADg1Lq6q7o5nc68/3Pai7t1lCYQSlD44ebxjHwnQAqzG2AiDZKEFhkqCy3SgSqWpggtMjQAVK80RWgu+BmaoRmaoRmaoRn6Z6AAuqFgaPqgMNg0QQdJ0lYv6AhG1OoBpTDkqM5QskCI6grlRBehukG5kQWoLlCXsN5SB6hjTE8qH+ocz0/KhXpF83otD+o7fu6v5kH91677xOFAJcqhax8MqNDF0LEXOlRsf+FY3ahQwS2bU1cMKGJMKRUqvF3nd0eESp+BHDYLJGiAsxq3RxIUApyCuX1SoBDktM7d0o5DIdC7Crx+x6EQ7N0PWWg4J09KgGJAKIhBIehNJ5yjrB0KYaEoCEXUIbVDgzvpQ2aFQngoCkERtUht0Emc1GGzQGEaKDHOMHQqJ3HkbFBERdJB6ITOdKCUYEPQSZ3pQAnhBqATOwklRgkUHaEw/a3Po/+xShoKMe4lHwlqgkI6UER1UgM0kjMdqD3wPTSaMx2oNXS6UIj5eRxL8GShUZ22S40uKJKhEB0KVChiZCkJGjuhDCjGbkOENKEKnL3lVOiF3iIuH12Cy+/NUiriNyNC/T3OZ2cCUOOq12B7KAnlSQP0cZYGtHqaG1NcQxdLWM2UQGsLwNqUYsDN8xqrTqogoy+va3OKAbe7+qH9oQG6eSvNKYbFsnnoUqoAejdFTymGZuTrv+9LHdB2aDfP+7KfYuieaIG2+Vu8l5uPWS/FyqCtptpdralu9Zzn6EHJHK1Wn1/zQ23bHntVQNmqr5qSfjheoOcqAO3T3zqqpF1D2xR30HqNgSrnzRytTjaN3/zSrPrv/hVf5VfUXNdR1VBTy9AMzdD/Bv0BKC/8oCS48vUAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKgAAABpCAMAAACZIZiXAAAAAXNSR0ICQMB9xQAAAFRQTFRFAAAADQgICAoNDQsKBAAAERIRAAAECgsNCgQEDQoIAwAABAgNDQgEAAMICwsNCgQAAAQKDQsLCAMAAAADAwADCwYDCAMDBAMICgsKAwYLAwMI////6icgWgAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAJVSURBVHja7dvtbsIgGAVgVq2utqu6zTnX+7/PIY1VkfJVXjgk9MfUkJgnOy+UD8uGTC72+KEu0LDQOh8osDRHaF2gBFBcaY7QMuAXaAbQbDoTcL+XoselvtQoKlXRmTClyl6PSFUPT4D5z42jcNT5AR9MqrszQVG1t1Ck/A33ehyqcVKCQrWYPWFIraZ5CFS7+ShA/rYT5+RU+xl+YqnLUiQp1WnNlDJ/x8VdOqrzKjQV1WO5nEbqta5PQfXbgEiQv+9OSXSq/5ZOZOmSvaeo1EWbZDHzX7ibF4+6eNsxFjXA/mgcaZCN3BjUMDvOEfIPtTVOTg23h08irQmgJNR7UOz+GfkKfnwTolRr+fvENwY/Z1pOlaAENUrZq2hO7iioNEeMHvm/VfoWDl2t2WYbFupBfd/qW9jQ7NqhG6VB83KTdh+9voUN+wN/EX9Cny7bU3mojLWqApxa2Gp9fRn/pXT3FdN1/GxnesqthV2T59CvaqA4r7elNt/VDPTWwsY3VFBb6mOJ1soWcqhdqYo+0uwUirH3TDV6IqlRa6ooxONPtTr3kmIqXspeb5+/iLXjhn0rKabiZeItxTjqQu02v+f+dOHJXiSFaBmhvDQI7kxu+XdXgRp6s8X8OZEhfyV0uqL+7smQv6pG00D1VN7rm78eBKqlKsfRZFDzqAoDNVGBoPpehQTVUrGgGioadLZU8aAzVESoMn9IqIoKCn3NHxYqU4Ghz/kjQ5+o2FDjugrpgQGtFOvJBkFFj96QP9yzItlA86jRAi3QAi3QAi3QAi1Q9OsfMD8A6luZI7kAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>кинетическая энергия <i><span>E</span></i><sub>к</sub></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проекция импульса <i><span>p<sub>y</sub></span></i></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>проекция ускорения <i><span>a<sub>y</sub></span></i></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>координата <i>у</i></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "E9E545",
@@ -1141,7 +1200,8 @@ export const BANK_TASKS = [
   "answer": "7",
   "accept": [],
   "why": "mgh = Eк + потери = 7 Дж; h = 7/(0,1·10) = 7 м",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Шарик массой 100&nbsp;г падает с некоторой высоты. Начальная скорость шарика равна нулю. Его кинетическая энергия при падении на землю равна 6&nbsp;Дж, а потеря энергии за счёт сопротивления воздуха составила 1&nbsp;Дж. С какой высоты&nbsp; упал шарик?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F120FE",
@@ -1157,7 +1217,8 @@ export const BANK_TASKS = [
   "answer": "1,8",
   "accept": [],
   "why": "столб воды 20 − 2 = 18 см; p = ρgh = 1000·10·0,18 = 1,8 кПа",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В сосуд глубиной 20&nbsp;см налита вода, уровень которой ниже края сосуда <br> на 2&nbsp;см. Чему равно дополнительное к атмосферному давление столба воды на плоское дно сосуда?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F13F4D",
@@ -1177,7 +1238,8 @@ export const BANK_TASKS = [
    "0,750,05"
   ],
   "why": "d = 15/20 = 0,75 мм, погрешность 1/20 = 0,05 мм",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Чтобы узнать диаметр медной проволоки, ученик намотал её виток к витку на карандаш и измерил длину намотки из 20 витков. Длина оказалась равной (15&nbsp;±&nbsp;1) мм. Запишите в ответ диаметр проволоки с учётом погрешности измерений.</p><p>Ответ: <u>(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> ± <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</u> мм.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F4D3FF",
@@ -1193,7 +1255,8 @@ export const BANK_TASKS = [
   "answer": "21",
   "accept": [],
   "why": "a = GM/r² убывает, T = 2π√(r³/GM) растёт",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Космический аппарат, обращающийся вокруг Луны по круговой орбите, перешёл на другую круговую орбиту бóльшего радиуса. Как изменились в результате этого перехода центростремительное ускорение, с которым аппарат движется по орбите, и его период обращения вокруг Луны?</p><p>Для каждой величины определите соответствующий характер изменения: </p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличилась</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшилась</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменилась</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Центростремительное ускорение</p></td><td valign=\"top\"><p align=\"center\">Период обращения аппарата вокруг Луны&nbsp;</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "F579FA",
@@ -1209,7 +1272,8 @@ export const BANK_TASKS = [
   "answer": "1000",
   "accept": [],
   "why": "p₁/p₂ = (m₁/m₂)(υ₁/υ₂): 1,5 = (m₁/m₂)·½ ⇒ m₁/m₂ = 3, значит m₂ = 1000 кг",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Отношение скорости грузовика к скорости легкового автомобиля 𝜐1𝜐2 =12.&nbsp;Масса грузовика 𝑚1 =3000&nbsp;кг. Какова масса легкового автомобиля, если отношение импульса грузовика к импульсу легкового автомобиля равно 1,5?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "FA9CF6",
@@ -1225,7 +1289,8 @@ export const BANK_TASKS = [
   "answer": "13",
   "accept": [],
   "why": "одинаковая жёсткость 40 Н/м и одинаковый объём 30 см³, разный материал ⇒ отличается только масса",
-  "sure": "средняя: пара 4 и 5 тоже даёт разную массу при одинаковой жёсткости, но там меняется ещё и объём"
+  "sure": "средняя: пара 4 и 5 тоже даёт разную массу при одинаковой жёсткости, но там меняется ещё и объём",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ученику необходимо на опыте обнаружить зависимость периода свободных колебаний пружинного маятника от массы груза. У него имеется пять пружинных маятников, характеристики которых приведены в таблице. Какие <b>два</b> маятника необходимо взять ученику, чтобы провести данное исследование? Грузы сплошные.</p><table class=\"t\"><tbody><tr><td valign=\"top\"><p align=\"center\">№ маятника</p></td><td valign=\"top\"><p align=\"center\">Жёсткость пружины,</p><p align=\"center\">Н/м</p></td><td valign=\"top\"><p align=\"center\">Объём груза,</p><p align=\"center\">см<sup>3</sup></p></td><td valign=\"top\"><p align=\"center\">Материал, из которого сделан груз</p></td></tr><tr><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">40</p></td><td valign=\"top\"><p align=\"center\">30</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">3</p></td><td valign=\"top\"><p align=\"center\">40</p></td><td valign=\"top\"><p align=\"center\">30</p></td><td valign=\"top\"><p align=\"center\">медь</p></td></tr><tr><td valign=\"top\"><p align=\"center\">4</p></td><td valign=\"top\"><p align=\"center\">10</p></td><td valign=\"top\"><p align=\"center\">30</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">10</p></td><td valign=\"top\"><p align=\"center\">60</p></td><td valign=\"top\"><p align=\"center\">медь</p></td></tr></tbody></table><p>Запишите в ответе номера выбранных маятников.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "FcA2F2",
@@ -1241,7 +1306,8 @@ export const BANK_TASKS = [
   "answer": "13",
   "accept": [],
   "why": "a = ω²R растёт; по вертикали N = mg, не меняется",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В школьном опыте брусок, помещённый на горизонтальный диск, вращался вместе с ним с некоторой угловой скоростью. В ходе опыта угловую скорость диска увеличили. При этом положение бруска на диске осталось прежним. Как изменились при этом центростремительное ускорение бруска и сила нормального давления бруска на опору?</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличилась</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшилась</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменилась</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Центростремительное ускорение бруска</p></td><td valign=\"top\"><p align=\"center\">Сила нормального давления бруска <br> на опору</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "0A3E4F",
@@ -1257,7 +1323,8 @@ export const BANK_TASKS = [
   "answer": "3",
   "accept": [],
   "why": "поршень покоится ⇒ давления равны, p ∝ n⟨E⟩; при nн/nа = 1/3 выходит ⟨Eн⟩/⟨Eа⟩ = 3",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Горизонтальный цилиндрический сосуд с гладкими стенками разделён подвижным поршнем на две части. В одной части сосуда находится неон, <br> в другой – аргон. Определите отношение средних кинетических энергий теплового движения молекул неона и аргона <span>𝐸н𝐸а,</span>&nbsp;если поршень покоится, <br> а отношение концентраций газов <span>𝑛н𝑛а=13.</span>&nbsp;</p></td></tr></tbody></table></div>"
  },
  {
   "id": "0F98F4",
@@ -1273,7 +1340,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "p ∝ νT: ½ = (ν₂/ν₁)·2 ⇒ уменьшить в 4 раза",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В сосуде неизменного объёма находится идеальный газ. Во сколько раз нужно уменьшить количество вещества газа в сосуде, чтобы после увеличения абсолютной температуры газа в 2 раза его давление стало вдвое меньше начального?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "192F48",
@@ -1289,7 +1357,8 @@ export const BANK_TASKS = [
   "answer": "0,1",
   "accept": [],
   "why": "m = Q/λ = 0,33·10⁵ / 3,3·10⁵ = 0,1 кг",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Какую массу льда, находящегося при 0&nbsp;<span>°</span>С, можно превратить в воду, если льду сообщить количество теплоты 0,33<span>×</span>10<sup>5</sup> Дж?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "25664A",
@@ -1311,7 +1380,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "процесс 1–2 идёт при постоянной T (вертикаль на VT-диаграмме): внутренняя энергия не меняется, значит Q = A = 4 кДж",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKEAAACvCAYAAACVW77GAAAAAXNSR0ICQMB9xQAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAATpSURBVHja7d0xUuNIGAbQPgAXoIrezAcwwumErAIOgK0iJaJUtcUBGjJXbc0FNiMkmHgTTsANJuAG3IEd2WOv7fGAZVsWhhd8UGBQl1uPv7sluwm3t7dBpM3oBIFQRCfI+0F4dRqvQwgvs4mnV9fVY6nMuzGE5+lj2eBO50kjlTCV/U4WwlM4yb9dDocHs4+VRe88hPjcK8pzHSfNIUwXhxXCSQWcBxhesuLm7NWD/fgZnSobVsLxsDuLbfK9RZgQyk4QDoeXB/lReFhlDjiZL+pU2QjhTZGdVfO+vEzd6utBFu7CUf6wOD+EUBpDOF4hZ08XKR0uglwVIYiyEcJJ5SvTeJX81kIEQtkqwun87yT/Vn1eZSGyDCCEsjbCyeWZ0UXqbPC11kEWEIIo6yGc3BVZcSECoWwd4XghMl6U1D4IhLKthclaB1gC8LMhrObTf2Z//DN9/vH4cdWrCrLFV9F81go4WtBl2d/9MnXG05p+5ziGxzqXtyCEcKNUc+lFbHVudQqEzcD8zQtBBMKdVscY4nfDMYStpbrzpApC2G4VjPl93WutEEK4vZVyjPeGYQhbHIbj1zov+hAIGwVYVcUiy5KqCOHOAC69c7TGfXgIIaydIo/pd7curZAhFAhFIBQIP2Bn+UOD8D0ABHEPEMp+RyVco802quAu2/2I/QnhHg3HEELY+nOEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEcM0TJPaiUQlVQpUQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEMKGAUIIIYQQQujfikEIIYSfE6H/8gkhhBBC2NabgiCEEEII30entfn2SAghbP05QgghhBBCCCGEEEIIIYRbXEWKDZFUQpXQcAwhhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQvgROs12wRC22mn2rN4zhGIvGpXQcKwSWphACOGO2xsOLw+KvPdXjOF7PL26hhDCnbZXAcxjvI8hPFePQQhha+2lMu9WECGEEEIIIYQQQgghhBBCCCGEEEIIIYQQQgghhLCV9gZZuJt/cUP2dJHSIYQQag9CJ0l7EGoPQidJexBqD0InSXsQag9CJ0l7EGoPQidJexBqr8X26h4HQu01grDOZgFbRyhSd7sRCKV1jDufhMrHT90Nl3SaNIpwpwsTkdYv0YhAKBCKQCgQikAo+48wlf3OcQyPo+s78fixX6aODpI6SeniMAvh6c07JUf5w+VweDCHcPLLvaI8r74ui975Nt/ELZ8jN0V2FuPJv/2y7I4L2687U6R+/mVxp4rRh9EuAjM6R3sxH4WHkA3udK6smmoD+dnCdXUar0OIz3mZuv+PuHk376cvcwgnVXBR5/gAqqGsn/EWKW8bmpbMrLg5Wyyti4pFas8PVxhNf2ILL8sR/vp9kZUQ1tipDEJpJMvmg7WH4zoHEVl3PmhhIq3PB0cIp2pdopEtpe5Ubm4SOblYrQrKupkWsBpTubnVjNt2svk88PVbdK8iFGkrOkEgFNEJAqGIThAIRf4DKb3eMOpG+1QAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>На <i>VТ</i>-диаграмме показан процесс изменения состояния 1 моль одноатомного идеального газа. Газ<br> в этом процессе совершил работу, равную 4 кДж. Какое количество теплоты получил газ? </p></td></tr></tbody></table></div>"
  },
  {
   "id": "2A4D4B",
@@ -1327,7 +1397,8 @@ export const BANK_TASKS = [
   "answer": "200",
   "accept": [],
   "why": "⟨E⟩ ∝ T, выросла вдвое ⇒ T₁ = 400/2 = 200 К",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>При увеличении абсолютной температуры средняя кинетическая энергия хаотического теплового движения молекул гелия увеличилась в 2 раза. Конечная температура газа равна 400 К. Какова начальная температура газа?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "2E704B",
@@ -1343,7 +1414,8 @@ export const BANK_TASKS = [
   "answer": "50",
   "accept": [],
   "why": "пар складывается, объём удваивается: (20+80)/2 = 50 %",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В сосуде, разделённом перегородкой на две равные части, находится влажный воздух. Температура и давление воздуха в обеих частях сосуда одинаковы. Его относительная влажность в одной половине сосуда 20%, а в другой –&nbsp;80%. Какой станет влажность воздуха в сосуде, если перегородку убрать?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "437C4A",
@@ -1359,7 +1431,8 @@ export const BANK_TASKS = [
   "answer": "25",
   "accept": [],
   "why": "16/64 = 25 %",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Рабочее тело тепловой машины за цикл получает от нагревателя количество теплоты, равное 64&nbsp;Дж, и совершает работу, равную 16&nbsp;Дж. Чему равен КПД тепловой машины?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "48EC42",
@@ -1375,7 +1448,8 @@ export const BANK_TASKS = [
   "answer": "40",
   "accept": [],
   "why": "20/50 = 40 %",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Тепловая машина за цикл получает от нагревателя количество теплоты, равное 50 кДж, и совершает работу 20 кДж. Чему равен КПД тепловой машины?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "4EF342",
@@ -1391,7 +1465,8 @@ export const BANK_TASKS = [
   "answer": "60",
   "accept": [],
   "why": "КПД = A/Q = 60/100 = 60 %",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Рабочее тело тепловой машины за цикл получает от нагревателя количество теплоты, равное 100 Дж, и совершает работу 60 Дж. Каков КПД тепловой машины?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "5D804A",
@@ -1413,7 +1488,8 @@ export const BANK_TASKS = [
   "answer": "250",
   "accept": [],
   "why": "плавление — плато при 1500 °C от 1·10⁵ до 6·10⁵ Дж, то есть 5·10⁵ Дж на 2 кг: λ = 2,5·10⁵ Дж/кг = 250 кДж/кг",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/gif;base64,R0lGODlhFAGZAHcAMSH+GlNvZnR3YXJlOiBNaWNyb3NvZnQgT2ZmaWNlACH5BAEAAAAALAAABAAUAZIAhQAAAA0PDxkZGw0QJw0QOw07Xw0nTiUQEDoQECUQJzoQJzkQOyUQOzonJzo6XzkmTiQnTyU7XiROTiROcTtffztOcU0nEF47EF06Ol08J04oKE0mO046Tl9NJ05OOl1OTk5ff05Obl1/XU5uX0xzf11/f11zf113d25OJn9fO3FOO39fTn9uTHd3d39uYm5ubmZmZm5ugICAZgECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwb/QIBwSCwCLIGAUZhMLo2Cp3RKrVqv2Kx2y+16v1IM9TIkEw8DUjlQmEbB8Lh8Tq/bvYbsY3jIG/1Pb3eDhIWGh3UITRRSe0YXAYxGHFICgoiYmZqbhhZVFxNCoEIIBFuWl5yqq6ytTwlqVUmhQgdcqK65uruYgFoBvle4vMTFxl1mXAemWaipx9DR0p5dSFrOz9La264JXinASxmBztzm56vMQtZZAQNFCOTl6PT1hQHqAEpbTfhUlvYCCjT0oRDAgQgTwmFh6KDChxCtWAhmx2HEixg1WczIsWPFbB5DijwFcqTJk+RQqly5ZCNLVSVfEnIpU2NNjTFvzsypcw7N/547gSL6KbRi0UNEj8pJqhQO06ZenkKNynPqtapWb2HNamUr12Zev6YEmuSdkSZGFOUj5W+s2C5SR2oYgsAsH7RE4gnJpxfA2iFx37ZsyuIALQDJ/gyhhrhIGyhhBQsJrLIvgAPh4BVhhuCw35aRBVNGyQLWkH6SABROnSLN5SJ2iYyWHNrkKHhtmRTZt+80aMlgp0KQ0hsc60j6doPGxry58+fQo0ufTr269eo150q5/ZqIWVtDUMQG7DWs+WbX0KufnLO2wsRLEncOz3nzbyzn13dNj5//5CruIQTfJ4BY8NgFBbq1n34LCuNfgw6yByBLkPQDSCwApFbLEOqsBv8ACn9J2B+DE45oIoQLShVgQBX2Q1cTnt31F2YhihjhiSj+82CJI2K1oliU5YejjiS6kV5cP34V5I485kjkjcIEliRXSxZp5JBPOulGecBpZWUlTF6JJZjBjdnlll8GEiaZZg6Gn5BnRpmmm21Csaaab94Z531Qasmmn3j2uSWce/7D5Zx21pmooCkRWmglhypaRKSM/gnpf4g+CkCVksqWqaeSCuKoppB9Cpiei1Ya6KWYdlrodbDGKuustNY6DKmsqroqoKnyOmmWm6JKKqe60unrr21uNCqu5JnaarHIuhqsgs8e+yix1p4q7bSqZrMss5tSmm21wDZpbrO9ngv/ro3jcgstqNJ6C9K3zGKrrpjtikuuttueaW+5AFt6767hChwwuP/iOy69vSbF8LD6HkywwgMby9TDmiZsMMUcd7wqTxh31BsRLcaoVlq5lbptyPt6TOdTLGM0SxGF4UUXh3kxkkKNGk/scroSJ6qisB6BR3KMohR4oNJ85ks0v+9q6+PTGRUWI2YUzScEiKTYp3LUUC9MdbBIjo2R0Vu7eAZsG3rXdMXGiu3srXADbZLVS5wshHFD8D1ycl93ZevghFPnrLsroX3WYX/zphxkhUcu+eSFy4T3E8l4uLVrio/HrqER/xwt2IjXPXriU3Bn2WcAaL3X22geHvrGPtNe/7tIly8hBhEJiuIY7PKYPfvtdtset0qKa/ehEeBxzQfOwC8nvOzUHx5RE+oo4oQRNc+Y8qRVzbNy9aSXHjTEgpsv+unns78+vOX7G34UMatPfPHHtw//uugOav/97jMe/gZIwAAiDGRvqN/w8idAAwLwWu05iALJ5zTrdeliopre+DbYrwtGMGym25/+QPg+EpZwTw5zyAQ5WMEOAieFIhxhyx5oQhrO0IZxIgrdVli+BRYwhuvSYSp42MIitkt+lEuiEpcYHf4FTjbPIGIIa8jABgLxgNT6XxVtGDMpOpEmdLvhFsfoQDJeEYdTygoYvaXBHlLwiB6EnBnPOEcx/v/QjmW8IwqjOK82GlGGWtRjDvmIxrF10Y9OLBgU+/hGQPowj5CEIPisSMU6BjKSeKSjIOW3SEpmspKY/OQlNRnKQULxhKMEJSlXKcpUtpKT7ImJF1H5SFa+0iQ2Y0uI9Pa1iyHSkY0EpEkwk4TU9GUtx+STL4PpSVfO8iYDQgzTkraYx5wyXO35JS2Z2UzcYSYth3Fe68L5FwmCTJvNrKUqbYnLRTzPbW0bgucAEkZLutKZhkSnTvTGt70hp58AAGgsmUjQgibRKr1pnG+I8DdsDo2b9lRnK9PIkVBo7kOuuah4MDRQN84tnxDVSTJWlz2vLXJqIS2lRO9J0ZD0bgj/Lz2pR+MFUhb2RHnM29pamheieqazpqR7pky0F4AYdY97NAreTIMK1D/yr2cRTSk76wfLpcqNplKVpE2nyNKsrvNVKz3kR726R7Lic6xbfWpYm8pVodZrrWhlqlmr6tQTijWtQYQrVvdq1S/MxiRQFaRe69pNSPm0JgZNrGIXO6ueMPaxkI0sc7aABIokEkjYuKxmcwWGhm72s5oBrWiN4IjRmva0p0VaNHiZCSS4wxAXsKYdkFAjL6CgCbK9AjEzY4WioiwfScjtGvrRD+FiAgE6q+0dlFcXjtbBs3KALhjE6boqNJcurpmCa9OS3Cww5nWsmCYnFEeHBhzAuHCQ/y4crIkC9DJPuOe1gmFIFlMtTIQVJF1FdecwjtVFlxC3TY1zn0Be6FFBcfm9ggqKAIiEbg9wdejcKrxBCAS4txoG6EASLAsG1yqXCBbwHCk+XAvPSJgL98WoBxYKAAlY2A4K5UQ06eBfMNSMxXS4LYkDyoYlFIbDRVBcjK2wAQYXgRJ8250dwLEbDWFiOHeQxIvpMLILiPgLZAAHiSFBHN02uW/q1S6H9xEBQpx4EwOOQ5m7RgeABngOKDjDhY9w5VJ4eW3wtMKaYboE7BXCdeLExIzhcFviXrkLZ46DgehDhRDHJ8xn8Aygd7w8EAfDt44bBHzmbIfULHgQNV5veJDq8F3WSeHNJPPtncvwuy4EIw98K3WEDYyIFm24wpzmBy0K3NnFWKEueRkZO6QwXzybmgrjgIcvEopjOyRVE8RV9R1CDQZwFPMOuaQCUT0r3Rbt9HuYizZxQ+FgZqMWHQugQkEIAQnLDvvcCmGAj4fAkEIMWgiqhXc9+qHaFK8iBfpOiANelO1DKPkJIbhCEAAAOw==\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>Брусок из неизвестного металла массой 2&nbsp;кг поместили в печь и стали его нагревать. На рисунке приведён график зависимости температуры металла <i><span>t</span></i>от переданного ему количества теплоты <i><span>Q</span></i>. Чему равна удельная теплота плавления металла?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "6BF448",
@@ -1429,7 +1505,8 @@ export const BANK_TASKS = [
   "answer": "30",
   "accept": [],
   "why": "15/50 = 30 %",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Тепловая машина за цикл получает от нагревателя количество теплоты, равное 50 кДж, и совершает работу 15 кДж. Чему равен КПД тепловой машины?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "9B7e46",
@@ -1445,7 +1522,8 @@ export const BANK_TASKS = [
   "answer": "2,5",
   "accept": [],
   "why": "p = nkT: 5 · ½ = 2,5",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Концентрация молекул идеального газа увеличилась в 5 раз, а его абсолютная температура уменьшилась в&nbsp;2&nbsp;раза. Во сколько раз увеличилось при этом давление газа?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "9D4F49",
@@ -1461,7 +1539,8 @@ export const BANK_TASKS = [
   "answer": "120",
   "accept": [],
   "why": "p ∝ n⟨E⟩: 180 · (1/3) · 2 = 120 кПа",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Первоначальное давление идеального одноатомного газа в сосуде равнялось 180 кПа. Объём сосуда увеличили, при этом концентрация молекул газа уменьшилась в 3 раза. Одновременно сосуд нагрели так, что средняя кинетическая энергия теплового движения молекул газа увеличилась в 2 раза. Каким в результате этого стало давление <i>р</i> газа в&nbsp;сосуде?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "A15641",
@@ -1477,7 +1556,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "⟨E⟩ ∝ T: 280/140 = 2",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Абсолютная температура неона увеличилась со 140 до 280 К. Во сколько раз увеличилась средняя кинетическая энергия теплового движения его молекул?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "A53641",
@@ -1499,7 +1579,8 @@ export const BANK_TASKS = [
   "answer": "31",
   "accept": [],
   "why": "ΔQ₁ — нагрев твёрдого вещества, значит ΔQ₁/(mΔt₁) — удельная теплоёмкость твёрдого (3); ΔQ₂ — плато плавления, значит ΔQ₂/m — удельная теплота плавления (1)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>В цилиндре под поршнем находилось твёрдое вещество массой <i><span>m</span></i>. Цилиндр поместили в печь. На рисунке схематично показан график изменения температуры <i><span>t</span></i>вещества по мере поглощения им количества теплоты <i><span>Q</span></i>. Формулы А и Б позволяют рассчитать значения физических величин, характеризующих происходящие с веществом тепловые процессы.</p><p>Установите соответствие между формулами и физическими величинами, значение которых можно рассчитать по этим формулам. </p><p>К каждой позиции первого столбца подберите соответствующую позицию из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>А)</b>&nbsp;</td><td><p>𝛥⁢𝑄1𝑚⁢𝛥⁢𝑡1</p></td></tr><tr valign=\"middle\"><td><b>Б)</b>&nbsp;</td><td><p>𝛥⁢𝑄2𝑚</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>1)</b>&nbsp;</td><td><p>удельная&nbsp;теплота&nbsp;плавления</p></td></tr><tr valign=\"middle\"><td><b>2)</b>&nbsp;</td><td><p>удельная&nbsp;теплота&nbsp;парообразования</p></td></tr><tr valign=\"middle\"><td><b>3)</b>&nbsp;</td><td><p>удельная&nbsp;теплоёмкость твёрдого вещества</p></td></tr><tr valign=\"middle\"><td><b>4)</b>&nbsp;</td><td><p>удельная&nbsp;теплоёмкость жидкости</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "AD5049",
@@ -1515,7 +1596,8 @@ export const BANK_TASKS = [
   "answer": "4600",
   "accept": [],
   "why": "Q = rm = 2,3·10⁶ · 2 = 4,6·10⁶ Дж = 4600 кДж",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Какое количество теплоты поглощается в процессе кипения и обращения <br> в пар 2 кг воды, происходящем при&nbsp; 100&nbsp;°С и атмосферном давлении 10<sup>5</sup> Па?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "AD774B",
@@ -1531,7 +1613,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "p ∝ N·T при V = const: 2 = (N₂/N₁)·½ ⇒ N₂/N₁ = 4",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В сосуде неизменного объёма находится идеальный газ. Во сколько раз нужно увеличить количество газа в сосуде, чтобы после уменьшения абсолютной температуры газа в 2 раза его давление стало вдвое больше начального?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "BA6eFF",
@@ -1547,7 +1630,8 @@ export const BANK_TASKS = [
   "answer": "2200",
   "accept": [],
   "why": "ΔU = Q + Aвнеш = 1700 + 500 = 2200 Дж",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Двум моль газа сообщили количество теплоты, равное 1700&nbsp;Дж, при этом внешние силы совершили над газом работу, равную 500 Дж. На сколько увеличилась внутренняя энергия газа?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "C2BD49",
@@ -1563,7 +1647,8 @@ export const BANK_TASKS = [
   "answer": "36",
   "accept": [],
   "why": "A = ηQ = 0,3·120 = 36 Дж",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Тепловая машина с КПД 30% за цикл работы получает от нагревателя количество теплоты, равное 120&nbsp;Дж. Какую работу машина совершает за цикл?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "DC7C46",
@@ -1579,7 +1664,8 @@ export const BANK_TASKS = [
   "answer": "200",
   "accept": [],
   "why": "T₂ = T₁/4 и T₁ − T₂ = 600 ⇒ T₁ = 800, T₂ = 200 К",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>При уменьшении абсолютной температуры на 600&nbsp;К средняя кинетическая энергия теплового движения молекул аргона уменьшилась в 4 раза. Какова конечная температура аргона?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "DDF044",
@@ -1595,7 +1681,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "при постоянной T концентрация пара ∝ влажности: 40/20 = 2",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Относительная влажность воздуха увеличилась с 20% до 40% при неизменной температуре. Во сколько раз увеличилась при этом концентрация молекул воды в воздухе?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F23045",
@@ -1617,7 +1704,8 @@ export const BANK_TASKS = [
   "answer": "0,75",
   "accept": [],
   "why": "по клеткам: 1(1;4) → 2(3;4) → 3(5;2). A₁₂ = 4·2 = 8 клеток, A₂₃ — трапеция (4+2)/2·2 = 6, отношение 6/8 = 0,75",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>На рисунке показано, как меняется давление идеального газа в зависимости от его объёма при переходе из состояния 1 в состояние 2, а затем в состояние 3. Чему равно отношение работ газа <span>𝐴23𝐴12</span>&nbsp;в этих двух процессах?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F5A444",
@@ -1639,7 +1727,8 @@ export const BANK_TASKS = [
   "answer": "31",
   "accept": [],
   "why": "1–2 — прямая через начало координат в осях p–T, значит объём постоянен (3); 2–3 — рост давления при постоянной температуре, объём падает, плотность растёт (1)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><span>Один моль одноатомного идеального газа участвует в процессе 1–2–3, график которого изображён на рисунке в координатах <i>p</i>–</span><i><span>T</span></i><span>, где <i>p</i> –&nbsp;давление газа, </span><i><span>T</span></i>–&nbsp;абсолютная температура газа. Как изменяются объём газа <i><span>V</span></i><span> в ходе процесса 1–2 и плотность газа ρ в ходе процесса 2–3? </span></p><table><tbody><tr><td valign=\"top\"><p align=\"center\"><span><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKoAAACkBAMAAAD1UqjBAAAAAXNSR0ICQMB9xQAAACRQTFRFAAAADQ4QDQ8PDRAODQ4ODQ4NDQ0NDQ0ODRAQDQsODQsN////8jO9dwAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAKiSURBVGje7dtNbuIwFAdw79lRqLocvVbVSNyAA8yCHIEjeIfUUdZMieYI2WbNBlsjWYkvN/mAEe4k8cd7XlS1NyAkfkTPdkL4P5iOMVhSk6qr5wqy9pmkPdbVWrySq82Sq1OnbhCMgK2ptqR6xapv9fvZVLdadB8ECLXJ9IOpikyXe6TajrVZgZZcdZ8DEMZd+sUpMlPNeV8AGaqyTlXHwlSX8KLRqla/zLquhicSVwF94PdqXfxTw6ZLLvqH0lDFbfmGrtfr+3JDPQLHq+rUrMfPWRi1Pn7n9OrIOSupSU1qUpOa1KQmNalJ/ULq2L3Pl1JlLHXzWdS0C5Ka1JhqBQW92jzWvzm5qrjO9zHqWkZRcx5DjfB7VlvZXQy14jHUxxi7QHD9g15dAuzIVQEAUdYrcV0vixgqYxFUiKECfKNXuy9Z1HWdTAMw6nTEgFBn0pBwdS5iCVZhLrexqId9CGpRK9hPr6hg1bweO0w+QrWHVgGqQ77mr7qEdp5qS7okgV5qb7rEi37HCo7horeqqVXpeqgWVcDz2Xem/M4u3Ypy7VxwVsEnW3ZVvVBX1TOudlN9M3AX1T9Yt6qXRUBab1dZQGOBVWUsoFvBqkJIp5FNhQu9KkM7QObU4CagOTW8s2hGRbQATaugNb2KQSdVFDqhShw6rqLayqZUNDqmAhodUUFrepUC/U8lQT+okgY1VfzkX4V7FY/eLsfs/gWisYmiAnVXrRy+j5GrH2aLciQ1qbRqfWx3wcu5U8u7OzXkUFt10m/dsdaF2lKpf86i0D/7zupds6KrwdCk23dWP5CVQJfZoObcTDtwY7hJZ13z8oFOfeIx1KGYfQWeyNT6XUeYrf4/BeQrqyquqioE2S4Q1+Ck3bE53Y6Nc3ZJalJv4y/CHGEX6ThmawAAAABJRU5ErkJggg==\" align=\"ABSMIDDLE\" alt=\"undefined\"></span></p></td></tr></tbody></table><p><span>Для каждой величины определите соответствующий характер изменения:</span></p><table><tbody><tr><td valign=\"top\"><p><span>1)</span></p></td><td valign=\"top\"><p><span>увеличивается</span></p></td></tr><tr><td valign=\"top\"><p><span>2)</span></p></td><td valign=\"top\"><p><span>уменьшается</span></p></td></tr><tr><td valign=\"top\"><p><span>3)</span></p></td><td valign=\"top\"><p><span>не изменяется</span></p></td></tr></tbody></table><p><span>Запишите <u>в таблицу</u> выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</span></p><table><tbody><tr><td valign=\"top\"><p align=\"center\"><span>Объём газа<br> &nbsp;в ходе процесса 1–2</span></p></td><td valign=\"top\"><p align=\"center\"><span>Плотность газа<br> &nbsp;в ходе процесса 2–3</span></p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "0810F0",
@@ -1655,7 +1744,8 @@ export const BANK_TASKS = [
   "answer": "32121",
   "accept": [],
   "why": "проверка актов на соответствие высшему закону — Конституционный Суд; федеральная собственность и разработка бюджета — Правительство; назначение председателя ЦБ и принятие законов — Государственная Дума",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между полномочиями и субъектами государственной власти РФ, реализующими эти полномочия: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПОЛНОМОЧИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">рассмотрение дел о соответствии нормативных актов закону, имеющему высшую юридическую силу</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">управление федеральной собственностью</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">назначение на должность Председателя Центрального банка РФ</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">разработка федерального бюджета</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">принятие федеральных законов</p></td></tr></tbody></table></div><div class=\"col\"><b><u>СУБЪЕКТЫ ГОСУДАРСТВЕННОЙ ВЛАСТИ РФ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>Государственная Дума</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>Правительство РФ</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>Конституционный Суд РФ</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "16E443",
@@ -1671,7 +1761,8 @@ export const BANK_TASKS = [
   "answer": "13213",
   "accept": [],
   "why": "военная доктрина и помилование — Президент; федеральная собственность и исполнение бюджета — Правительство; изменение границ между субъектами утверждает Совет Федерации",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между полномочиями и субъектами государственной власти Российской Федерации, реализующими эти полномочия: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПОЛНОМОЧИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">утверждение военной доктрины</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">осуществление управления федеральной собственностью</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">утверждение изменения границ <br> между субъектами Российской Федерации</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">осуществление помилования</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">обеспечение исполнения федерального бюджета</p></td></tr></tbody></table></div><div class=\"col\"><b><u>СУБЪЕКТЫ ГОСУДАРСТВЕННОЙ ВЛАСТИ РОССИЙСКОЙ ФЕДЕРАЦИИ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p align=\"left\">Президент Российской Федерации</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>Совет Федерации</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>Правительство Российской Федерации</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "05FF0C",
@@ -1687,7 +1778,8 @@ export const BANK_TASKS = [
   "answer": "235",
   "accept": [],
   "why": "социальное государство — достойная жизнь, МРОТ, поддержка семьи. Свобода совести относится к светскому государству, федеративное устройство к форме устройства",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Согласно Конституции РФ наша страна является социальным государством. Выберите в приведённом списке черты, характеризующие социальное государство, и запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "1CA945",
@@ -1703,7 +1795,8 @@ export const BANK_TASKS = [
   "answer": "234",
   "accept": [],
   "why": "социально-экономические — собственность, охрана здоровья, свобода труда. Собрания и митинги политическое право, достоинство личности личное",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите в приведённом списке положения, характеризующие социально-экономические права (свободы) гражданина Российской Федерации. Запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "230e40",
@@ -1719,7 +1812,8 @@ export const BANK_TASKS = [
   "answer": "11221",
   "accept": [],
   "why": "права работника — вступать в профсоюзы, получать зарплату, знать условия труда; обязанности — беречь имущество работодателя и соблюдать охрану труда",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между примерами и элементами правового статуса работника (согласно Трудовому кодексу Российской Федерации): к каждой позиции, данной в первом столбце, подберите соответствующую позицию из&nbsp;второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИМЕРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">вступать в профессиональные союзы</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">своевременно и в полном объёме получать заработную плату</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">бережно относиться к имуществу работодателя</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p>соблюдать требования охраны труда</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">получать полную достоверную информацию об условиях труда</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ЭЛЕМЕНТЫ ПРАВОВОГО СТАТУСА РАБОТНИКА</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>права</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>обязанности</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "49800D",
@@ -1735,7 +1829,8 @@ export const BANK_TASKS = [
   "answer": "145",
   "accept": [],
   "why": "личные права — защита чести, неприкосновенность частной жизни, тайна переписки. Быть избранным политическое право, социальное обеспечение социальное",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Что из перечисленного относится к личным (гражданским) правам (свободам) человека и гражданина в Российской Федерации? Запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "58614D",
@@ -1751,7 +1846,8 @@ export const BANK_TASKS = [
   "answer": "32123",
   "accept": [],
   "why": "эксперт и свидетель — иные участники; прокурор и следователь — сторона обвинения; обвиняемый — сторона защиты",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между субъектами и участниками уголовного судопроизводства (согласно Уголовно-процессуальному кодексу Российской Федерации): к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>СУБЪЕКТЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p>эксперт</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>прокурор</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p>обвиняемый</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p>следователь</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p>свидетель</p></td></tr></tbody></table></div><div class=\"col\"><b><u>УЧАСТНИКИ УГОЛОВНОГО СУДОПРОИЗВОДСТВА</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>сторона защиты</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>сторона обвинения</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>иные участники</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "5B1242",
@@ -1767,7 +1863,8 @@ export const BANK_TASKS = [
   "answer": "135",
   "accept": [],
   "why": "основы конституционного строя — народовластие (ст. 3), местное самоуправление (ст. 12), самостоятельность ветвей власти (ст. 10). Пункты 2 и 4 из Семейного кодекса",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите в приведённом списке положения, характеризующие основы конституционного строя РФ, и запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "5D06FB",
@@ -1783,7 +1880,8 @@ export const BANK_TASKS = [
   "answer": "22113",
   "accept": [],
   "why": "выговор и увольнение — дисциплинарные взыскания; компенсация морального вреда и возмещение убытков — способы защиты гражданских прав; обязательные работы — административное наказание",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между примерами и мерами юридической ответственности в Российской Федерации: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИМЕРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">выговор</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">увольнение по соответствующим основаниям</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">компенсация морального вреда</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">возмещение убытков</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">обязательные работы</p></td></tr></tbody></table></div><div class=\"col\"><b><u>МЕРЫ ЮРИДИЧЕСКОЙ ОТВЕТСТВЕННОСТИ В РОССИЙСКОЙ ФЕДЕРАЦИИ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p align=\"left\">способы защиты гражданских прав <br> по Гражданскому кодексу РФ</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p align=\"left\">дисциплинарные взыскания <br> по Трудовому кодексу РФ</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p align=\"left\">административные наказания <br> по Кодексу РФ об административных правонарушениях</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "75B5F9",
@@ -1799,7 +1897,8 @@ export const BANK_TASKS = [
   "answer": "345",
   "accept": [],
   "why": "основы конституционного строя — поддержка конкуренции (ст. 8), социальное государство (ст. 7), федеративное устройство (ст. 1). Финансирование партий не основа, а верховенство одной ветви власти противоречит разделению властей",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Какие из перечисленных позиций относятся к основам конституционного строя РФ? Запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "84DC47",
@@ -1815,7 +1914,8 @@ export const BANK_TASKS = [
   "answer": "13",
   "accept": [],
   "why": "личные права — свобода передвижения и личная неприкосновенность. Референдум политическое право, а сохранение наследия и уплата налогов — обязанности",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Что из перечисленного относится к личным (гражданским) правам (свободам) гражданина РФ? Запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "8969F9",
@@ -1831,7 +1931,8 @@ export const BANK_TASKS = [
   "answer": "145",
   "accept": [],
   "why": "федеративное государство — субъекты со своей компетенцией, палата, представляющая субъекты, и конституции республик при верховенстве Конституции РФ. МРОТ относится к социальному государству, конкуренция — к экономическим основам",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Согласно Конституции РФ наша страна является федеративным государством. Выберите в приведённом списке признаки федеративного государства. Запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "923D4D",
@@ -1847,7 +1948,8 @@ export const BANK_TASKS = [
   "answer": "234",
   "accept": [],
   "why": "социальное государство — МРОТ, достойная жизнь, поддержка семьи. Пункты 1 и 5 характеризуют светское государство",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Согласно Конституции РФ наша страна является социальным государством. Выберите в приведённом списке черты, характеризующие социальное государство, и запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "B76C43",
@@ -1863,7 +1965,8 @@ export const BANK_TASKS = [
   "answer": "134",
   "accept": [],
   "why": "личные (гражданские) — неприкосновенность частной жизни, тайна переписки, свобода совести. Право на труд в безопасных условиях социально-экономическое, свобода предпринимательства экономическая",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Что из перечисленного относится к личным (гражданским) правам (свободам) гражданина РФ? Запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "E4ED4C",
@@ -1879,7 +1982,8 @@ export const BANK_TASKS = [
   "answer": "135",
   "accept": [],
   "why": "основы конституционного строя — равенство объединений (ст. 13), высшая сила Конституции (ст. 15), земля как основа жизни народов (ст. 9). Пункт 2 из КоАП, пункт 4 из Трудового кодекса",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите в приведённом списке положения, характеризующие основы конституционного строя Российской Федерации. Запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "ECB04A",
@@ -1895,7 +1999,8 @@ export const BANK_TASKS = [
   "answer": "15",
   "accept": [],
   "why": "правовое государство — верховенство права и разделение властей. Федеративное устройство, светскость и республиканская форма правления к правовому государству отношения не имеют",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Конституция РФ провозглашает нашу страну правовым государством. Найдите в приведённом списке признаки правового государства. Запишите <b><u>цифры</u></b>, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "7B7249",
@@ -1911,7 +2016,8 @@ export const BANK_TASKS = [
   "answer": "46",
   "accept": [],
   "why": "прогон программы для каждого n: при n = 46 остаётся строка 9911391 с суммой цифр 33",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Исполнитель Редактор получает на вход строку цифр и преобразовывает её. Редактор может выполнять две команды, в обеих командах <i><span>v</span></i>и<i><span>w</span></i>обозначают цепочки цифр.</p><p>А) <b>заменить </b>(<i><span>v</span></i>,<i><span>w</span></i>).</p><p>Эта команда заменяет в строке первое слева вхождение цепочки <i><span>v</span></i>на цепочку&nbsp;<i><span>w</span>. </i>Например, выполнение команды </p><p><b>заменить </b>(111, 27) </p><p>преобразует строку 05111150 в строку 0527150. </p><p>Если в строке нет вхождений цепочки <i><span>v</span></i>, то выполнение команды <b>заменить </b>(<i><span>v</span></i>,<i><span>w</span></i>) не меняет эту строку.</p><p>Б) <b>нашлось </b>(<i><span>v</span></i>).</p><p>Эта команда проверяет, встречается ли цепочка <i><span>v</span></i> в строке исполнителя Редактор. Если она встречается, то команда возвращает логическое значение «истина», в противном случае возвращает значение «ложь». Строка исполнителя при этом не изменяется.</p><p>Цикл</p><p>ПОКА&nbsp; <i>условие</i>&nbsp; </p><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <i>последовательность команд </i></p><p>КОНЕЦ ПОКА</p><p>выполняется, пока условие истинно.</p><p>В конструкции</p><p>ЕСЛИ&nbsp; <i>условие</i></p><p>&nbsp;&nbsp;&nbsp;&nbsp; ТО <i>команда1</i></p><p>ИНАЧЕ <i>команда2</i></p><p>КОНЕЦ ЕСЛИ</p><p>выполняется <i>команда1 </i>(если условие истинно) или <i>команда2 </i>(если условие ложно).</p><p>Дана программа для Редактора:</p><p>НАЧАЛО</p><p>ПОКА нашлось (19) ИЛИ нашлось (399) ИЛИ нашлось (999)</p><p>&nbsp;&nbsp;&nbsp; ЕСЛИ нашлось (19)</p><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ТО заменить (19, 9)</p><p>&nbsp;&nbsp;&nbsp; КОНЕЦ ЕСЛИ</p><p>&nbsp;&nbsp;&nbsp; ЕСЛИ нашлось (399)</p><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ТО заменить (399, 91)</p><p>&nbsp;&nbsp;&nbsp; КОНЕЦ ЕСЛИ</p><p>&nbsp;&nbsp;&nbsp; ЕСЛИ нашлось (999)</p><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ТО заменить (999, 3)</p><p>&nbsp;&nbsp;&nbsp; КОНЕЦ ЕСЛИ</p><p>КОНЕЦ ПОКА</p><p>КОНЕЦ </p><p>На вход приведённой выше программе поступает строка, начинающаяся с&nbsp;цифры «1», а затем содержащая <i><span>n</span></i> цифр «9» (3 &lt; <i><span>n</span> &lt;</i> 10&nbsp;000).</p><p>Определите <b>наименьшее</b> значение <i><span>n</span></i>, при котором сумма цифр в строке, получившейся в результате выполнения программы, равна 33.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F7CF49",
@@ -1927,7 +2033,8 @@ export const BANK_TASKS = [
   "answer": "4322322",
   "accept": [],
   "why": "F(4) печатает 4 и дважды вызывает F(3); F(3) печатает 3 и дважды F(2), а F(2) печатает только 2. Выходит 4 + 322 + 322",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ниже на пяти языках программирования записан рекурсивный алгоритм <span>F</span>.</p><table><tbody><tr><td valign=\"top\"><p><b>Бейсик</b></p></td><td valign=\"top\"><p><b>Python</b></p></td></tr><tr><td valign=\"top\"><p align=\"left\"><span>SUB F(n)</span></p><p align=\"left\"><span>PRINT n,</span></p><p><span>IF n &gt;= 3 THEN</span></p><p><span>&nbsp;&nbsp;&nbsp; F</span><span>(n - 1)</span></p><p><span>&nbsp;&nbsp;&nbsp; F</span><span>(n - 1)</span></p><p><span>END IF</span></p><p><span>END SUB</span></p></td><td valign=\"top\"><p align=\"left\"><span>def F(n):</span></p><p align=\"left\"><span>print(n, end='')</span></p><p align=\"left\"><span>if n &gt;= 3:</span></p><p align=\"left\"><span>F(n - 1)</span></p><p align=\"left\"><span>F(n - 1)</span></p></td></tr><tr><td valign=\"top\"><p><b>Алгоритмический язык</b></p></td><td valign=\"top\"><p><b>Паскаль</b></p></td></tr><tr><td valign=\"top\"><p><u><span>алг</span></u><span> F(<u>цел </u>n)</span></p><p><u><span>нач</span></u></p><p><u><span>вывод </span></u><span>n</span></p><p><u><span>если </span></u><span>n &gt;= 3 <u>то</u></span></p><p><span>&nbsp;&nbsp;&nbsp; F</span><span>(n - 1)</span></p><p><span>&nbsp;&nbsp;&nbsp; F</span><span>(n - 1)</span></p><p><u><span>все</span></u></p><p><u><span>кон</span></u></p></td><td valign=\"top\"><p><span>procedure F(n: integer);</span></p><p><span>begin</span></p><p><span>write(n);</span></p><p><span>if n &gt;= 3 then</span></p><p><span>begin</span></p><p><span>&nbsp;&nbsp;&nbsp; F</span><span>(n </span>–<span>&nbsp;1);</span></p><p><span>F</span><span>(n - 1)</span></p><p><span>end</span></p><p><span>end;</span></p></td></tr><tr><td colspan=\"2\" valign=\"top\"><p><b>С</b><b><span>++</span></b></p></td></tr><tr><td colspan=\"2\" valign=\"top\"><p align=\"left\"><span>void F(int n) {</span></p><p align=\"left\"><span>&nbsp; std::cout &lt;&lt; n;</span></p><p align=\"left\"><span>if (n &gt;= 3) {</span></p><p align=\"left\"><span>F</span><span>(n - 1);</span></p><p align=\"left\"><span>F</span><span>(n - 1);</span></p><p align=\"left\"><span>}</span></p><p align=\"left\"><span>}</span></p></td></tr></tbody></table><p>Запишите подряд без пробелов и разделителей все числа, которые будут выведены на экран при выполнении вызова F(4). Числа должны быть записаны в том же порядке, в котором они выводятся на экран.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "0D62F0",
@@ -1943,7 +2050,8 @@ export const BANK_TASKS = [
   "answer": "16",
   "accept": [],
   "why": "пятеро работников по трудовым договорам — малая группа (1) и формальная (6): она создана официально и закреплена договорами. Профессии у работников кафе разные, территориального и этнического признака здесь нет",
-  "sure": "средняя: составители иногда засчитывают и «профессиональная группа»"
+  "sure": "средняя: составители иногда засчитывают и «профессиональная группа»",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>После окончания института однокурсники зарегистрировали свой бизнес в установленном законом порядке. Они арендовали помещение, открыли кафе домашнего питания, заключили трудовые договоры с пятью работниками. Как можно охарактеризовать работников кафе? Запишите цифры, под которыми указаны соответствующие характеристики.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "290002",
@@ -1959,7 +2067,8 @@ export const BANK_TASKS = [
   "answer": "123",
   "accept": [],
   "why": "1, 2, 3 верны. Ошибки: 4 — группы возникли задолго до государства; 5 — первичные группы (семья, друзья) официальных организаций не требуют",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите верные суждения о социальных группах и запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "4AC9F7",
@@ -1975,7 +2084,8 @@ export const BANK_TASKS = [
   "answer": "135",
   "accept": [],
   "why": "1, 3, 5 верны. Ошибки: 2 — участники это субъекты конфликта, а не его предмет; 4 — конфликты бывают и конструктивными",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите верные суждения о социальных конфликтах и запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "7E1B45",
@@ -1991,7 +2101,8 @@ export const BANK_TASKS = [
   "answer": "135",
   "accept": [],
   "why": "1, 3, 5 верны. Ошибки: 2 — государство и СМИ агенты вторичной социализации; 4 — агенты вторичной социализации в ближайшее окружение не входят",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите верные суждения о социализации и запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "CC164E",
@@ -2007,7 +2118,8 @@ export const BANK_TASKS = [
   "answer": "345",
   "accept": [],
   "why": "3, 4, 5 верны. Ошибки: 1 — государством санкционируются только правовые нормы; 2 — «всегда» здесь лишнее",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите верные суждения о социальных нормах и запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F83D4c",
@@ -2023,7 +2135,8 @@ export const BANK_TASKS = [
   "answer": "124",
   "accept": [],
   "why": "1 — обоюдная заинтересованность действительно условие разрешения; 2 — политические конфликты разновидность социальных; 4 — переговоры способ урегулирования. Ошибки: 3 — латентные выделяют по форме проявления, а не по масштабу; 5 — у конфликтов бывают и конструктивные последствия",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите верные суждения о социальных конфликтах и запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F93e43",
@@ -2039,7 +2152,8 @@ export const BANK_TASKS = [
   "answer": "345",
   "accept": [],
   "why": "3, 4, 5 верны. Ошибки: 1 — девиация нарушает не только моральные нормы, а позитивная и вовсе не осуждается; 2 — отклоняющееся поведение бывает и групповым",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите верные суждения об отклоняющемся поведении и запишите цифры, под которыми они указаны.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "085CFC",
@@ -2055,7 +2169,8 @@ export const BANK_TASKS = [
   "answer": "21121",
   "accept": [],
   "why": "чувственное познание — ощущение, восприятие, представление; рациональное — понятие и умозаключение",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между формами и этапами (ступенями) познания: <br> к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФОРМЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p>понятие</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>ощущение</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p>представление</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p>умозаключение</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p>восприятие</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ЭТАПЫ (СТУПЕНИ) ПОЗНАНИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>чувственное</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>рациональное</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "506AF7",
@@ -2071,7 +2186,8 @@ export const BANK_TASKS = [
   "answer": "12122",
   "accept": [],
   "why": "элитарная — сложность содержания и «высокие» ценности; массовая — широкий круг потребителей, коммерция и интерес к обыденному",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между признаками и видами (типами) культуры: <br> к каждому элементу, данному в первом столбце, подберите соответствующий элемент из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИЗНАКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">сложность содержания</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">ориентация на запросы широкого круга потребителей</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">наличие определённого круга ценностей, признаваемых истинными и «высокими»</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">ярко выраженная коммерческая направленность</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">опора на интерес людей к проблемам обыденной жизни</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ВИДЫ (ТИПЫ) КУЛЬТУРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>элитарная </p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>массовая </p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "B950F6",
@@ -2087,7 +2203,8 @@ export const BANK_TASKS = [
   "answer": "12131",
   "accept": [],
   "why": "коммерческая направленность, развлекательность и ориентация на стандартные вкусы — массовая культура; сложность содержания — элитарная; многообразие форм присуще обеим",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между признаками и видами (типами) культуры: <br> к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИЗНАКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">ярко выраженная коммерческая направленность</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">сложность содержания</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">преимущественно развлекательный характер</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">многообразие форм</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">ориентация на стандартные вкусы <br> и предпочтения потребителя</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ВИДЫ (ТИПЫ) КУЛЬТУРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>только массовая </p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>только элитарная </p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>и массовая, и элитарная </p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "BC03F6",
@@ -2103,7 +2220,8 @@ export const BANK_TASKS = [
   "answer": "22211",
   "accept": [],
   "why": "обязанности — беречь имущество, выполнять учебный план, уважать честь работников; академические права — участие в формировании содержания образования и переход на бесплатное обучение",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между действиями и элементами статуса обучающегося в Российской Федерации: ккаждому элементу, данному <br> в первом столбце, подберите элемент из второго столбца. </p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ДЕЙСТВИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">бережно относиться к имуществу образовательной организации</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">выполнять индивидуальный учебный план</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">уважать честь и достоинство работников образовательной организации</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">участвовать в формировании содержания своего профессионального образования при соблюдении установленных законодательством условий</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">осуществить переход с платного обучения на бесплатное обучение <br> в случаях и в порядке, предусмотренных законодательством</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ЭЛЕМЕНТЫ СТАТУСА ОБУЧАЮЩЕГОСЯ&nbsp;В РОССИЙСКОЙ ФЕДЕРАЦИИ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>академические права</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>обязанности</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "CC554F",
@@ -2119,7 +2237,8 @@ export const BANK_TASKS = [
   "answer": "42113",
   "accept": [],
   "why": "терроризм — политическая проблема; отсталость регионов — «Север–Юг»; сокращение видов и загрязнение среды — экологические; старение населения — демографическая",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между проявлениями и глобальными проблемами современности: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРОЯВЛЕНИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">международный терроризм как средство давления на правительства государств</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">экономическая отсталость ряда регионов мира</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">сокращение разнообразия животного мира</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">загрязнение окружающей среды</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">увеличение доли пожилых людей <br> в странах Европы</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ГЛОБАЛЬНЫЕ ПРОБЛЕМЫ СОВРЕМЕННОСТИ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>экологические</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проблема «Север –&nbsp;Юг»</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>демографические</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>политические</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "6DB94A",
@@ -2135,7 +2254,8 @@ export const BANK_TASKS = [
   "answer": "21133",
   "accept": [],
   "why": "транспортный — региональный; сбор за пользование животным миром и НДФЛ — федеральные; налог на имущество физлиц и торговый сбор — местные",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между примерами и видами налогов и сборов (согласно Налоговому кодексу Российской Федерации): к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИМЕРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p>транспортный налог</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">сбор за пользование объектами животного мира</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p>налог на доходы физических лиц</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p>налог на имущество физических лиц</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p>торговый сбор</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ВИДЫ НАЛОГОВ И&nbsp;СБОРОВ В РОССИЙСКОЙ ФЕДЕРАЦИИ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>федеральные</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>региональные</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>местные</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "9FED4E",
@@ -2151,7 +2271,8 @@ export const BANK_TASKS = [
   "answer": "11221",
   "accept": [],
   "why": "постоянные издержки не зависят от выпуска — аренда, обслуживание кредита, оклады администрации; переменные растут с выпуском — сдельная зарплата и сырьё",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между примерами и видами издержек фирмы <br> в краткосрочном периоде: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИМЕРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p>плата за аренду помещения</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>обслуживание кредита</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p>сдельная зарплата работников</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p>приобретение сырья и материалов</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p>оклады администрации</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ВИДЫ ИЗДЕРЖЕК ФИРМЫ В КРАТКОСРОЧНОМ ПЕРИОДЕ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>постоянные</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>переменные</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "BB56F8",
@@ -2167,7 +2288,8 @@ export const BANK_TASKS = [
   "answer": "22331",
   "accept": [],
   "why": "труд — использование способностей человека и зарплата; земля — рента и природные ресурсы; капитал — процент",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между характеристиками и факторами производства: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ХАРАКТЕРИСТИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">непосредственное использование физических и умственных способностей <br> в процессе создания экономических благ</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">факторный доход –&nbsp;заработная плата</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">факторный доход –&nbsp;рента</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">все виды природных ресурсов, пригодных для производства жизненных благ</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">факторный доход –&nbsp;процент</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФАКТОРЫ ПРОИЗВОДСТВА</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>капитал</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>труд</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>земля</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "D129FA",
@@ -2183,7 +2305,8 @@ export const BANK_TASKS = [
   "answer": "11233",
   "accept": [],
   "why": "активные операции размещают средства — ссуды и кредиты; пассивные привлекают — вклады; посреднические — консалтинг, хранение и перевозка ценностей",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между примерами и видами банковских операций: к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПРИМЕРЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p>ссудные операции</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>кредитование физических лиц</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p>приём вкладов (депозитов)</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p>консалтинговые и информационные услуги</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p>хранение и перевозка ценностей</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ВИДЫ БАНКОВСКИХ ОПЕРАЦИЙ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>активные</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>пассивные</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>посреднические</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "FCF8FB",
@@ -2199,7 +2322,8 @@ export const BANK_TASKS = [
   "answer": "31213",
   "accept": [],
   "why": "единственный продавец уникального товара и естественная монополия — монополия; равная информированность и множество фирм со схожим товаром — чистая конкуренция; рынок нескольких крупных фирм — олигополия",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Установите соответствие между характеристиками и видами конкуренции (конкурентных рынков): к каждой позиции, данной в первом столбце, подберите соответствующую позицию из второго столбца.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ХАРАКТЕРИСТИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">рыночная структура, при которой на рынке присутствует единственный продавец уникального товара</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">модель рынка, при которой никто из участников не располагает информацией, большей по сравнению с другими</p></td></tr><tr valign=\"top\"><td><b>В)</b>&nbsp;</td><td><p align=\"left\">рыночная структура, при которой рынок поделён между несколькими крупными фирмами</p></td></tr><tr valign=\"top\"><td><b>Г)</b>&nbsp;</td><td><p align=\"left\">ситуация на рынке, при которой большое количество фирм производят схожую продукцию</p></td></tr><tr valign=\"top\"><td><b>Д)</b>&nbsp;</td><td><p align=\"left\">ситуация на рынке, при которой услуги (чаще всего имеющие естественное происхождение)&nbsp;может предлагать только один производитель</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ВИДЫ КОНКУРЕНЦИИ (КОНКУРЕНТНЫХ РЫНКОВ)</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p align=\"left\">чистая (совершенная) конкуренция</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p align=\"left\">олигополия</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p align=\"left\">монополия</p></td></tr></tbody></table></div></div></td></tr></tbody></table>Запишите в таблицу выбранные цифры под соответствующими буквами.</td></tr></tbody></table></div>"
  },
  {
   "id": "15274C",
@@ -2221,7 +2345,8 @@ export const BANK_TASKS = [
   "answer": "41",
   "accept": [],
   "why": "ключ шунтирует первый резистор: при замкнутом K в цепи один R, I = ℰ/(R+r) — формула 4; при разомкнутом оба последовательно, I = ℰ/(2R+r) — формула 1",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJEAAACFCAMAAABsQeqcAAAAAXNSR0ICQMB9xQAAAJZQTFRFAAAADQoIAwAAAAQKDQgEBAgNDQsLCAMAAAQEBAADCAoNAwAECgoIAwQKCwYDAAMEBAQICwsNCgQAAAADDQsKBAAAAAAECgsNAAMICgYICAgNAwYLBAMIBAAEAAA6AABmADqQAGa2OgAAOgA6OpDbZgAAZrb/kDoAkNv/tmYAtv//25A62////7Zm/9uQ//+2///b////D+5khwAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAJvSURBVHja7dt7W4IwFAbwg9eysjTQym6WXcys9v2/XAw1QzaY48hmvfuD58ny5cfZhgiNhG+NIKpIRHHzSUSsxSbfQGyiXy2oUV00qOlQtJnRajcbB4cdl+NowxQcHZ941Wuie3rWcz37061/3hEuRZmEMKo7nWuUyQlqTbei1emo1V5O+O5g6FhEC1UsukgGdL8unIp+n48ue4IhjnGOBVfCK1GrfdHzS8TVIPrPIr+uaiGCCCKIBMO3bYgg+qsiYmorUdkYP0Ue9RpEEEFkJmKIgQgiiPZLxNQggggiiCCCCCKIINonke0dI12y7f0nv0XbF9jylzlvgIhBNF908d0bk0ifZ1yjj4eJ3KhIVjXS5pmLHl/j7YyeuUS6PGPRTB7N18vtK5NIm2cq+noZyw1NmMaRPs9U9PkkB+L9O9dc0+elRfpT8Dwu71Q50wpPy+q5ps1TPhdR/N00Ppy5alhbivR5iuciqoyk2z+fxgYds/F2tSgnb/2GXNHHgzwcTbdZiHLyDEXTZJbOacwkyskzEiWn/MligjwziHLzDGuU2yxqZJQG0Z6LSl1nZ0TWaR6LSjbO//aBCCKIIIIIIoggWu6EzF/nFW33Xdnizu3ei3KGBmk6aKdPCahgvFb/jKJoh9WTCvdXeZmK91Y1yWRnm6ZWW74yStaEl1rMay3KlimM5ArD8LrXdyTKDPDFsuLuyFWvZcuUiMKboUtRmiRFYdQUTkWpnguj+IfdgLZaC7EuU1yjMBoMnYvWJNlrQW0wdC76uQxKRnaDeBYZlxOlZz+NPBIl5envgmQj+vkUkVOu7oNotw0iiP6m6BsNZjA0pv6LiwAAAABJRU5ErkJggg==\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>На рисунке показана цепь постоянного тока. Установите соответствие между физическими величинами и формулами, по которым их можно рассчитать ( <i>ℰ</i>–&nbsp;ЭДС источника тока, <i><span>r</span></i>–&nbsp;внутреннее сопротивление источника тока, <i><span>R</span></i>–&nbsp;сопротивление резистора). </p><p>К каждой позиции первого столбца подберите соответствующую позицию второго столбца и запишите <br><u>в таблицу</u> выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">сила тока через источник при замкнутом ключе К</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"left\">сила тока через источник при разомкнутом ключе&nbsp;К</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>ℰ𝑟+2⁢𝑅</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>ℰ2⁢𝑅</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>ℰ𝑟</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>ℰ𝑅+𝑟</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "269B40",
@@ -2243,7 +2368,8 @@ export const BANK_TASKS = [
   "answer": "22",
   "accept": [],
   "why": "R2 и реостат параллельны, их сопротивление растёт ⇒ общее растёт, ток падает: U₁ = IR₁ уменьшается (2), и мощность P = ℰ²/Rобщ тоже (2)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>На рисунке показана цепь постоянного тока, содержащая источник тока с ЭДС <span>ℰ</span>, два резистора и реостат. Сопротивления резисторов <i><span>R</span></i><sub>1</sub> и <i><span>R</span></i><sub>2</sub> одинаковы<i>.</i> Сопротивление реостата <i><span>R</span></i><sub>3</sub> можно менять. Как изменятся напряжение на резисторе <i><span>R</span></i><sub>1</sub> и суммарная тепловая мощность, выделяемая в цепи, если увеличить сопротивление реостата? Внутренним сопротивлением источника пренебречь.</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличится</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшится</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменится</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Напряжение <br> на резисторе <i><span>R</span></i><sub>1</sub></p></td><td valign=\"top\"><p align=\"center\">Суммарная тепловая мощность, выделяемая в цепи</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "30094E",
@@ -2259,7 +2385,8 @@ export const BANK_TASKS = [
   "answer": "22",
   "accept": [],
   "why": "длина вдвое ⇒ R вдвое; при постоянном U ток I = U/R падает, мощность P = U²/R тоже",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Внешний участок электрической цепи представляет собой отрезок провода <br> с большим удельным сопротивлением. Он подключён к источнику тока, поддерживающему на клеммах постоянное напряжение. Затем первоначальный отрезок провода заменили отрезком такого же провода, но вдвое большей длины. Как изменились в результате такой замены сила тока<br> и мощность тока на участке цепи?</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличилась</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшилась</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменилась</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Сила тока</p></td><td valign=\"top\"><p align=\"center\">Мощность тока</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "404345",
@@ -2281,7 +2408,8 @@ export const BANK_TASKS = [
   "answer": "3",
   "accept": [],
   "why": "R1 с амперметром и R2 соединены параллельно, значит напряжение на них общее: U = I₁R₁ = 1·3 = 3 В",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/jpeg;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p><span>В цепи, изображённой на рисунке, амперметр показывает 1 А.</span> Найдите напряжение на <i><span>R</span></i><sub>2</sub>. Амперметр считать идеальным.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "4EAC46",
@@ -2303,7 +2431,8 @@ export const BANK_TASKS = [
   "answer": "14",
   "accept": [],
   "why": "вольтметр идеальный, ток идёт через R и реостат: I = ℰ/(R+Rp+r) — формула 1; вольтметр показывает напряжение на R: U = ℰR/(R+Rp+r) — формула 4",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>Исследуется электрическая цепь, собранная по схеме, представленной на рисунке.</p><p>Определите формулы, которые можно использовать для расчётов показаний амперметра и вольтметра. <span>Считать измерительные приборы идеальными, а сопротивление реостата полностью введённым в цепь.</span></p><p>К каждой позиции первого столбца подберите соответствующую позицию из второго столбца <br> и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ПОКАЗАНИЯ ПРИБОРОВ</u></b><table><tbody><tr valign=\"middle\"><td><b>А)</b>&nbsp;</td><td><p>показания амперметра</p></td></tr><tr valign=\"middle\"><td><b>Б)</b>&nbsp;</td><td><p>показания вольтметра</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>1)</b>&nbsp;</td><td><p>ℰ𝑅+𝑅p+𝑟</p></td></tr><tr valign=\"middle\"><td><b>2)</b>&nbsp;</td><td><p>ℰ⁢(𝑅 +𝑅p +𝑟)</p></td></tr><tr valign=\"middle\"><td><b>3)</b>&nbsp;</td><td><p>ℰ −ℰ⁢𝑅𝑅+𝑅р+𝑟</p></td></tr><tr valign=\"middle\"><td><b>4)</b>&nbsp;</td><td><p>ℰ⁢𝑅𝑅+𝑅p+𝑟</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "72454E",
@@ -2325,7 +2454,8 @@ export const BANK_TASKS = [
   "answer": "вниз",
   "accept": [],
   "why": "заряды +Q и −Q стоят симметрично относительно оси, на которой лежит −q: притяжение к +Q даёт составляющую вправо-вниз, отталкивание от −Q — влево-вниз; горизонтальные части гасят друг друга, остаётся направленная вниз",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJgAAABwBAMAAAAQ+6T9AAAAAXNSR0ICQMB9xQAAACFQTFRFDQsODRAQDQ8PDQ4ODQsNDQ4QDQ0NDRAODQ0ODQ4N////URzrrAAAAAlwSFlzAAAOxAAADsQBlSsOGwAAABl0RVh0U29mdHdhcmUATWljcm9zb2Z0IE9mZmljZX/tNXEAAAGiSURBVGje7dmxasMwEAbg5BGagEvGXsAlnj1l9+LRHfIOnvMCToa+gychYhD3lJFkYrlQWsj9hbY5DY5RyMdJloLMv2BgWyj2XVvStkZhVcbLIwgz65rdFoSFqgIIwZreY88YzAXHjZVRIcSGXbjEOSMiIVblt4v1WHEn5vxv6aX1C4P5VAqxtMrYPLUYLMxZHGWcMyFmVq2LhSEeAFdEo+XHKV0abNK+JPEOeA+LtsdgfoX0fK4x2Jk7ohI1zFlTTDHFFINg1etyj8Lc2jQtCutKPtQg7HKozVo8Z90qHCAyt2GXox7AkHF1hGFHbvYwLB+6HoVdmrxrUZhvbzUOMxvgdhoyHDZMZ67//Rf0KJgFYvZ2pEdgBMYKAWb9XRErsvGVyt8EkFJXEb//qotily2wlf0VjO95mLrRFVNMMcUUU0yxx8Km3EmCuX38SLmTHJvlTnJsljvJsVnuJMY+5E53Y6fwrrCb507yylLuJIs9RmzKnWSBzISNuZMsKopYyp2sHEu5EyARS7mTBYRYKXcCYD+VO7EUm+dOYuyz9nuxK5NKXJvzGLvaAAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>Отрицательный заряд –<i><span>q</span></i>находится в поле двух неподвижных зарядов: положительного +<i><span>Q</span></i> и отрицательного –<i><span>Q</span></i> (см. рисунок). <span>Куда направлено относительно рисунка </span>(<b><i>вправо, влево, вверх, вниз, к наблюдателю, от наблюдателя</i></b>) <span>ускорение заряда –<i>q</i> в этот момент времени, если на него действуют только заряды </span>+<i><span>Q</span></i> и –<i><span>Q</span></i><span>?</span><i> Ответ запишите словом (словами).</i></p></td></tr></tbody></table></div>"
  },
  {
   "id": "7E024D",
@@ -2347,7 +2477,8 @@ export const BANK_TASKS = [
   "answer": "21",
   "accept": [],
   "why": "R2 и реостат соединены параллельно: при R3→0 напряжение на этом участке, а значит и на R2, падает (2). Внешнее сопротивление уменьшается с 1,5R до R, ток и мощность P = ℰ²/Rвнеш растут (1)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALMAAACWBAMAAABnW6RFAAAAAXNSR0ICQMB9xQAAACRQTFRFAAAADQ8PDQsODRAODQsNDQ4QDQ4NDQ0NDRAQDQ4ODQ0O////Wb9Y7AAAAAF0Uk5TAEDm2GYAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAAZdEVYdFNvZnR3YXJlAE1pY3Jvc29mdCBPZmZpY2V/7TVxAAACBklEQVRo3u3aMVLCQBQG4F3GNKmy44zoUNpg7wHSMI52aVQ6jpBbZOwocgE6OYOXMwkIKHlhN/v+YML76/Cxs9nsPh5RyiraKFC0gtFRgYMGHaHGjKRxM42kNW7QvbyLGjdwDXxiDHDxSTpNP3e/vtH3sdBCkwlMmZtORp2UXzXuG42ZEG0ioXcR2p/WxjKR/aVViqocRUfWBb/rhGihL492fcQulC7O/NsUNOr3dJaB6HkcjkH0qwpAox5lKlli6NCYDLVC8lUKomfL6RJET9MgB9GfaVjcyMyDpnI1j0cfL+k85qeTYn0k4231xktv86BgdA6jwwWMXocpiA7MNe42KnUWurno/Pu50xd3RH+RqaEnJy8WWuih0j9poI8zOX3xwe9Mflo5TIhxmxChhT4/bXE2GrezsQPaJi41i9ADpokOB8uo6zscLHR9h4OFru9wcNBEh4ODJjocLCukvsPBQRMdDo6dj+hwcNCbDseiiXY6ZfapOhxxiKA3HQ4IvV2BQndGJ3cwuvmRcfpVwE4rflq1itBCD5t2aQr+G/pXWF5K6ZzebZ9kXe5Pk3U5A03V5W3pg7dYqbrcnybrcn+arMv9abIub0vvD2+yLvd/ZKq6PMkQdFmXh4s1gK7q8qf4DUBv6vLVI257Ovq/1I6mXkM6zHMrWtts/u1uo0UCkyvJkPINy7il3EPme8kAAAAASUVORK5CYII=\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table><p>На рисунке показана цепь постоянного тока, содержащая источник тока с ЭДС ℰ, два резистора и реостат. Сопротивления резисторов <i><span>R</span></i><sub>1</sub> и <i><span>R</span></i><sub>2</sub> одинаковы и равны <i><span>R</span>. </i>Сопротивление реостата <i><span>R</span></i><sub>3</sub> можно менять<i>.</i> Как изменятся напряжение на резисторе <i><span>R</span></i><sub>2</sub> и суммарная тепловая мощность, выделяемая во внешней цепи, если уменьшить сопротивление реостата от <i><span>R</span></i> до 0? Внутренним сопротивлением источника пренебречь.</p><p>Для каждой величины определите соответствующий характер изменения: </p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличится</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшится</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменится</p></td></tr></tbody></table><p>Запишите <u>в таблицу</u> выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td><p align=\"center\">Напряжение на резисторе <i><span>R</span></i><sub>2</sub></p></td><td><p align=\"center\">Суммарная тепловая мощность, выделяемая во внешней цепи</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "7FABFc",
@@ -2363,7 +2494,8 @@ export const BANK_TASKS = [
   "answer": "20",
   "accept": [],
   "why": "Φ = ЭДС·Δt = 10 мВ · 2 с = 20 мВб",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>За время Δ<i><span>t</span></i>= 2 с магнитный поток через площадку, ограниченную проволочной рамкой, равномерно уменьшается от некоторого значения <span>𝛷</span>&nbsp;до&nbsp;нуля. При этом в рамке генерируется ЭДС индукции, равная 10 мВ. Определите начальный магнитный поток <span>𝛷</span>&nbsp;через рамку.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "A94A44",
@@ -2385,7 +2517,8 @@ export const BANK_TASKS = [
   "answer": "15",
   "accept": [],
   "why": "нужны одинаковые ЭДС и внутреннее сопротивление при разном внешнем: цепи 1 и 5 — ε = 9 В, r = 1 Ом, R = 5 и 15 Ом",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p><img src=\"data:image/gif;base64,R0lGODlhZgBdAHcAMSH+GlNvZnR3YXJlOiBNaWNyb3NvZnQgT2ZmaWNlACH5BAEAAAAALAEABABkAFkAhQAAAAAAAA0KCAMAAA0PDwAECg0IBAQIDQ0LCwgDAAAEBAQAAwgKDQMABAoKCAMECgsGAwADBAQECAsLDQoEAAAAAw0LCgQAAAAABAoLDQADCAoGCAgIDQMGCwMAAwAAOgAAZgA6kABmtjoAADo6kDqQ22YAAGYAZma2/5A6AJA6OpBmAJDb/7ZmALb//9uQOtv///+2Zv/bkP//tv//2////wECAwECAwECAwECAwECAwECAwECAwECAwECAwECAwb/QIBwSCwaj8ikcikkOJ3MqHRKrR4JQ6h1y+1KsVmveEwGRwWDQAFgCBzI8LKZiUgcDIoFI873apkCDQ4PfYVcc0wQERITho5TiEwUFXuPlkqRSxYXa5eOAQFJiJlEaG+ehqCikXVuRhAYGaipoat/rRqNRBSds32qWxu6vpfAVQIcxKjGUnW5yp7M0NNJ0tTXRMygtdjT2tbds9/c4cTj5dDn6ADb7e7v8PHx2fL19vVS9/r74/z+8PnIPVJnCdwRg7/IbYsmsFpDWvQeJgy4TCHCOBfpVYzIkGLHIQuLSTSSEU5JiFFOjlE5MeVIPixhvtT4UZnKmF1wmpwJkicZ/50/fbITKgboypH3PhGVefBdjRrv1gUlue2p1atQQ0rl0g+r16fttnK1GOCr2axLxQoxBuqsW6hqqwBr+/as0XVz3cYIgMLt3XKq6JptEUDE27RbA5c1K4PEig8s/CLGW/VsixJ7S0iO61Kw1xknXMwwEQKG3cno2p19YbhGC8inOTNR/ZWGisg19rY2+xcbba973YFwEVu2Q89WaaToa/UF3+LGmyJ/2ti0VRkjdmPt7bvyVeXMk6d47pV7G3exOnoeDar0U/btrVvlDgBNByFo0hcMNb1uedRFCOBBJQBA4Mp+Q/m3GRmwyAJAHZSItNZiCpYHRx2dtHKfhGtV+M8fHJu080xN3lVInxAGREiBfjUNRWFdWpFBwTNtnNKiiy/yFqMYGAqxSS8cRtSfO32YMsSKDgZZxD6FTEJgG0AONBNAhpwHyoYhHiilR9GNxWWXVtwEYJdigumlS2H+oyY+cgml05pwUklFmW16aCd0U9A5Z4539vmmm4j116eHf34Z0KCIZpWmoS4lOmihaNbp6J2QzhbnpJTGGRCcmNoZ55iWdkooqLSIaiKphQhq6oeJ8bnqVyfK9CqMqCY062G1ynornql96qtYvv66RRAAOw==\" align=\"ABSMIDDLE\" alt=\"undefined\"> Ученик изучает законы постоянного тока. В его распоряжении имеется пять аналогичных электрических цепей (см. рисунок) <br> с различными источниками и внешними сопротивлениями, характеристики которых указаны в таблице. Какие <b>две</b> цепи необходимо взять ученику для того, чтобы на опыте исследовать зависимость силы тока, протекающего в цепи, от внешнего сопротивления? </p><table class=\"t\"><tbody><tr><td valign=\"top\"><p align=\"center\">№&nbsp;цепи</p></td><td valign=\"top\"><p align=\"center\">ЭДС источника 𝜀,&nbsp;В</p></td><td valign=\"top\"><p align=\"center\">Внутреннее сопротивление источника <i><span>r</span></i>, Ом</p></td><td valign=\"top\"><p align=\"center\">Внешнее сопротивление <i><span>R</span></i>, Ом</p></td></tr><tr><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">9</p></td><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">5</p></td></tr><tr><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">6</p></td><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">10</p></td></tr><tr><td valign=\"top\"><p align=\"center\">3</p></td><td valign=\"top\"><p align=\"center\">12</p></td><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">15</p></td></tr><tr><td valign=\"top\"><p align=\"center\">4</p></td><td valign=\"top\"><p align=\"center\">6</p></td><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">10</p></td></tr><tr><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">9</p></td><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">15</p></td></tr></tbody></table><p>Запишите в ответе номера выбранных цепей.</p><table><tbody><tr><td><p>Ответ:</p></td><td valign=\"top\"></td><td valign=\"top\"></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "c0DF4F",
@@ -2401,7 +2534,8 @@ export const BANK_TASKS = [
   "answer": "1",
   "accept": [],
   "why": "F = qυB: у первой 2q·υ, у второй q·2υ — силы равны",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Две частицы с зарядами <i><span>q</span></i><sub>1</sub> = 2<i><span>q</span></i> и <i><span>q</span></i><sub>2</sub> = <i><span>q</span></i> влетают в однородное магнитное поле перпендикулярно вектору магнитной индукции со скоростями <span>𝜐1=𝜐</span>&nbsp;и <span>𝜐2=2⁢𝜐</span>&nbsp;соответственно. Определите отношение <span>𝐹1𝐹2</span>&nbsp;модулей сил, действующих на частицы со стороны магнитного поля в этот момент времени.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "D35A43",
@@ -2423,7 +2557,8 @@ export const BANK_TASKS = [
   "answer": "2",
   "accept": [],
   "why": "после первого резистора цепь делится на две ветви по 2 Ом, ток 4 А делится поровну — по 2 А. Вольтметр меряет одиночный резистор нижней ветви: U = 2·1 = 2 В",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Восемь одинаковых резисторов с сопротивлением 𝑟 =1&nbsp;Ом соединены в электрическую цепь, через которую течёт ток 𝐼 =4&nbsp;А (см. рисунок). Какое напряжение показывает идеальный вольтметр?</p><table><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,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\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "E43A49",
@@ -2445,7 +2580,8 @@ export const BANK_TASKS = [
   "answer": "0,75",
   "accept": [],
   "why": "ток делится между ветвями 3r и r обратно пропорционально сопротивлению: через амперметр идёт 3/4 тока, то есть 0,75 А",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>По участку цепи (см. рисунок) течёт постоянный ток <i><span>I</span></i> = 1 А. Чему равна сила тока, которую показывает амперметр, если сопротивление <i><span>r</span></i>&nbsp;=&nbsp;1&nbsp;Ом? Сопротивлением амперметра пренебречь.</p><table><tbody><tr><td valign=\"top\"><p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAY4AAACICAMAAADH9PznAAAAAXNSR0ICQMB9xQAAAHJQTFRFAAAAAAAADQ4QDQ8PDQ4NDQ0ODRAQDQ4ODQ0NDQsODRAODQsNDRBCDRBsDUKTDWy5PxAQP0KTP2y5P5PcaxAQaxBsa7n/kkIQkkJCkkJsktz/uGwQuGxCuLlsuP//3JNC3P///7ls/9yT//+5///c////hDiduwAAAAF0Uk5TAEDm2GYAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAAZdEVYdFNvZnR3YXJlAE1pY3Jvc29mdCBPZmZpY2V/7TVxAAAEa0lEQVR42u2dfXubIBTFVRpNlm3ptu6t2Za+fv+vuLRRC41GlCNe4Jw/+tQ8yVXOL1xAgWQZRVEURVEURVEURUnStlDqKluVlYgwsDjhalWuV6WqhISBxQlVRbWpNuVaSBhYnEC1LapqKyYMLE6oOubptZwwsDjB4sDkaVAYWJxQVWDyNCgMLE6g2mD6lKAwsDihalWuBYWBxQlVzFUURcmRmihMmJmuhjiIA4TjeYI6cCCioK6GOIiDOIiDOIiDOIiDOIiDOIiDOIgDpk35ciPgijgcccB8LNRccyjSqh0gHwu1xjLQNM2AM2GiOF+NDx+3xYctcbjjAPm4KSswjkiT1QAOkI8rcDueKg6Qj+in9qniwPiIbjpSxQHyEb6mIVEcIB/RTUeyOGQ2HaniwPiI7uamigPWzUXPFU4TB8bHLfgOSao4ID6+rBdVyrqDZre8NEEcI32EyWZ5qYEjplmI8h5E2SwvJQ5fslpeGtHTTOEFs1peShzecNj05ojDl6xGnsThdBL7t9otL00VB6bYI6LYLS8lDk84CuIQRAPzJSIO4iCOxHBIpUEcxBEtDve7fknimKtyEIcwHK5PjIiDOBbGASoycUjCoTLiII7ocIwr8ZgwxIHGodqPnzqgvct2VEYcM+I4vb/51PAiqnlw5LHiyMf5aLpfL4W7tKRtDhz5q2KE0V8u1U2jXleo03h+T0MNVDE3HHmjOGnoBbto5Jn7b8cmD+2FOXHExuO8XNo3v9dFvXbUx+/qh5bRiGMCjvzcyF4cdcJqa0v7d4ym4XhVHiuO/AKO7lmsmvvNC1prThwoHNYmtu7X1cU47khWGZPVbDha91sc5rGJo//ExHGZh2lkv4ttmmk7ul00BsfM7Oha47joYkvDxDF202rHYWDs4w5rF9thoJaTJmwh7nyTJNJBeTaahnmHZCC7zYaDM9jrdxoLp6afkzjccQDPSRzOOJDnJA7iIA7iCAIHZyESx9Ky2d8jzO9ZoLVjeH8P4vCo4f09iMOfLPb3IA5/stjfgzg84hje34M4/MlizTxxeJPN/h7E4U02+3sQhzcVxMGCBXPVEn+bOlEcUn8uPE0c+lRIUUBSxHE2LRXHI759dGfH0TVJGMWDOCY41j0hG3Nhbg86k8PRO38e1FsjjnEftXoYTxx+cJh+7XeGK8ThGYdp1+PNx1ts9SAOh1R1UOobNl0Rx3S3nn7/VZ/viEMIjvvd4436QRxCcPy5PaarHTRbEcdktx6+3D0/XH/6RxwL4TDNOhzz1NNPbLZKFcdE6b3c7y/14t5ozJW7puEQeK/fM477+iV96EEcfilqvdxfJwx7feixeLJKSrpZD1+bSqI15sSxFI993YQbjTlxLITj0NaJ/VvrsfwwME0cxyqhTgPA47i8+Zc4FkxW89hCHEC7lr/BnhyPeV0hDphfEh7OkgcwVREHzDElYiZJiji6PBMyz4o8mnt4sNhuOxgQiKA5uunyeNtQPnk7xAAhDFFMoinKf9VfR35/wanlAAAAAElFTkSuQmCC\" align=\"ABSMIDDLE\" alt=\"undefined\"></p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "e4eF4A",
@@ -2461,7 +2597,8 @@ export const BANK_TASKS = [
   "answer": "3",
   "accept": [],
   "why": "ЭДС = ΔΦ/Δt = 6 мВб / 2 мс = 3 В",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>За <span>𝛥⁢𝑡=2</span>&nbsp;мс магнитный поток, пронизывающий площадку, которая ограничена проводящим витком, равномерно возрастает от 2 до 8 мВб. Чему равен модуль ЭДС индукции в витке?</p></td></tr></tbody></table></div>"
  },
  {
   "id": "F1e9FF",
@@ -2477,7 +2614,8 @@ export const BANK_TASKS = [
   "answer": "4",
   "accept": [],
   "why": "Δt = ΔΦ/ЭДС = 28 мВб / 7 мВ = 4 с",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>За промежуток времени Δ<i><span>t</span></i> магнитный поток, пронизывающий проволочную рамку, равномерно уменьшается от 28 мВб до нуля. При этом в рамке генерируется ЭДС, равная 7&nbsp;мВ. Определите промежуток времени Δ<i><span>t</span></i>.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "FDFAF7",
@@ -2493,6 +2631,7 @@ export const BANK_TASKS = [
   "answer": "32",
   "accept": [],
   "why": "а < F: собирающая даёт мнимое прямое увеличенное (3); рассеивающая всегда мнимое прямое уменьшенное (2)",
-  "sure": ""
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Спираль лампочки расположена вблизи главной оптической оси тонкой рассеивающей линзы с фокусным расстоянием, равным по модулю <i><span>F</span></i>, перпендикулярно этой оси. Расстояние <i>а </i>от линзы до спирали меньше <i><span>F</span></i>. <span>Затем рассеивающую линзу заменили на собирающую с фокусным расстоянием </span><i><span>F</span></i><span>. Установите соответствие между видом линзы, использовавшейся в опыте, и свойствами даваемого ею изображения.</span></p><p><span>К каждой позиции первого столбца подберите соответствующую позицию из&nbsp;второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</span></p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ВИД ЛИНЗЫ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p>линза собирающая</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>линза рассеивающая</p></td></tr></tbody></table></div><div class=\"col\"><b><u>СВОЙСТВА ИЗОБРАЖЕНИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p align=\"left\">действительное, перевёрнутое, увеличенное</p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p align=\"left\">мнимое, прямое, уменьшенное</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p align=\"left\">мнимое, прямое, увеличенное</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p align=\"left\">действительное, перевёрнутое, уменьшенное</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  }
 ];
