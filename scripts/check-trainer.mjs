@@ -201,7 +201,11 @@ for (const name of bank.BANK_SUBJECTS.slice(1)) {
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
 await page.getByRole("button", { name: /^Физика/ }).first().click();
 await page.waitForTimeout(400);
-const withPictures = new Set(bank.BANK_TASKS.filter((t) => t.subject === "Физика" && t.pictures.length).map((t) => t.id));
+// Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,
+// где в разметку не попал.
+const withPictures = new Set(bank.BANK_TASKS
+  .filter((t) => t.subject === "Физика" && (t.pictures.length || /<img/.test(t.body || "")))
+  .map((t) => t.id));
 want("в наборе есть задания с рисунками", withPictures.size > 0, withPictures.size + " шт.");
 let shownPicture = 0;
 for (let step = 0; step < 40; step += 1) {
