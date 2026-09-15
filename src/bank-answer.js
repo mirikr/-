@@ -87,7 +87,8 @@ export function myVote(log, marks, taskId) {
     answer = a.answer || "";
     matches = !!a.ok;
   });
-  const mark = (marks || []).find((m) => m.taskId === taskId);
+  // Жалоба на само задание («криво показано») к ключу отношения не имеет.
+  const mark = (marks || []).find((m) => m.taskId === taskId && (m.kind === "ok" || m.kind === "wrong"));
   return { taskId, userId: "я", answer, matches, fipi: mark ? mark.kind : "" };
 }
 

@@ -129,6 +129,21 @@ want("разбор от своего задания", afterRight.includes(nextTa
 const stats = await page.locator("#root").innerText();
 want("в итогах учтены попытки", /прорешано/.test(stats) && /подряд верно/.test(stats));
 
+// Итоги должны относиться к выбранному предмету, а не ко всему сразу.
+const firstSubject = bank.BANK_SUBJECTS[0];
+want("в заголовке итогов назван предмет", stats.toLowerCase().includes("как идут дела · " + firstSubject.toLowerCase()),
+  (stats.match(/Как идут дела[^\n]*/) || [])[0]);
+const otherSubject = bank.BANK_SUBJECTS[1];
+await page.getByRole("button", { name: new RegExp("^" + otherSubject) }).first().click();
+await page.waitForTimeout(400);
+const otherStats = await page.locator("#root").innerText();
+const done = (otherStats.match(/(\d+)\s*\nпрорешано/) || [])[1];
+want("у другого предмета свои итоги", done === "0", otherSubject + ": прорешано " + done);
+want("списки жалоб тоже по предмету", !/Спорные ключи/.test(otherStats) && !/Задания, на которые пожаловались/.test(otherStats));
+await page.getByRole("button", { name: new RegExp("^" + firstSubject) }).first().click();
+await page.waitForTimeout(400);
+want("у своего предмета итоги на месте", /Спорные ключи/.test(await page.locator("#root").innerText()));
+
 // Самое важное: прогресс должен пережить перезагрузку.
 await page.waitForTimeout(1200);
 await page.reload();
@@ -144,6 +159,30 @@ want("попытки сохранились", saved.log === 2, "записей: 
 want("отметка о ключе сохранилась", saved.marks === 1, "отметок: " + saved.marks);
 const afterReload = await page.locator("#root").innerText();
 want("итоги на месте после перезагрузки", /прорешано/.test(afterReload) && /Спорные ключи/.test(afterReload));
+
+// Разметка условия: таблица должна остаться таблицей, а не строкой слов.
+const structured = await page.evaluate(() => {
+  const el = document.querySelector("section.ap-card .ap-fipi");
+  if (!el) return null;
+  return { tables: el.querySelectorAll("table").length, cells: el.querySelectorAll("td").length };
+});
+want("условие показано разметкой, а не сплошным текстом", !!structured, structured ? JSON.stringify(structured) : "разметки нет");
+want("в условии есть таблица", structured && structured.tables > 0, structured ? structured.tables + " шт." : "");
+
+// Жалоба на само задание: кнопка есть, отмечается и попадает в список.
+const beforeBroken = await card.innerText();
+want("есть кнопка жалобы на задание", /Пожаловаться на задание/.test(beforeBroken));
+await page.getByRole("button", { name: "Пожаловаться на задание" }).click();
+await page.waitForTimeout(250);
+want("жалоба отмечается", /Пожаловались на задание/.test(await card.innerText()));
+want("задание попало в список жалоб", /Задания, на которые пожаловались/.test(await page.locator("#root").innerText()));
+await page.waitForTimeout(1400);
+const brokenSaved = await page.evaluate(() => {
+  const raw = localStorage.getItem("planner:planner-state-v5");
+  const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+  return (value.bankMarks || []).filter((m) => m.kind === "broken").length;
+});
+want("жалоба на задание сохранилась", brokenSaved === 1, "записей: " + brokenSaved);
 
 // Предметы переключаются, и набор меняется.
 for (const name of bank.BANK_SUBJECTS.slice(1)) {

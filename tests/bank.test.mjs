@@ -21,6 +21,16 @@ ok(BANK_TASKS.every((t) => (t.pictures || []).every((p) => String(p.data || "").
   "картинки лежат внутри набора, а не ссылками на чужой сайт");
 ok(BANK_TASKS.every((t) => /^[0-9A-Za-zА-Яа-я]{5,8}$/.test(t.id)), "номер задания выглядит как номер банка");
 // Служебные строки банка в условие попасть не должны.
+// Разметка условия: она и есть то, ради чего задание читаемо.
+ok(BANK_TASKS.every((t) => t.body && t.body.length > 30), "у каждого задания есть разметка условия");
+// Обработчик ищем как атрибут (пробел перед именем), иначе внутри картинки
+// в base64 находится случайная последовательность вроде «onNotw0=».
+const unsafe = BANK_TASKS.filter((t) => /<script|<iframe|<form|<input|<select|\son\w+\s*=|href\s*=\s*["']javascript:/i.test(t.body));
+ok(unsafe.length === 0, "в разметке нет скриптов, форм и обработчиков" + (unsafe.length ? ": " + unsafe[0].id : ""));
+const remote = BANK_TASKS.filter((t) => /<img[^>]+src=["'](?!data:)/i.test(t.body));
+ok(remote.length === 0, "все картинки вшиты, чужих ссылок нет" + (remote.length ? ": " + remote[0].id : ""));
+ok(BANK_TASKS.filter((t) => /<table/.test(t.body)).length > 100, "таблицы в условиях сохранены");
+
 const dirty = BANK_TASKS.filter((t) => /НЕ РЕШЕНО|СВОЙСТВА ЗАДАНИЯ|Номер:|ОТВЕТИТЬ/i.test(t.text));
 ok(dirty.length === 0, "в условиях нет служебных строк банка" + (dirty.length ? ": " + dirty[0].id : ""));
 // Свой же ответ обязан проходить проверку — иначе задание нельзя решить в принципе.

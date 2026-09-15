@@ -2118,7 +2118,9 @@ export default function StudyPlanner() {
   // поэтому id у неё постоянный.
   function addMark(entry) {
     setBankMarks((list) => {
-      const id = "mark-" + entry.taskId;
+      // Жалоба на само задание живёт отдельно от отметки о ключе: одно другому
+      // не мешает — задание может быть и кривым, и с верным ответом.
+      const id = (entry.kind === "broken" ? "broken-" : "mark-") + entry.taskId;
       const rest = list.filter((m) => m.id !== id);
       const was = list.find((m) => m.id === id);
       // Повторное нажатие той же кнопки снимает отметку: передумать можно.
@@ -2128,8 +2130,9 @@ export default function StudyPlanner() {
   }
 
   const trainerSolved = useMemo(() => {
+    const known = new Set(BANK_TASKS.map((t) => t.id));
     const last = new Map();
-    trainerLog.forEach((a) => last.set(a.taskId, a.ok));
+    trainerLog.forEach((a) => known.has(a.taskId) && last.set(a.taskId, a.ok));
     let n = 0;
     last.forEach((ok) => ok && (n += 1));
     return n;
