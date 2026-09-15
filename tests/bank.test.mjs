@@ -32,10 +32,18 @@ ok(remote.length === 0, "все картинки вшиты, чужих ссыл
 ok(BANK_TASKS.filter((t) => /<table/.test(t.body)).length > 100, "таблицы в условиях сохранены");
 // В серверной разметке рисунок вставляет скрипт, а не тег <img>: если это
 // упустить, вместе с исходной разметкой из задания пропадают все рисунки.
-const withPics = BANK_TASKS.filter((t) => t.pictures.length);
-const noPicture = withPics.filter((t) => !/<img/.test(t.body));
-ok(withPics.length > 0 && noPicture.length === 0,
-  "рисунок стоит в разметке у всех заданий с рисунками" + (noPicture.length ? ": " + noPicture.map((t) => t.id).join(", ") : ""));
+const withPics = BANK_TASKS.filter((t) => /<img/.test(t.body));
+ok(withPics.length > 30, "рисунки встали в разметку: " + withPics.length + " заданий");
+const callLeft = BANK_TASKS.filter((t) => /ShowPictureQ/.test(t.body));
+ok(callLeft.length === 0, "вызова ShowPictureQ в разметке не осталось" + (callLeft.length ? ": " + callLeft[0].id : ""));
+// Отдельным списком картинка лежит только тогда, когда в разметку она не попала,
+// — иначе набор тащил бы каждый рисунок дважды.
+const twice = BANK_TASKS.filter((t) => (t.pictures || []).some((p) => t.body.includes(p.data)));
+ok(twice.length === 0, "рисунок не хранится дважды" + (twice.length ? ": " + twice[0].id : ""));
+
+// Номер варианта в банке рисует галочка: убрав её, номер надо вернуть.
+const numbered = BANK_TASKS.filter((t) => /Выбор ответ/i.test(t.type) && /<td[^>]*>1\)<\/td>/.test(t.body));
+ok(numbered.length > 0, "у вариантов без своей нумерации номер восстановлен: " + numbered.length + " заданий");
 
 // Однажды вместе с полями ввода из разметки вылетала вся таблица, а с ней —
 // все варианты ответа: на экране оставался один вопрос без списка.

@@ -17,6 +17,10 @@ const SOURCES = [
   { subject: "Информатика", file: UP + "ccaafe63-____________100_______________.json", answers: "answers/informatics.json" },
 ];
 
+// Сколько всего заданий лежит в открытом банке ФИПИ по каждому предмету. Число
+// считано на самом сайте банка: по нему видно, какая часть уже перенесена к нам.
+const TOTALS = { "Обществознание": 1678, "Информатика": 2475, "Физика": 2344 };
+
 const LEADS = [
   "Впишите правильный ответ.",
   "Выберите один или несколько правильных ответов.",
@@ -86,6 +90,8 @@ for (const src of SOURCES) {
   for (const t of seen.values()) {
     const a = answers[t.id];
     if (!a) continue;
+    // Задания второй части проверяет эксперт, а не строчка с ответом. В тренажёре им нечего делать.
+    if (/Развернутый/i.test(t.answerType || "")) continue;
     const c = clean(t.text);
     const pictures = (t.pictures || []).filter((p) => p.data).map((p) => ({ data: p.data, w: p.w, h: p.h }));
     forBody.push({ id: t.id, html: t.html, raw: t.raw || "", pictures: t.pictures || [] });
@@ -113,6 +119,9 @@ out.forEach((t) => {
   const body = bodies[t.id] || "";
   // Совсем пустая или подозрительно короткая разметка — значит на текст надёжнее.
   t.body = body.replace(/<[^>]+>/g, "").replace(/[\s\u00A0]/g, "").length > 30 ? body : "";
+  // Картинка, которая уже встала в разметку, второй раз не нужна: иначе набор
+  // тащит каждый рисунок дважды, а это мегабайты на ровном месте.
+  t.pictures = t.pictures.filter((p) => !t.body.includes(p.data));
 });
 
 out.sort((a, b) => a.section.localeCompare(b.section, "ru") || a.id.localeCompare(b.id));
@@ -123,6 +132,9 @@ const subjects = [...new Set(out.map((t) => t.subject))]
   .sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
 const sections = {};
 subjects.forEach((s) => { sections[s] = [...new Set(out.filter((t) => t.subject === s).map((t) => t.section))]; });
+
+const totals = {};
+subjects.forEach((s) => { if (TOTALS[s]) totals[s] = TOTALS[s]; });
 
 const header = `// Задания открытого банка ФИПИ: условия сняты со страницы банка, у каждого сохранён
 // его номер — по нему задание находится в самом банке.
@@ -139,9 +151,20 @@ export const BANK_SUBJECTS = ${JSON.stringify(subjects, null, 2)};
 
 export const BANK_SECTIONS = ${JSON.stringify(sections, null, 2)};
 
+export const BANK_TOTALS = ${JSON.stringify(totals, null, 2)};
+
 export const BANK_TASKS = `;
 
 writeFileSync(new URL("../src/fipi-bank.js", import.meta.url), header + JSON.stringify(out, null, 1) + ";\n");
+
+// Рядом кладётся крошечный список номеров. Сам набор весит мегабайты и грузится
+// отдельным куском, только когда открывают тренажёр, — а чтобы посчитать, сколько
+// заданий осталось, приложению хватает одних номеров.
+const index = `// Номера заданий набора — чтобы считать решённые, не загружая весь набор.
+// Файл собран из выгрузок сборщика вместе с fipi-bank.js, менять его руками не нужно.
+export const BANK_IDS = ${JSON.stringify(out.map((t) => t.id))};
+`;
+writeFileSync(new URL("../src/fipi-index.js", import.meta.url), index);
 
 // Сторож: разметка не должна терять текст условия. Однажды вместе с полями
 // ввода вылетала вся таблица, а с ней — все варианты ответа.
@@ -161,7 +184,7 @@ console.log("всего заданий:", out.length, "| с разметкой �
   "| с таблицами:", out.filter((t) => /<table/.test(t.body)).length);
 subjects.forEach((s) => {
   const list = out.filter((t) => t.subject === s);
-  console.log("  " + s + ":", list.length, "| с картинками:", list.filter((t) => t.pictures.length).length,
+  console.log("  " + s + ":", list.length, "| с картинками:", list.filter((t) => t.pictures.length || /data:image/.test(t.body || "")).length,
     "| разделы:", sections[s].join(", "));
 });
 const size = readFileSync(new URL("../src/fipi-bank.js", import.meta.url)).length;

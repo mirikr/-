@@ -37,10 +37,13 @@ export async function cleanBodies(tasks) {
       // В серверной разметке картинку вставляет скрипт ShowPictureQ, а тега
       // <img> ещё нет — он появляется в браузере. Подставляем тег сами, иначе
       // вместе с исходной разметкой из задания пропадают все рисунки.
-      const source = (raw || t.html)
+      // В снимке страницы тег <img> скрипт уже поставил, и рядом с ним остался
+      // сам вызов: подставив тег ещё раз, мы получили бы рисунок дважды.
+      const source = (raw ? raw
         // Вызов бывает и с одним аргументом, и с двумя, и в разных кавычках.
         .replace(/<script[^>]*>\s*ShowPictureQ\(\s*['"]([^'"]+)['"][^)]*\)\s*;?\s*<\/script>/gi,
           (m, src) => '<img src="' + src + '">')
+        : t.html)
         .replace(/<m:/g, "<")
         .replace(/<\/m:/g, "</");
       box.innerHTML = source;
@@ -53,12 +56,38 @@ export async function cleanBodies(tasks) {
       // Поля ввода в приложении свои, поэтому сами поля убираем. А вот таблицу
       // вокруг них трогать нельзя: у заданий с выбором ответа варианты стоят в
       // одной строке с галочкой, и вместе с таблицей исчезали все варианты.
+      // Номера вариантов в банке рисует сама галочка, поэтому, убрав её, надо
+      // вернуть номер на место: иначе ответ «23» не к чему отнести.
+      const marks = new Map();
+      box.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach((n) => {
+        const table = n.closest("table");
+        if (!table) return;
+        const list = marks.get(table) || [];
+        list.push(n);
+        marks.set(table, list);
+      });
+      marks.forEach((list) => {
+        if (list.length < 2) return;
+        // Номер ставим только там, где его нет: в части заданий он уже написан
+        // отдельной ячейкой, и второй такой же превратил бы список в «1) 1)».
+        if (list.some((n) => /\d\s*\)/.test(((n.closest("tr") || n.parentElement) || {}).textContent || ""))) return;
+        list.forEach((n, i) => {
+          const cell = n.closest("td, th") || n.parentElement;
+          if (!cell) return;
+          if (!(cell.textContent || "").replace(/[\s\u00A0]/g, "")) cell.setAttribute("data-number", String(i + 1) + ")");
+        });
+      });
+
       box.querySelectorAll("select, input, button, textarea").forEach((n) => {
         // Таблица, в которой стояли галочки или поля, — это список вариантов,
         // а не таблица с данными: сетку ей рисовать не нужно.
         const table = n.closest("table");
         if (table) table.setAttribute("data-widget", "1");
         n.remove();
+      });
+      box.querySelectorAll("[data-number]").forEach((cell) => {
+        cell.textContent = cell.getAttribute("data-number");
+        cell.removeAttribute("data-number");
       });
 
       // Осталась только сетка для ответа — «А Б В Г Д» с рядом цифр под ними.
@@ -77,10 +106,13 @@ export async function cleanBodies(tasks) {
       (t.pictures || []).forEach((p) => {
         if (p.data && p.src) pics[String(p.src).split("/").pop()] = p.data;
       });
+      const already = new Set();
       box.querySelectorAll("img").forEach((img) => {
         const name = String(img.getAttribute("src") || "").split("/").pop();
-        if (pics[name]) img.setAttribute("src", pics[name]);
-        else img.remove();
+        // Один и тот же рисунок дважды — это разметка банка, а не задание.
+        if (!pics[name] || already.has(name)) { img.remove(); return; }
+        already.add(name);
+        img.setAttribute("src", pics[name]);
       });
 
       // Чистим разметку: оставляем только знакомые теги и безопасные атрибуты.

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BANK_SECTIONS, BANK_SOURCE, BANK_SUBJECTS, BANK_TASKS, BANK_URL } from "./fipi-bank.js";
+import { BANK_SECTIONS, BANK_SOURCE, BANK_SUBJECTS, BANK_TASKS, BANK_TOTALS, BANK_URL } from "./fipi-bank.js";
 import { AGREE_NEEDED, consensus, isRight, myVote, streakOf, timeWord, trainerStats } from "./bank-answer.js";
 import { loadVotes, myUserId, saveVote, votesState } from "./bank-votes.js";
 
@@ -91,6 +91,9 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
 
   const sections = (BANK_SECTIONS[subject] || []).slice().sort((a, b) => a.localeCompare(b, "ru"));
   const mine = useMemo(() => BANK_TASKS.filter((t) => t.subject === subject), [subject]);
+  // Сколько заданий по этому предмету всего в банке ФИПИ и какую часть мы уже перенесли.
+  const whole = BANK_TOTALS[subject] || 0;
+  const percent = whole ? Math.max(0.1, (mine.length / whole) * 100).toFixed(1).replace(".0", "").replace(".", ",") : "";
 
   // Что человек уже одолел: по последней попытке, тренируются ведь до победы.
   const solved = useMemo(() => {
@@ -223,6 +226,23 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
           ))}
         </div>
 
+        <div style={S.moved}>
+          <div style={S.movedTop}>
+            <span>
+              Перенесено из банка ФИПИ: <b>{mine.length}</b> {taskWord(mine.length)} из{" "}
+              <b>{whole || "?"}</b> по предмету «{subject}»
+            </span>
+            {whole ? <span style={S.movedPart}>{percent}%</span> : null}
+          </div>
+          {whole ? (
+            <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(1.5, Math.min(100, (mine.length / whole) * 100)) + "%" }} /></div>
+          ) : null}
+          <div style={S.movedNote}>
+            Задания переносим и решаем вручную, поэтому набор растёт постепенно. Задания второй части
+            с развёрнутым ответом сюда не попадают: их проверяет эксперт, а не строчка с ответом.
+          </div>
+        </div>
+
         <div style={S.chips}>
           <button onClick={() => pickSection("")} className="ap-row" style={{ ...S.chip, ...(section ? null : S.chipOn) }}>
             Все разделы
@@ -267,6 +287,11 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
             ) : (
               <div style={S.text}>{task.text}</div>
             )}
+            {/* Картинки лежат отдельно только тогда, когда в разметке их не оказалось:
+                иначе рисунок был бы показан дважды. */}
+            {(task.pictures || []).map((p, i) => (
+              <img key={i} src={p.data} alt="" style={S.picture} />
+            ))}
 
             <div style={S.answerRow}>
               <input
@@ -417,6 +442,15 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   );
 }
 
+function taskWord(n) {
+  const last = n % 10;
+  const two = n % 100;
+  if (two >= 11 && two <= 14) return "заданий";
+  if (last === 1) return "задание";
+  if (last >= 2 && last <= 4) return "задания";
+  return "заданий";
+}
+
 const S = {
   chips: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 },
   chip: {
@@ -433,6 +467,18 @@ const S = {
     font: "inherit", fontSize: 14.5, cursor: "pointer",
   },
   subjectOn: { background: "var(--btnBg)", color: "var(--btnInk)", borderColor: "var(--btnBg)", fontWeight: 600 },
+  moved: {
+    border: "1px solid var(--line2)", background: "var(--panel2)", borderRadius: 10,
+    padding: "10px 13px", marginBottom: 12,
+  },
+  movedTop: {
+    display: "flex", alignItems: "baseline", gap: 10, justifyContent: "space-between",
+    fontSize: 13.5, color: "var(--ink2)", lineHeight: 1.5,
+  },
+  movedPart: { fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--ink3)", flex: "0 0 auto" },
+  bar: { height: 6, borderRadius: 999, background: "var(--line2)", overflow: "hidden", margin: "8px 0 0" },
+  barFill: { height: "100%", borderRadius: 999, background: "var(--btnBg)" },
+  movedNote: { fontSize: 12, color: "var(--mute)", lineHeight: 1.5, marginTop: 7 },
   alpha: {
     border: "1px solid var(--warmLine)", background: "var(--warmBg)", color: "var(--warmInk)",
     borderRadius: 10, padding: "11px 14px", fontSize: 13.5, lineHeight: 1.55, marginBottom: 14,

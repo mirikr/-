@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
 import { stampState, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments } from "./notebook.jsx";
@@ -22,8 +22,10 @@ import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import NowCard from "./now-card.jsx";
-import Trainer from "./trainer.jsx";
-import { BANK_TASKS } from "./fipi-bank.js";
+// Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
+// тренажёр, а не вместе со всем приложением.
+const Trainer = lazy(() => import("./trainer.jsx"));
+import { BANK_IDS } from "./fipi-index.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
 import { search as searchAll } from "./search.js";
@@ -2130,14 +2132,14 @@ export default function StudyPlanner() {
   }
 
   const trainerSolved = useMemo(() => {
-    const known = new Set(BANK_TASKS.map((t) => t.id));
+    const known = new Set(BANK_IDS);
     const last = new Map();
     trainerLog.forEach((a) => known.has(a.taskId) && last.set(a.taskId, a.ok));
     let n = 0;
     last.forEach((ok) => ok && (n += 1));
     return n;
   }, [trainerLog]);
-  const trainerLeft = Math.max(0, BANK_TASKS.length - trainerSolved);
+  const trainerLeft = Math.max(0, BANK_IDS.length - trainerSolved);
 
   const weeklyBudget = weeklyBudgetHours(budget);
   const navItems = [
@@ -3161,7 +3163,9 @@ export default function StudyPlanner() {
         )}
 
         {screen === "trainer" && (
-          <Trainer log={trainerLog} marks={bankMarks} onAttempt={addAttempt} onMark={addMark} styles={styles} />
+          <Suspense fallback={<section style={styles.plainBlock}><p style={styles.muted}>Задания загружаются…</p></section>}>
+            <Trainer log={trainerLog} marks={bankMarks} onAttempt={addAttempt} onMark={addMark} styles={styles} />
+          </Suspense>
         )}
 
         {screen === "school" && (

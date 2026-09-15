@@ -52,11 +52,25 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
         // Снимки прошлых версий — это пара мегабайт ради одного окна истории:
         // в офлайн-кэш они не нужны, подгрузятся, когда откроют сравнение.
-        globIgnores: ["**/versions/*.png"],
+        // Набор заданий тренажёра — отдельный кусок в пару мегабайт. В офлайн-запас
+        // его не кладём: приложение должно ставиться быстро и на мобильном интернете.
+        // Один раз открыв тренажёр, ученик получает набор в кэш и дальше решает без сети.
+        globIgnores: ["**/versions/*.png", "**/trainer-*.js"],
         // The planner must open with no network at all; Supabase calls are never cached,
         // they either reach the server or fall back to the local copy in storage.js.
         navigateFallback: base + "index.html",
         runtimeCaching: [
+          {
+            // Имя куска меняется вместе с содержимым, поэтому старый набор
+            // подсунуть нельзя: адрес у новой сборки другой.
+            urlPattern: /\/assets\/trainer-[^/]+\.js$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "trainer-bank",
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 180 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
             handler: "CacheFirst",
