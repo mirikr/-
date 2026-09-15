@@ -30,6 +30,12 @@ ok(unsafe.length === 0, "в разметке нет скриптов, форм �
 const remote = BANK_TASKS.filter((t) => /<img[^>]+src=["'](?!data:)/i.test(t.body));
 ok(remote.length === 0, "все картинки вшиты, чужих ссылок нет" + (remote.length ? ": " + remote[0].id : ""));
 ok(BANK_TASKS.filter((t) => /<table/.test(t.body)).length > 100, "таблицы в условиях сохранены");
+// В серверной разметке рисунок вставляет скрипт, а не тег <img>: если это
+// упустить, вместе с исходной разметкой из задания пропадают все рисунки.
+const withPics = BANK_TASKS.filter((t) => t.pictures.length);
+const noPicture = withPics.filter((t) => !/<img/.test(t.body));
+ok(withPics.length > 0 && noPicture.length === 0,
+  "рисунок стоит в разметке у всех заданий с рисунками" + (noPicture.length ? ": " + noPicture.map((t) => t.id).join(", ") : ""));
 
 // Однажды вместе с полями ввода из разметки вылетала вся таблица, а с ней —
 // все варианты ответа: на экране оставался один вопрос без списка.
@@ -39,6 +45,12 @@ const lost = BANK_TASKS.filter((t) => {
   return inText > 120 && plainOf(t.body).length < inText * 0.75;
 });
 ok(lost.length === 0, "разметка не потеряла текст условия" + (lost.length ? ": " + lost.map((t) => t.id).join(", ") : ""));
+
+// Формулы приходят из банка настоящим MathML — браузер рисует их сам, без
+// сторонних библиотек. Когда-то они схлопывались в кашу вроде «A23A12».
+const withMath = BANK_TASKS.filter((t) => /<math/i.test(t.body));
+ok(withMath.length > 20, "формулы сохранены разметкой: " + withMath.length + " заданий");
+ok(withMath.every((t) => !/<m:|xmlns:m/.test(t.body)), "у формул нет приставки «m:» — иначе браузер их не рисует");
 
 const choice = BANK_TASKS.filter((t) => /Выбор ответ/i.test(t.type));
 const noOptions = choice.filter((t) => !(/\b1\)/.test(plainOf(t.body)) && /\b[45]\)/.test(plainOf(t.body))));

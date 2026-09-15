@@ -9,8 +9,11 @@ const pw = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const { chromium } = pw.chromium ? pw : pw.default;
 
 const KEEP_TAGS = new Set(["P","BR","B","I","U","EM","STRONG","SUB","SUP","SPAN","DIV","TABLE","THEAD","TBODY","TFOOT",
-  "TR","TD","TH","UL","OL","LI","IMG","MATH","MSUB","MSUP","MSUBSUP","MFRAC","MROW","MI","MN","MO","MSQRT","MTEXT","MSPACE","CENTER","HR","PRE","CODE","SMALL"]);
-const KEEP_ATTRS = new Set(["colspan","rowspan","align","valign","src","alt","start","class"]);
+  "TR","TD","TH","UL","OL","LI","IMG","CENTER","HR","PRE","CODE","SMALL",
+  // Разметка формул: банк отдаёт её как MathML, и браузер умеет рисовать её сам.
+  "MATH","MSTYLE","MROW","MFRAC","MSUB","MSUP","MSUBSUP","MUNDER","MOVER","MUNDEROVER","MI","MN","MO",
+  "MSQRT","MROOT","MTEXT","MSPACE","MTABLE","MTR","MTD","MFENCED","MENCLOSE","MPADDED","MPHANTOM"]);
+const KEEP_ATTRS = new Set(["colspan","rowspan","align","valign","src","alt","start","class","displaystyle","mathvariant"]);
 
 export async function cleanBodies(tasks) {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
@@ -24,7 +27,23 @@ export async function cleanBodies(tasks) {
     const result = {};
 
     for (const t of list) {
-      box.innerHTML = t.html;
+      // Исходная разметка с сервера лучше снимка страницы: в ней формулы ещё не
+      // перерисованы MathJax. Берём её, когда она пришла целой — в первых
+      // выгрузках текст в ней побился из-за кодировки.
+      const raw = t.raw && !t.raw.includes("\uFFFD") && /[а-яА-Я]{4}/.test(t.raw) ? t.raw : "";
+      // Формулы у банка идут с приставкой «m:», как в вордовской разметке, и
+      // браузер считает их неизвестными тегами. Без приставки это обычный
+      // MathML, который он рисует сам.
+      // В серверной разметке картинку вставляет скрипт ShowPictureQ, а тега
+      // <img> ещё нет — он появляется в браузере. Подставляем тег сами, иначе
+      // вместе с исходной разметкой из задания пропадают все рисунки.
+      const source = (raw || t.html)
+        // Вызов бывает и с одним аргументом, и с двумя, и в разных кавычках.
+        .replace(/<script[^>]*>\s*ShowPictureQ\(\s*['"]([^'"]+)['"][^)]*\)\s*;?\s*<\/script>/gi,
+          (m, src) => '<img src="' + src + '">')
+        .replace(/<m:/g, "<")
+        .replace(/<\/m:/g, "</");
+      box.innerHTML = source;
 
       // Шапка задания, свойства, кнопка ответа и скрипты — не условие.
       box.querySelectorAll('[id^="i"], .task-header-panel, .task-info-panel, .answer-panel, script, style, noscript')
@@ -70,7 +89,10 @@ export async function cleanBodies(tasks) {
       while (changed && guard++ < 30) {
         changed = false;
         box.querySelectorAll("*").forEach((el) => {
-          if (!TAGS.has(el.tagName)) {
+          // У тегов MathML имя остаётся строчным (это не HTML), поэтому
+          // сравнивать надо в одном регистре — иначе формулы не проходят
+          // белый список и разворачиваются в набор букв.
+          if (!TAGS.has(el.tagName.toUpperCase())) {
             el.replaceWith(...el.childNodes);
             changed = true;
             return;
