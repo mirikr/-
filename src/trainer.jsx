@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BANK_SECTIONS, BANK_SOURCE, BANK_SUBJECTS, BANK_TASKS, BANK_URL } from "./fipi-bank.js";
 import { AGREE_NEEDED, consensus, isRight, myVote, streakOf, timeWord, trainerStats } from "./bank-answer.js";
-import { loadVotes, myUserId, saveVote } from "./bank-votes.js";
+import { loadVotes, myUserId, saveVote, votesState } from "./bank-votes.js";
 
 // Тренажёр по открытому банку ФИПИ.
 //
@@ -74,10 +74,15 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   // тогда виден только свой голос, и тренажёр от этого не ломается.
   const [votes, setVotes] = useState([]);
   const [me, setMe] = useState("");
+  const [shared, setShared] = useState("off");
 
   useEffect(() => {
     let alive = true;
-    loadVotes().then((rows) => alive && setVotes(rows));
+    loadVotes().then((rows) => {
+      if (!alive) return;
+      setVotes(rows);
+      setShared(votesState());
+    });
     myUserId().then((id) => alive && setMe(id));
     return () => {
       alive = false;
@@ -362,6 +367,17 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
 
       <section className="ap-card" style={styles.card}>
         <div style={styles.cardTitle}>Как идут дела · {subject.toLowerCase()}</div>
+        <div style={S.shared}>
+          {shared === "ready"
+            ? "Общий счёт ответов подключён: ключи проверяются всем классом" +
+              (votes.length ? " · записей в копилке: " + votes.length : " · пока пусто")
+            : shared === "missing"
+              ? "Общей копилки ответов в базе нет — счёт идёт только по твоим ответам"
+              : shared === "error"
+                ? "Общая копилка ответов не отвечает — счёт идёт только по твоим ответам"
+                : "Вход не выполнен — счёт идёт только по твоим ответам"}
+        </div>
+
         <div style={S.stats}>
           <div style={S.stat}><span style={S.statValue}>{stats.done}</span><span style={S.statName}>прорешано</span></div>
           <div style={S.stat}><span style={S.statValue}>{stats.percent}%</span><span style={S.statName}>верных</span></div>
@@ -490,6 +506,10 @@ const S = {
   keyBtnOn: { borderColor: "var(--ink)", color: "var(--ink)", fontWeight: 600 },
   bankLink: { fontSize: 13, color: "var(--ink3)" },
 
+  shared: {
+    fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, marginBottom: 12,
+    borderLeft: "3px solid var(--line)", paddingLeft: 9,
+  },
   stats: { display: "flex", flexWrap: "wrap", gap: 18 },
   stat: { display: "flex", flexDirection: "column", gap: 2, minWidth: 92 },
   statValue: { fontSize: 22, fontFamily: "'PT Serif', Georgia, serif", fontVariantNumeric: "tabular-nums" },

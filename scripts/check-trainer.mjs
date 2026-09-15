@@ -129,6 +129,10 @@ want("разбор от своего задания", afterRight.includes(nextTa
 const stats = await page.locator("#root").innerText();
 want("в итогах учтены попытки", /прорешано/.test(stats) && /подряд верно/.test(stats));
 
+// Видно ли, считается счёт по всему классу или только по себе.
+want("сказано, откуда берётся счёт ключей", /счёт идёт только по твоим ответам|Общий счёт ответов подключён/.test(stats),
+  (stats.match(/[^\n]*счёт[^\n]*/) || [])[0]);
+
 // Итоги должны относиться к выбранному предмету, а не ко всему сразу.
 const firstSubject = bank.BANK_SUBJECTS[0];
 want("в заголовке итогов назван предмет", stats.toLowerCase().includes("как идут дела · " + firstSubject.toLowerCase()),
