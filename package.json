@@ -1,17 +1,18 @@
 {
   "name": "study-planner",
   "private": true,
-  "version": "0.8.1.2",
+  "version": "0.9.0",
   "type": "module",
   "description": "Ежедневник обществоведа — планировщик подготовки к экзамену и олимпиаде",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/merge.test.mjs && node tests/calendar.test.mjs && node tests/schedule.test.mjs && node tests/files.test.mjs && node tests/now.test.mjs && node tests/olympiads.test.mjs && node tests/repetition.test.mjs && node tests/search.test.mjs",
+    "test": "node tests/merge.test.mjs && node tests/calendar.test.mjs && node tests/schedule.test.mjs && node tests/files.test.mjs && node tests/now.test.mjs && node tests/olympiads.test.mjs && node tests/repetition.test.mjs && node tests/search.test.mjs && node tests/bank.test.mjs",
     "check:render": "node scripts/check-render.mjs",
     "check:upgrade": "node scripts/check-upgrade.mjs",
-    "check:crash": "node scripts/check-crash.mjs"
+    "check:crash": "node scripts/check-crash.mjs",
+    "check:trainer": "node scripts/check-trainer.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

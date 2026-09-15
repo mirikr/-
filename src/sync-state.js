@@ -19,7 +19,7 @@ const SCALAR_FIELDS = ["budget", "subjectColors", "showSunday", "hiddenSubjects"
 // Настройки интерфейса у каждого устройства свои — их не сливаем, берём локальные.
 const LOCAL_ONLY_FIELDS = ["openSections"];
 
-const ID_COLLECTIONS = ["journal", "events", "customSubjects", "lyceumSchedule", "homework"];
+const ID_COLLECTIONS = ["journal", "events", "customSubjects", "lyceumSchedule", "homework", "trainerLog", "bankMarks"];
 
 const TOMBSTONE_TTL_MS = 120 * 24 * 60 * 60 * 1000; // 4 месяца: дольше расхождение не живёт
 

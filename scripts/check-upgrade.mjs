@@ -80,6 +80,10 @@ const OLD_STATE = {
   homework: [{ id: "h1", date: inDays(0), subjectName: "Алгебра", text: "№12", minutes: 30, done: false }],
   showSunday: true,
   openSections: { events: true },
+  // Записи тренажёра: решённое задание и отметка о сверке ключа. Пропасть им
+  // нельзя — это и есть прогресс подготовки.
+  trainerLog: [{ id: "try-4EF342-1", taskId: "4EF342", answer: "60", ok: true, seconds: 41, at: new Date(Date.now() - 3600000).toISOString() }],
+  bankMarks: [{ id: "mark-4EF342", taskId: "4EF342", kind: "ok", at: new Date(Date.now() - 3600000).toISOString() }],
 };
 
 const browser = await chromium.launch({ executablePath: BROWSER });
@@ -123,6 +127,9 @@ if (!after) {
   want("свой цвет предмета", after.subjectColors?.law, "#B23A3A");
   want("часы распределения", after.budget?.alloc?.econ, 5);
   want("воскресенье в расписании", after.showSunday, true);
+  want("решённое задание тренажёра", after.trainerLog?.length, 1);
+  want("ответ и время попытки целы", after.trainerLog?.[0]?.seconds, 41);
+  want("отметка о сверке ключа", after.bankMarks?.[0]?.kind, "ok");
 }
 
 const text = await page.locator("#root").innerText();
