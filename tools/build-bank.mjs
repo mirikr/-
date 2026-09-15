@@ -9,7 +9,10 @@ import { cleanBodies } from "./clean-body.mjs";
 // окружения, потому что сами файлы в репозиторий не кладутся: это сырьё.
 const UP = process.env.FIPI_DIR || "./fipi";
 const SOURCES = [
-  { subject: "Физика", file: UP + "4c6d30da-fipi-100.json", extra: UP + "1910c825-fipi-110.json", answers: "answers/physics.json" },
+  // Свежая выгрузка физики идёт первой: в ней целы и формулы, и картинки.
+  // Прежние оставлены — из них берутся задания, которых в новой не оказалось.
+  { subject: "Физика", file: UP + "ac16a348-fipi-100.json",
+    older: [UP + "4c6d30da-fipi-100.json", UP + "1910c825-fipi-110.json"], answers: "answers/physics.json" },
   { subject: "Обществознание", file: UP + "b2a0ec16-_________100_______________.json", answers: "answers/social.json" },
   { subject: "Информатика", file: UP + "ccaafe63-____________100_______________.json", answers: "answers/informatics.json" },
 ];
@@ -72,10 +75,12 @@ const forBody = [];
 for (const src of SOURCES) {
   const answers = JSON.parse(readFileSync(new URL(src.answers, import.meta.url), "utf8"));
   const seen = new Map();
-  for (const file of [src.file, src.extra].filter(Boolean)) {
+  // Сначала кладём старые выгрузки, потом свежую — она перекрывает их.
+  for (const file of [...(src.older || []), src.file].filter(Boolean)) {
     for (const t of JSON.parse(readFileSync(file, "utf8")).tasks) {
       const was = seen.get(t.id);
-      if (!was || (t.pictures || []).some((p) => p.data)) seen.set(t.id, t);
+      const better = !was || t.raw || (t.pictures || []).some((p) => p.data && !(was.pictures || []).some((q) => q.data));
+      if (better) seen.set(t.id, t);
     }
   }
   for (const t of seen.values()) {
@@ -83,7 +88,7 @@ for (const src of SOURCES) {
     if (!a) continue;
     const c = clean(t.text);
     const pictures = (t.pictures || []).filter((p) => p.data).map((p) => ({ data: p.data, w: p.w, h: p.h }));
-    forBody.push({ id: t.id, html: t.html, pictures: t.pictures || [] });
+    forBody.push({ id: t.id, html: t.html, raw: t.raw || "", pictures: t.pictures || [] });
     out.push({
       id: t.id,
       subject: src.subject,
