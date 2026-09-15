@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BANK_SOURCE, BANK_TASKS, BANK_URL } from "./fipi-bank.js";
-import { isRight, keyState, streakOf, timeWord, trainerStats } from "./bank-answer.js";
+import { AGREE_NEEDED, consensus, isRight, myVote, streakOf, timeWord, trainerStats } from "./bank-answer.js";
+import { loadVotes, myUserId, saveVote } from "./bank-votes.js";
 
 // Тренажёр по открытому банку ФИПИ.
 //
@@ -12,6 +13,15 @@ import { isRight, keyState, streakOf, timeWord, trainerStats } from "./bank-answ
 // Ключи решены нами, а не взяты у банка: он правильный ответ не отдаёт. Поэтому
 // у каждого ответа честно написано, сверен он или нет, и есть две кнопки —
 // подтвердить и пожаловаться.
+
+function peopleWord(n) {
+  const last = n % 10;
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 14) return "человек";
+  if (last === 1) return "человека";
+  if (last >= 2 && last <= 4) return "человек";
+  return "человек";
+}
 
 function useStopwatch(taskId) {
   const [shown, setShown] = useState(0);
@@ -59,6 +69,19 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const [currentId, setCurrentId] = useState("");
   const [value, setValue] = useState("");
   const [result, setResult] = useState(null);
+  // Голоса класса: чужие ответы на те же задания. Без облака список пустой —
+  // тогда виден только свой голос, и тренажёр от этого не ломается.
+  const [votes, setVotes] = useState([]);
+  const [me, setMe] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    loadVotes().then((rows) => alive && setVotes(rows));
+    myUserId().then((id) => alive && setMe(id));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const sections = useMemo(() => {
     const seen = [];
@@ -84,11 +107,17 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const task = (currentId && BANK_TASKS.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
 
-  const ids = useMemo(() => new Set(queue.map((t) => t.id)), [queue]);
   const stats = useMemo(() => trainerStats(log, null), [log]);
   const streak = streakOf(log);
-  const key = task ? keyState(marks, task.id) : null;
   const myMark = task ? (marks || []).find((m) => m.taskId === task.id) : null;
+
+  // Свой голос считаем из своих же записей: так он виден сразу, даже если
+  // облако недоступно и в общую копилку он ещё не уехал.
+  const allVotes = useMemo(() => {
+    const strangers = (votes || []).filter((v) => !me || v.userId !== me);
+    return task ? strangers.concat(myVote(log, marks, task.id)) : strangers;
+  }, [votes, me, log, marks, task]);
+  const key = task ? consensus(allVotes, task.id) : null;
 
   const disputed = useMemo(() => {
     const out = [];
@@ -106,6 +135,17 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     const seconds = Math.round(watch.read());
     setResult({ ok, seconds });
     onAttempt({ taskId: task.id, answer: value, ok, seconds });
+    // Ответ уходит в общую копилку: по таким совпадениям и проверяются ключи.
+    saveVote({ taskId: task.id, answer: value, matches: ok, fipi: myMark ? myMark.kind : "" })
+      .then((sent) => sent && loadVotes(true).then(setVotes));
+  }
+
+  function mark(kind) {
+    if (!task) return;
+    onMark({ taskId: task.id, kind });
+    const same = myMark && myMark.kind === kind;
+    saveVote({ taskId: task.id, answer: value, matches: !!(result && result.ok), fipi: same ? "" : kind })
+      .then((sent) => sent && loadVotes(true).then(setVotes));
   }
 
   function next() {
@@ -213,27 +253,42 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
 
             {result && (
               <div style={S.keyBox}>
-                <div style={{ ...S.keyState, ...(key.state === "disputed" ? S.keyBad : key.state === "confirmed" ? S.keyOk : S.keyWarn) }}>
+                <div style={{ ...S.keyState, ...(key.state === "disputed" ? S.keyBad : key.state === "confirmed" || key.state === "agreed" ? S.keyOk : S.keyWarn) }}>
                   {key.state === "confirmed"
-                    ? "Ответ сверен с банком" + (key.confirmed > 1 ? " (" + key.confirmed + ")" : "")
-                    : key.state === "disputed"
-                      ? "Спорный ответ: кто-то получил в банке другой"
-                      : "Ответ решён нами и с банком не сверен"}
+                    ? "Сверен с банком" + (key.fipiOk > 1 ? ", подтвердили " + key.fipiOk : "")
+                    : key.state === "agreed"
+                      ? "Ответ сошёлся у " + key.agree + " " + peopleWord(key.agree) + " — похоже, ключ верный"
+                      : key.state === "disputed"
+                        ? key.fipiBad
+                          ? "Спорный: банк ответил иначе"
+                          : "Спорный: чаще отвечают «" + (key.rival ? key.rival.answer : "") + "»"
+                        : "Решён нами, не сверен" +
+                          (key.agree > 1 ? " · сошёлся у " + key.agree : "") +
+                          " · нужно ещё " + key.need}
                 </div>
                 <p style={S.keyNote}>
-                  Банк правильный ответ не показывает — он только говорит «верно» или «неверно».
-                  Если проверишь это задание на сайте, отметь, что получилось: так ключ станет надёжнее для всех.
+                  {key.state === "confirmed"
+                    ? "Банк с этим ответом согласился — ключ надёжный."
+                    : "Банк правильный ответ не показывает: он только говорит «верно» или «неверно». " +
+                      "Ключ считается проверенным, когда его подтвердит банк или когда " + AGREE_NEEDED +
+                      " человека независимо ответят так же."}
                 </p>
+                {key.state !== "confirmed" && (
+                  <p style={S.ask}>
+                    Загляни в банк и перепроверь: найди там задание <b>№ {task.id}</b>, введи свой ответ
+                    и нажми «Ответить» — потом отметь здесь, что вышло. Это минута, а ключ станет надёжным для всех.
+                  </p>
+                )}
                 <div style={S.keyButtons}>
                   <button
-                    onClick={() => onMark({ taskId: task.id, kind: "ok" })}
+                    onClick={() => mark("ok")}
                     className="ap-row"
                     style={{ ...S.keyBtn, ...(myMark && myMark.kind === "ok" ? S.keyBtnOn : null) }}
                   >
                     Сверил — банк согласен
                   </button>
                   <button
-                    onClick={() => onMark({ taskId: task.id, kind: "wrong" })}
+                    onClick={() => mark("wrong")}
                     className="ap-row"
                     style={{ ...S.keyBtn, ...(myMark && myMark.kind === "wrong" ? S.keyBtnOn : null) }}
                   >
@@ -328,6 +383,10 @@ const S = {
   keyOk: { borderColor: "var(--green)", color: "var(--ink2)" },
   keyBad: { borderColor: "var(--redLine)", background: "var(--redBg)", color: "var(--ink2)" },
   keyNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "8px 0 9px" },
+  ask: {
+    fontSize: 13, lineHeight: 1.55, color: "var(--ink2)", margin: "0 0 10px",
+    borderLeft: "3px solid var(--warmLine)", paddingLeft: 10,
+  },
   keyButtons: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
   keyBtn: {
     border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 8,

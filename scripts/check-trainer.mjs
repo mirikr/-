@@ -95,6 +95,8 @@ want("неверный ответ распознан", /Неверно/.test(aft
 want("показан правильный ответ", afterWrong.includes(task.answer));
 want("показан разбор", afterWrong.includes(task.why.slice(0, 20)));
 want("ключ помечен как несверенный", /не сверен/i.test(afterWrong));
+want("сказано, скольких совпадений не хватает", /нужно ещё \d/.test(afterWrong), (afterWrong.match(/нужно ещё \d/) || [])[0]);
+want("есть просьба перепроверить в банке", /перепроверь/i.test(afterWrong) && afterWrong.includes(shownId));
 
 // Отметки о сверке: подтверждение и жалоба меняют плашку.
 await page.getByRole("button", { name: /Сверил/ }).click();
@@ -103,7 +105,7 @@ want("подтверждение отмечается", /сверен с бан�
 await page.getByRole("button", { name: /В банке другой ответ/ }).click();
 await page.waitForTimeout(250);
 const disputedText = await page.locator("#root").innerText();
-want("жалоба делает ключ спорным", /Спорный ответ/i.test(disputedText));
+want("жалоба делает ключ спорным", /Спорный: банк ответил иначе/i.test(disputedText));
 want("спорный ключ попал в список", /Спорные ключи/i.test(disputedText));
 
 // Верный ответ следующего задания.

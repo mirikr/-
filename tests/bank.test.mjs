@@ -1,5 +1,5 @@
 // Сверка ответов в тренажёре и целость набора заданий.
-import { isRight, keyState, normalizeAnswer, streakOf, timeWord, trainerStats } from "../src/bank-answer.js";
+import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, streakOf, timeWord, trainerStats } from "../src/bank-answer.js";
 import { BANK_TASKS, BANK_SECTIONS } from "../src/fipi-bank.js";
 
 let bad = 0;
@@ -49,6 +49,40 @@ ok(stats.done === 2 && stats.right === 2 && stats.percent === 100, "итоги �
 ok(stats.averageSeconds === 30, "среднее время 30 с, вышло " + stats.averageSeconds);
 ok(streakOf(log) === 2 && streakOf([{ ok: true }, { ok: false }]) === 0, "серия считается с конца журнала");
 ok(timeWord(75) === "1:15" && timeWord(42) === "42 с", "время читается по-человечески");
+
+// --- согласие класса ------------------------------------------------------
+const vote = (userId, taskId, answer, matches, fipi) => ({ userId, taskId, answer, matches, fipi: fipi || "" });
+
+ok(consensus([], "A").state === "unverified", "без голосов ключ несверенный");
+ok(consensus([vote("u1", "A", "60", true), vote("u2", "A", "60", true)], "A").state === "unverified",
+  "двух совпадений мало");
+const three = consensus([vote("u1", "A", "60", true), vote("u2", "A", "60", true), vote("u3", "A", "60", true)], "A");
+ok(three.state === "agreed" && three.agree === 3, "трое порознь ответили так же — ключу верим");
+ok(three.need === 0, "когда набралось, просить больше не надо");
+ok(consensus([vote("u1", "A", "60", true)], "A").need === AGREE_NEEDED - 1, "видно, скольких не хватает");
+
+// Слово банка весомее любого числа совпадений.
+const many = [vote("u1", "A", "60", true), vote("u2", "A", "60", true), vote("u3", "A", "60", true), vote("u4", "A", "55", false, "wrong")];
+ok(consensus(many, "A").state === "disputed", "банк против — ключ спорный, сколько бы ни сошлось");
+ok(consensus([vote("u1", "A", "60", true, "ok")], "A").state === "confirmed", "подтверждение банка важнее числа голосов");
+
+// Сговорившееся большинство с другим ответом — тоже повод усомниться.
+const rivals = [vote("u1", "A", "60", true), vote("u2", "A", "45", false), vote("u3", "A", "45", false)];
+const r = consensus(rivals, "A");
+ok(r.state === "disputed" && r.rival.answer === "45" && r.rival.count === 2, "двое с одинаковым другим ответом делают ключ спорным");
+ok(consensus([vote("u1", "A", "60", true), vote("u2", "A", "45", false)], "A").state === "unverified",
+  "один несовпавший ответ ещё не спор");
+ok(consensus([vote("u1", "B", "60", true), vote("u2", "B", "60", true), vote("u3", "B", "60", true)], "A").state === "unverified",
+  "голоса по чужому заданию не считаются");
+
+// Свой голос собирается из своих же записей.
+const mine = myVote(
+  [{ taskId: "A", answer: "58", ok: false }, { taskId: "A", answer: "60", ok: true }],
+  [{ taskId: "A", kind: "ok" }],
+  "A"
+);
+ok(mine.answer === "60" && mine.matches === true, "свой голос берётся из последней попытки");
+ok(mine.fipi === "ok", "своя отметка о сверке попадает в голос");
 
 console.log(bad ? "\nпровалов: " + bad : "\nвсе проверки банка прошли");
 process.exit(bad ? 1 : 0);

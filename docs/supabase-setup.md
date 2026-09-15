@@ -43,6 +43,41 @@ create policy "planner_kv принадлежит владельцу"
 ложится и всё состояние планировщика (ключ `planner-state-v5`), и каждый
 прикреплённый к домашнему заданию файл (ключи `hwfile-*`).
 
+### Копилка ответов тренажёра
+
+Вторая таблица из `supabase/schema.sql` — общая. Правильных ответов банк ФИПИ не
+отдаёт, поэтому ключи в приложении решены нами, а проверяются сообща: если трое
+независимо ответили так же, как записано у нас, ключу можно верить; если банк
+кому-то ответил иначе, ключ помечается спорным.
+
+```sql
+create table if not exists public.bank_answers (
+  task_id    text        not null,
+  user_id    uuid        not null references auth.users on delete cascade,
+  answer     text        not null,
+  matches    boolean     not null default false,
+  fipi       text        not null default '',
+  updated_at timestamptz not null default now(),
+  primary key (task_id, user_id)
+);
+
+alter table public.bank_answers enable row level security;
+
+-- Читают все вошедшие: это и есть общий счёт голосов.
+create policy "bank_answers виден всем вошедшим"
+  on public.bank_answers for select to authenticated using (true);
+
+-- Пишет каждый только свою строку: чужой голос подделать нельзя.
+create policy "bank_answers пишет только владелец строки"
+  on public.bank_answers for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+```
+
+В отличие от `planner_kv`, строки этой таблицы видят друг у друга все вошедшие —
+иначе «трое из четверых» не посчитать. Ничего личного там не хранится: номер
+задания, ответ и отметка о сверке. Без этой таблицы тренажёр работает по-прежнему,
+просто счёт голосов будет только свой.
+
 ## 2.5 Создать бакеты для файлов и календаря
 
 Там же, в **SQL Editor**, выполните `supabase/storage.sql` (бакет `attachments`
@@ -61,6 +96,7 @@ create policy "planner_kv принадлежит владельцу"
 > устройства или при обновлении) не проходит, потому что хранилище не находит
 > запись и пробует вставить новую поверх. В конце файла запрос-проверка: он
 > должен вернуть четыре строки — видеть, создавать, обновлять, удалять.
+
 
 ## 3. Включить вход по паролю
 

@@ -34,6 +34,63 @@ export function isRight(task, value) {
   });
 }
 
+// Сколько независимых совпадений нужно, чтобы поверить ключу без банка.
+// Четверо в классе — значит трое, сошедшихся порознь, это уже не случайность.
+export const AGREE_NEEDED = 3;
+
+// Состояние ключа по общим голосам. Голос — это ответ одного человека на одно
+// задание: сошёлся он с нашим ключом или нет, и что сказал банк, если человек
+// сходил проверить.
+//
+// Слово банка весомее любого числа совпадений: если банк ответил иначе, ключ
+// спорный, сколько бы человек ни решили так же. И наоборот — сговорившееся
+// большинство с одинаковым неверным ответом не должно объявляться истиной,
+// поэтому «сошлось у троих» и «подтверждено банком» — разные состояния.
+export function consensus(votes, taskId) {
+  let agree = 0;
+  let fipiOk = 0;
+  let fipiBad = 0;
+  const rivals = new Map();
+
+  (votes || []).forEach((v) => {
+    if (v.taskId !== taskId) return;
+    if (v.fipi === "ok") fipiOk += 1;
+    if (v.fipi === "wrong") fipiBad += 1;
+    if (v.matches) {
+      agree += 1;
+    } else if (v.answer) {
+      const key = normalizeAnswer(v.answer);
+      if (key) rivals.set(key, { answer: v.answer, count: (rivals.get(key) ? rivals.get(key).count : 0) + 1 });
+    }
+  });
+
+  let rival = null;
+  rivals.forEach((r) => {
+    if (!rival || r.count > rival.count) rival = r;
+  });
+
+  let state = "unverified";
+  if (fipiBad) state = "disputed";
+  else if (fipiOk) state = "confirmed";
+  else if (rival && rival.count >= 2 && rival.count > agree) state = "disputed";
+  else if (agree >= AGREE_NEEDED) state = "agreed";
+
+  return { state, agree, fipiOk, fipiBad, rival, need: Math.max(0, AGREE_NEEDED - agree) };
+}
+
+// Свой голос: последний ответ на задание и отметка о сверке с банком.
+export function myVote(log, marks, taskId) {
+  let answer = "";
+  let matches = false;
+  (log || []).forEach((a) => {
+    if (a.taskId !== taskId) return;
+    answer = a.answer || "";
+    matches = !!a.ok;
+  });
+  const mark = (marks || []).find((m) => m.taskId === taskId);
+  return { taskId, userId: "я", answer, matches, fipi: mark ? mark.kind : "" };
+}
+
 export const KEY_STATE = {
   unverified: { label: "не сверен с ФИПИ", tone: "warn" },
   confirmed: { label: "сверен с ФИПИ", tone: "ok" },
