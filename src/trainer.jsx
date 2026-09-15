@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BANK_SOURCE, BANK_TASKS, BANK_URL } from "./fipi-bank.js";
+import { BANK_SECTIONS, BANK_SOURCE, BANK_SUBJECTS, BANK_TASKS, BANK_URL } from "./fipi-bank.js";
 import { AGREE_NEEDED, consensus, isRight, myVote, streakOf, timeWord, trainerStats } from "./bank-answer.js";
 import { loadVotes, myUserId, saveVote } from "./bank-votes.js";
 
@@ -60,6 +60,7 @@ function useStopwatch(taskId) {
 }
 
 export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
+  const [subject, setSubject] = useState(BANK_SUBJECTS[0] || "");
   const [section, setSection] = useState("");
   const [onlyNew, setOnlyNew] = useState(true);
   // Какое задание на экране. Держим именно его, а не позицию в списке: стоит
@@ -83,13 +84,8 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     };
   }, []);
 
-  const sections = useMemo(() => {
-    const seen = [];
-    BANK_TASKS.forEach((t) => {
-      if (!seen.includes(t.section)) seen.push(t.section);
-    });
-    return seen;
-  }, []);
+  const sections = (BANK_SECTIONS[subject] || []).slice().sort((a, b) => a.localeCompare(b, "ru"));
+  const mine = useMemo(() => BANK_TASKS.filter((t) => t.subject === subject), [subject]);
 
   // Что человек уже одолел: по последней попытке, тренируются ведь до победы.
   const solved = useMemo(() => {
@@ -101,13 +97,13 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   }, [log]);
 
   const queue = useMemo(() => {
-    return BANK_TASKS.filter((t) => (!section || t.section === section) && (!onlyNew || !solved.has(t.id)));
-  }, [section, onlyNew, solved]);
+    return mine.filter((t) => (!section || t.section === section) && (!onlyNew || !solved.has(t.id)));
+  }, [mine, section, onlyNew, solved]);
 
   const task = (currentId && BANK_TASKS.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
 
-  const stats = useMemo(() => trainerStats(log, null), [log]);
+  const stats = useMemo(() => trainerStats(log, new Set(mine.map((t) => t.id))), [log, mine]);
   const streak = streakOf(log);
   const myMark = task ? (marks || []).find((m) => m.taskId === task.id) : null;
 
@@ -157,6 +153,14 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     setCurrentId(pick ? pick.id : "");
   }
 
+  function pickSubject(name) {
+    setSubject(name);
+    setSection("");
+    setCurrentId("");
+    setResult(null);
+    setValue("");
+  }
+
   function pickSection(name) {
     setSection(name);
     setCurrentId("");
@@ -171,9 +175,30 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
       <section className="ap-card" style={styles.card}>
         <div style={styles.cardTitle}>Тренажёр по банку ФИПИ</div>
         <p style={styles.cardNote}>
-          Условия взяты из открытого банка заданий ЕГЭ по физике. У каждого задания подписан его номер —
+          Условия взяты из открытого банка заданий ЕГЭ. У каждого задания подписан его номер —
           по нему задание находится в самом банке. Время засекается настоящим секундомером, а не прикидкой.
         </p>
+
+        <div style={S.alpha}>
+          <b>Это альфа-версия, и ответы здесь решены нами, а не взяты у ФИПИ</b> — банк правильный ответ не
+          показывает. Значит, ошибки в ключах не исключение, а дело времени. Если банк ответил не так, как
+          приложение, — жми «В банке другой ответ». Такая отметка сейчас важнее любого решённого задания:
+          по ней ключи и становятся надёжными.
+        </div>
+
+        <div style={S.chips}>
+          {BANK_SUBJECTS.map((name) => (
+            <button
+              key={name}
+              onClick={() => pickSubject(name)}
+              className="ap-row"
+              style={{ ...S.subject, ...(subject === name ? S.subjectOn : null) }}
+            >
+              {name}
+              <span style={S.chipCount}>{BANK_TASKS.filter((t) => t.subject === name).length}</span>
+            </button>
+          ))}
+        </div>
 
         <div style={S.chips}>
           <button onClick={() => pickSection("")} className="ap-row" style={{ ...S.chip, ...(section ? null : S.chipOn) }}>
@@ -187,7 +212,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
               style={{ ...S.chip, ...(section === name ? S.chipOn : null) }}
             >
               {name}
-              <span style={S.chipCount}>{BANK_TASKS.filter((t) => t.section === name).length}</span>
+              <span style={S.chipCount}>{mine.filter((t) => t.section === name).length}</span>
             </button>
           ))}
         </div>
@@ -213,6 +238,16 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
             {task.kes && <div style={S.kes}>{task.kes}</div>}
             {task.lead && <div style={S.lead}>{task.lead}</div>}
             <div style={S.text}>{task.text}</div>
+            {task.pictures.map((p, i) => (
+              <img
+                key={i}
+                src={p.data}
+                alt={"Рисунок к заданию " + task.id}
+                style={S.picture}
+                width={p.w || undefined}
+                height={p.h || undefined}
+              />
+            ))}
 
             <div style={S.answerRow}>
               <input
@@ -248,6 +283,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
                   </div>
                 )}
                 <div style={S.why}>{task.why}</div>
+                {task.sure && <div style={S.doubt}>Уверенность в ключе неполная — {task.sure}</div>}
               </div>
             )}
 
@@ -341,6 +377,21 @@ const S = {
   chipOn: { background: "var(--ink)", color: "var(--bg)", borderColor: "var(--ink)", fontWeight: 600 },
   chipCount: { fontSize: 11.5, opacity: 0.7 },
   only: { display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, color: "var(--ink3)", marginBottom: 14 },
+  subject: {
+    display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--line)",
+    background: "var(--panel)", color: "var(--ink2)", borderRadius: 10, padding: "8px 15px",
+    font: "inherit", fontSize: 14.5, cursor: "pointer",
+  },
+  subjectOn: { background: "var(--btnBg)", color: "var(--btnInk)", borderColor: "var(--btnBg)", fontWeight: 600 },
+  alpha: {
+    border: "1px solid var(--warmLine)", background: "var(--warmBg)", color: "var(--warmInk)",
+    borderRadius: 10, padding: "11px 14px", fontSize: 13.5, lineHeight: 1.55, marginBottom: 14,
+  },
+  picture: {
+    display: "block", maxWidth: "100%", height: "auto", margin: "0 0 12px",
+    background: "#fff", border: "1px solid var(--line2)", borderRadius: 8, padding: 6,
+  },
+  doubt: { marginTop: 7, fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5 },
 
   task: { border: "1px solid var(--line2)", borderRadius: 12, padding: "14px 15px", background: "var(--panel2)" },
   head: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 },

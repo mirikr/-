@@ -81,6 +81,9 @@ want("секундомер идёт", secs(second) > secs(first), first + " → 
 const shownId = (head.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
 const bank = await import("../src/fipi-bank.js");
 const task = bank.BANK_TASKS.find((t) => t.id === shownId);
+want("в наборе три предмета", bank.BANK_SUBJECTS.length === 3, bank.BANK_SUBJECTS.join(", "));
+want("сказано, что это альфа и ключи наши", /альфа-верс/i.test(head) && /решены нами/i.test(head));
+want("просьба жать «В банке другой ответ» на виду", /В банке другой ответ/.test(head));
 want("задание из набора", !!task, shownId);
 
 // Неверный ответ: приложение должно сказать «Неверно», показать ключ и разбор.
@@ -141,6 +144,35 @@ want("попытки сохранились", saved.log === 2, "записей: 
 want("отметка о ключе сохранилась", saved.marks === 1, "отметок: " + saved.marks);
 const afterReload = await page.locator("#root").innerText();
 want("итоги на месте после перезагрузки", /прорешано/.test(afterReload) && /Спорные ключи/.test(afterReload));
+
+// Предметы переключаются, и набор меняется.
+for (const name of bank.BANK_SUBJECTS.slice(1)) {
+  await page.getByRole("button", { name: new RegExp("^" + name) }).first().click();
+  await page.waitForTimeout(400);
+  const t = await card.innerText();
+  const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+  const found = bank.BANK_TASKS.find((x) => x.id === id);
+  want("предмет «" + name + "» открывается", !!found && found.subject === name, id + " → " + (found ? found.subject : "не нашлось"));
+}
+
+// Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
+await page.getByRole("button", { name: /^Физика/ }).first().click();
+await page.waitForTimeout(400);
+const withPictures = new Set(bank.BANK_TASKS.filter((t) => t.subject === "Физика" && t.pictures.length).map((t) => t.id));
+want("в наборе есть задания с рисунками", withPictures.size > 0, withPictures.size + " шт.");
+let shownPicture = 0;
+for (let step = 0; step < 40; step += 1) {
+  const t = await card.innerText();
+  const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+  if (withPictures.has(id)) {
+    shownPicture = await page.evaluate(() => [...document.querySelectorAll("section.ap-card img")]
+      .filter((i) => i.currentSrc.startsWith("data:image") && i.naturalWidth > 10).length);
+    break;
+  }
+  await page.getByRole("button", { name: "Пропустить" }).click();
+  await page.waitForTimeout(120);
+}
+want("рисунок задания виден на экране", shownPicture > 0, "картинок в карточке: " + shownPicture);
 
 // Телефон: карточка не должна разъезжаться вбок.
 await page.setViewportSize({ width: 390, height: 780 });

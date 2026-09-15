@@ -1,6 +1,6 @@
 // Сверка ответов в тренажёре и целость набора заданий.
 import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, streakOf, timeWord, trainerStats } from "../src/bank-answer.js";
-import { BANK_TASKS, BANK_SECTIONS } from "../src/fipi-bank.js";
+import { BANK_TASKS, BANK_SECTIONS, BANK_SUBJECTS } from "../src/fipi-bank.js";
 
 let bad = 0;
 const ok = (cond, msg) => {
@@ -14,7 +14,11 @@ ok(new Set(BANK_TASKS.map((t) => t.id)).size === BANK_TASKS.length, "номер�
 ok(BANK_TASKS.every((t) => t.text && t.text.length > 40), "у каждого задания есть условие");
 ok(BANK_TASKS.every((t) => t.answer && String(t.answer).trim()), "у каждого задания есть ответ");
 ok(BANK_TASKS.every((t) => t.why && t.why.length > 5), "у каждого задания есть разбор");
-ok(BANK_TASKS.every((t) => BANK_SECTIONS.includes(t.section)), "раздел каждого задания из общего списка");
+ok(BANK_TASKS.every((t) => BANK_SUBJECTS.includes(t.subject)), "предмет каждого задания из общего списка");
+ok(BANK_TASKS.every((t) => (BANK_SECTIONS[t.subject] || []).includes(t.section)), "раздел каждого задания принадлежит его предмету");
+ok(BANK_SUBJECTS.every((s) => BANK_TASKS.some((t) => t.subject === s)), "в каждом предмете есть задания");
+ok(BANK_TASKS.every((t) => (t.pictures || []).every((p) => String(p.data || "").startsWith("data:image/"))),
+  "картинки лежат внутри набора, а не ссылками на чужой сайт");
 ok(BANK_TASKS.every((t) => /^[0-9A-Za-zА-Яа-я]{5,8}$/.test(t.id)), "номер задания выглядит как номер банка");
 // Служебные строки банка в условие попасть не должны.
 const dirty = BANK_TASKS.filter((t) => /НЕ РЕШЕНО|СВОЙСТВА ЗАДАНИЯ|Номер:|ОТВЕТИТЬ/i.test(t.text));
