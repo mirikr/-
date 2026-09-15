@@ -129,6 +129,21 @@ want("разбор от своего задания", afterRight.includes(nextTa
 const stats = await page.locator("#root").innerText();
 want("в итогах учтены попытки", /прорешано/.test(stats) && /подряд верно/.test(stats));
 
+// Итоги должны относиться к выбранному предмету, а не ко всему сразу.
+const firstSubject = bank.BANK_SUBJECTS[0];
+want("в заголовке итогов назван предмет", stats.toLowerCase().includes("как идут дела · " + firstSubject.toLowerCase()),
+  (stats.match(/Как идут дела[^\n]*/) || [])[0]);
+const otherSubject = bank.BANK_SUBJECTS[1];
+await page.getByRole("button", { name: new RegExp("^" + otherSubject) }).first().click();
+await page.waitForTimeout(400);
+const otherStats = await page.locator("#root").innerText();
+const done = (otherStats.match(/(\d+)\s*\nпрорешано/) || [])[1];
+want("у другого предмета свои итоги", done === "0", otherSubject + ": прорешано " + done);
+want("списки жалоб тоже по предмету", !/Спорные ключи/.test(otherStats) && !/Задания, на которые пожаловались/.test(otherStats));
+await page.getByRole("button", { name: new RegExp("^" + firstSubject) }).first().click();
+await page.waitForTimeout(400);
+want("у своего предмета итоги на месте", /Спорные ключи/.test(await page.locator("#root").innerText()));
+
 // Самое важное: прогресс должен пережить перезагрузку.
 await page.waitForTimeout(1200);
 await page.reload();

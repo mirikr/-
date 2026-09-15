@@ -103,8 +103,12 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const task = (currentId && BANK_TASKS.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
 
-  const stats = useMemo(() => trainerStats(log, new Set(mine.map((t) => t.id))), [log, mine]);
-  const streak = streakOf(log);
+  // Всё, что показано внизу, считается по выбранному предмету: перемешивать
+  // физику с обществознанием бессмысленно — ни серия, ни доля верных так ничего
+  // не значат.
+  const mineIds = useMemo(() => new Set(mine.map((t) => t.id)), [mine]);
+  const stats = useMemo(() => trainerStats(log, mineIds), [log, mineIds]);
+  const streak = useMemo(() => streakOf((log || []).filter((a) => mineIds.has(a.taskId))), [log, mineIds]);
   const myMark = task ? (marks || []).find((m) => m.taskId === task.id && (m.kind === "ok" || m.kind === "wrong")) : null;
   const myBroken = task ? (marks || []).find((m) => m.taskId === task.id && m.kind === "broken") : null;
 
@@ -119,22 +123,22 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const broken = useMemo(() => {
     const out = [];
     (marks || []).forEach((m) => {
-      if (m.kind !== "broken") return;
+      if (m.kind !== "broken" || !mineIds.has(m.taskId)) return;
       const t = BANK_TASKS.find((x) => x.id === m.taskId);
       if (t && !out.some((x) => x.id === t.id)) out.push(t);
     });
     return out;
-  }, [marks]);
+  }, [marks, mineIds]);
 
   const disputed = useMemo(() => {
     const out = [];
     (marks || []).forEach((m) => {
-      if (m.kind !== "wrong") return;
+      if (m.kind !== "wrong" || !mineIds.has(m.taskId)) return;
       const t = BANK_TASKS.find((x) => x.id === m.taskId);
       if (t && !out.some((x) => x.task.id === t.id)) out.push({ task: t, mark: m });
     });
     return out;
-  }, [marks]);
+  }, [marks, mineIds]);
 
   function answer() {
     if (!task || result) return;
@@ -357,7 +361,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
       </section>
 
       <section className="ap-card" style={styles.card}>
-        <div style={styles.cardTitle}>Как идут дела</div>
+        <div style={styles.cardTitle}>Как идут дела · {subject.toLowerCase()}</div>
         <div style={S.stats}>
           <div style={S.stat}><span style={S.statValue}>{stats.done}</span><span style={S.statName}>прорешано</span></div>
           <div style={S.stat}><span style={S.statValue}>{stats.percent}%</span><span style={S.statName}>верных</span></div>
@@ -385,7 +389,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
             {broken.map((t) => (
               <div key={t.id} style={S.disputedRow}>
                 <span style={S.code}>№ {t.id}</span>
-                <span style={S.disputedText}>{t.subject} · {t.text.slice(0, 70)}…</span>
+                <span style={S.disputedText}>{t.text.slice(0, 80)}…</span>
               </div>
             ))}
           </div>

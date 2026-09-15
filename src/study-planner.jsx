@@ -2130,8 +2130,9 @@ export default function StudyPlanner() {
   }
 
   const trainerSolved = useMemo(() => {
+    const known = new Set(BANK_TASKS.map((t) => t.id));
     const last = new Map();
-    trainerLog.forEach((a) => last.set(a.taskId, a.ok));
+    trainerLog.forEach((a) => known.has(a.taskId) && last.set(a.taskId, a.ok));
     let n = 0;
     last.forEach((ok) => ok && (n += 1));
     return n;
