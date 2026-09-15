@@ -37,9 +37,15 @@ create table if not exists public.bank_answers (
   answer     text        not null,
   matches    boolean     not null default false,
   fipi       text        not null default '',
+  -- Ответ, который засчитал сам банк ФИПИ: его присылает тот, кто сходил
+  -- проверить задание. По нему мы и правим ключи.
+  fipi_answer text       not null default '',
   updated_at timestamptz not null default now(),
   primary key (task_id, user_id)
 );
+
+-- Столбец появился позже самой таблицы: у тех, кто завёл её раньше, его нет.
+alter table public.bank_answers add column if not exists fipi_answer text not null default '';
 
 alter table public.bank_answers enable row level security;
 

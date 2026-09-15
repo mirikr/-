@@ -57,9 +57,13 @@ create table if not exists public.bank_answers (
   answer     text        not null,
   matches    boolean     not null default false,
   fipi       text        not null default '',
+  fipi_answer text       not null default '',
   updated_at timestamptz not null default now(),
   primary key (task_id, user_id)
 );
+
+-- Столбец с ответом банка добавился позже: у таблицы, заведённой раньше, его нет.
+alter table public.bank_answers add column if not exists fipi_answer text not null default '';
 
 alter table public.bank_answers enable row level security;
 
@@ -75,7 +79,7 @@ create policy "bank_answers пишет только владелец строк�
 
 В отличие от `planner_kv`, строки этой таблицы видят друг у друга все вошедшие —
 иначе «трое из четверых» не посчитать. Ничего личного там не хранится: номер
-задания, ответ и отметка о сверке. Без этой таблицы тренажёр работает по-прежнему,
+задания, ответ, отметка о сверке и ответ, который засчитал сам банк. Без этой таблицы тренажёр работает по-прежнему,
 просто счёт голосов будет только свой.
 
 ## 2.5 Создать бакеты для файлов и календаря

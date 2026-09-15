@@ -83,7 +83,7 @@ const bank = await import("../src/fipi-bank.js");
 const task = bank.BANK_TASKS.find((t) => t.id === shownId);
 want("в наборе три предмета", bank.BANK_SUBJECTS.length === 3, bank.BANK_SUBJECTS.join(", "));
 want("сказано, что это альфа и ключи наши", /альфа-верс/i.test(head) && /решены нами/i.test(head));
-want("просьба жать «В банке другой ответ» на виду", /В банке другой ответ/.test(head));
+want("просьба прислать ответ из банка на виду", /который банк засчитал/i.test(head));
 want("задание из набора", !!task, shownId);
 
 // Неверный ответ: приложение должно сказать «Неверно», показать ключ и разбор.
@@ -99,13 +99,33 @@ want("показан правильный ответ", afterWrong.includes(task.
 want("показан разбор", afterWrong.includes(task.why.slice(0, 20)));
 want("ключ помечен как несверенный", /не сверен/i.test(afterWrong));
 want("сказано, скольких совпадений не хватает", /нужно ещё \d/.test(afterWrong), (afterWrong.match(/нужно ещё \d/) || [])[0]);
-want("есть просьба перепроверить в банке", /перепроверь/i.test(afterWrong) && afterWrong.includes(shownId));
+want("сказано, что делать в банке", /найди задание/i.test(afterWrong) && afterWrong.includes(shownId));
+
+// Главное, ради чего всё затевалось: человек переписывает ответ, который засчитал
+// банк, и этот ответ закрепляется за заданием.
+const bankField = page.getByLabel("Ответ, который засчитал банк ФИПИ");
+want("есть поле для ответа с ФИПИ", await bankField.count() === 1);
+await bankField.fill("такого ответа нет");
+await page.getByRole("button", { name: "Отправить" }).click();
+await page.waitForTimeout(250);
+const afterSend = await card.innerText();
+want("ответ с ФИПИ записан", /Ответ с ФИПИ записан/i.test(afterSend) && afterSend.includes("такого ответа нет"));
+want("видно, что он расходится с ключом", /расходится с нашим ключом/i.test(afterSend));
+want("ключ стал спорным по ответу банка", /Спорный: на ФИПИ засчитан ответ/i.test(afterSend));
+const collected = await page.locator("#root").innerText();
+want("ответ попал в список для сверки", /Ответы с ФИПИ — собрано 1/i.test(collected));
+want("в списке видно оба ответа", collected.includes("ФИПИ: такого ответа нет"));
+
+// Отменить и вписать заново — поле возвращается.
+await page.getByRole("button", { name: /Отменить и вписать заново/ }).click();
+await page.waitForTimeout(250);
+want("после отмены поле вернулось", await page.getByLabel("Ответ, который засчитал банк ФИПИ").count() === 1);
 
 // Отметки о сверке: подтверждение и жалоба меняют плашку.
-await page.getByRole("button", { name: /Сверил/ }).click();
+await page.getByRole("button", { name: /Банк засчитал наш ответ/ }).click();
 await page.waitForTimeout(250);
 want("подтверждение отмечается", /сверен с банком/i.test(await card.innerText()));
-await page.getByRole("button", { name: /В банке другой ответ/ }).click();
+await page.getByRole("button", { name: /В банке ответ другой/ }).click();
 await page.waitForTimeout(250);
 const disputedText = await page.locator("#root").innerText();
 want("жалоба делает ключ спорным", /Спорный: банк ответил иначе/i.test(disputedText));

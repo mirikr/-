@@ -140,5 +140,23 @@ const mine = myVote(
 ok(mine.answer === "60" && mine.matches === true, "свой голос берётся из последней попытки");
 ok(mine.fipi === "ok", "своя отметка о сверке попадает в голос");
 
+// --- ответ, списанный с ФИПИ -----------------------------------------------
+// Ради него всё и затевалось: человек переписывает ответ, который засчитал банк,
+// и по этому ответу ключ либо подтверждается, либо правится.
+const withBank = (userId, taskId, answer, matches, fipi, fipiAnswer) =>
+  ({ userId, taskId, answer, matches, fipi, fipiAnswer });
+const fromBank = consensus([withBank("u1", "A", "45", false, "wrong", "45")], "A");
+ok(fromBank.state === "disputed", "присланный с ФИПИ другой ответ делает ключ спорным");
+ok(fromBank.fipiAnswer && fromBank.fipiAnswer.answer === "45", "видно, какой ответ засчитал банк");
+const agreedBank = consensus([withBank("u1", "A", "60", true, "ok", "60")], "A");
+ok(agreedBank.state === "confirmed" && agreedBank.fipiAnswer.answer === "60",
+  "совпавший ответ с ФИПИ подтверждает ключ");
+const bothFromBank = consensus(
+  [withBank("u1", "A", "45", false, "wrong", "45"), withBank("u2", "A", "45", false, "wrong", "45")], "A");
+ok(bothFromBank.fipiAnswer.count === 2, "одинаковые ответы с ФИПИ считаются вместе");
+ok(!consensus([withBank("u1", "A", "60", true)], "A").fipiAnswer, "без ответа с ФИПИ поле пустое");
+const mineBank = myVote([{ taskId: "A", answer: "45", ok: false }], [{ taskId: "A", kind: "wrong", fipiAnswer: "45" }], "A");
+ok(mineBank.fipiAnswer === "45", "свой ответ с ФИПИ попадает в голос");
+
 console.log(bad ? "\nпровалов: " + bad : "\nвсе проверки банка прошли");
 process.exit(bad ? 1 : 0);

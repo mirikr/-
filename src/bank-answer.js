@@ -51,11 +51,17 @@ export function consensus(votes, taskId) {
   let fipiOk = 0;
   let fipiBad = 0;
   const rivals = new Map();
+  // Ответ, который засчитал сам банк: его присылают те, кто сходил проверить.
+  const fromBank = new Map();
 
   (votes || []).forEach((v) => {
     if (v.taskId !== taskId) return;
     if (v.fipi === "ok") fipiOk += 1;
     if (v.fipi === "wrong") fipiBad += 1;
+    if (v.fipiAnswer) {
+      const key = normalizeAnswer(v.fipiAnswer);
+      if (key) fromBank.set(key, { answer: v.fipiAnswer, count: (fromBank.get(key) ? fromBank.get(key).count : 0) + 1 });
+    }
     if (v.matches) {
       agree += 1;
     } else if (v.answer) {
@@ -68,6 +74,10 @@ export function consensus(votes, taskId) {
   rivals.forEach((r) => {
     if (!rival || r.count > rival.count) rival = r;
   });
+  let fipiAnswer = null;
+  fromBank.forEach((r) => {
+    if (!fipiAnswer || r.count > fipiAnswer.count) fipiAnswer = r;
+  });
 
   let state = "unverified";
   if (fipiBad) state = "disputed";
@@ -75,7 +85,7 @@ export function consensus(votes, taskId) {
   else if (rival && rival.count >= 2 && rival.count > agree) state = "disputed";
   else if (agree >= AGREE_NEEDED) state = "agreed";
 
-  return { state, agree, fipiOk, fipiBad, rival, need: Math.max(0, AGREE_NEEDED - agree) };
+  return { state, agree, fipiOk, fipiBad, rival, fipiAnswer, need: Math.max(0, AGREE_NEEDED - agree) };
 }
 
 // Свой голос: последний ответ на задание и отметка о сверке с банком.
@@ -89,7 +99,14 @@ export function myVote(log, marks, taskId) {
   });
   // Жалоба на само задание («криво показано») к ключу отношения не имеет.
   const mark = (marks || []).find((m) => m.taskId === taskId && (m.kind === "ok" || m.kind === "wrong"));
-  return { taskId, userId: "я", answer, matches, fipi: mark ? mark.kind : "" };
+  return {
+    taskId,
+    userId: "я",
+    answer,
+    matches,
+    fipi: mark ? mark.kind : "",
+    fipiAnswer: (mark && mark.fipiAnswer) || "",
+  };
 }
 
 export const KEY_STATE = {
