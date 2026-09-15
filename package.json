@@ -1,11 +1,7 @@
 {
   "name": "study-planner",
   "private": true,
-<<<<<<< HEAD
   "version": "0.9.1",
-=======
-  "version": "0.9.0",
->>>>>>> origin/main
   "type": "module",
   "description": "Ежедневник обществоведа — планировщик подготовки к экзамену и олимпиаде",
   "scripts": {
