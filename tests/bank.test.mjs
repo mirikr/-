@@ -31,6 +31,28 @@ const remote = BANK_TASKS.filter((t) => /<img[^>]+src=["'](?!data:)/i.test(t.bod
 ok(remote.length === 0, "все картинки вшиты, чужих ссылок нет" + (remote.length ? ": " + remote[0].id : ""));
 ok(BANK_TASKS.filter((t) => /<table/.test(t.body)).length > 100, "таблицы в условиях сохранены");
 
+// Однажды вместе с полями ввода из разметки вылетала вся таблица, а с ней —
+// все варианты ответа: на экране оставался один вопрос без списка.
+const plainOf = (html) => String(html).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+const lost = BANK_TASKS.filter((t) => {
+  const inText = t.text.replace(/\s+/g, " ").trim().length;
+  return inText > 120 && plainOf(t.body).length < inText * 0.75;
+});
+ok(lost.length === 0, "разметка не потеряла текст условия" + (lost.length ? ": " + lost.map((t) => t.id).join(", ") : ""));
+
+const choice = BANK_TASKS.filter((t) => /Выбор ответ/i.test(t.type));
+const noOptions = choice.filter((t) => !(/\b1\)/.test(plainOf(t.body)) && /\b[45]\)/.test(plainOf(t.body))));
+ok(choice.length > 0 && noOptions.length === 0,
+  "у заданий с выбором на месте список вариантов" + (noOptions.length ? ": " + noOptions.map((t) => t.id).join(", ") : ""));
+
+const match = BANK_TASKS.filter((t) => /соответств/i.test(t.type));
+const noColumns = match.filter((t) => {
+  const p = plainOf(t.body);
+  return !(/А\)/.test(p) && /1\)/.test(p));
+});
+ok(match.length > 0 && noColumns.length === 0,
+  "у заданий на соответствие на месте оба столбца" + (noColumns.length ? ": " + noColumns.map((t) => t.id).join(", ") : ""));
+
 const dirty = BANK_TASKS.filter((t) => /НЕ РЕШЕНО|СВОЙСТВА ЗАДАНИЯ|Номер:|ОТВЕТИТЬ/i.test(t.text));
 ok(dirty.length === 0, "в условиях нет служебных строк банка" + (dirty.length ? ": " + dirty[0].id : ""));
 // Свой же ответ обязан проходить проверку — иначе задание нельзя решить в принципе.
