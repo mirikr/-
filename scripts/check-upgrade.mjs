@@ -83,7 +83,11 @@ const OLD_STATE = {
   // Записи тренажёра: решённое задание и отметка о сверке ключа. Пропасть им
   // нельзя — это и есть прогресс подготовки.
   trainerLog: [{ id: "try-4EF342-1", taskId: "4EF342", answer: "60", ok: true, seconds: 41, at: new Date(Date.now() - 3600000).toISOString() }],
-  bankMarks: [{ id: "mark-4EF342", taskId: "4EF342", kind: "ok", at: new Date(Date.now() - 3600000).toISOString() }],
+  bankMarks: [
+    { id: "mark-4EF342", taskId: "4EF342", kind: "ok", at: new Date(Date.now() - 3600000).toISOString() },
+    // Ответ, списанный с ФИПИ: по нему правятся ключи, потерять его нельзя.
+    { id: "mark-0810F0", taskId: "0810F0", kind: "wrong", fipiAnswer: "3214", at: new Date(Date.now() - 3600000).toISOString() },
+  ],
 };
 
 const browser = await chromium.launch({ executablePath: BROWSER });
@@ -130,6 +134,7 @@ if (!after) {
   want("решённое задание тренажёра", after.trainerLog?.length, 1);
   want("ответ и время попытки целы", after.trainerLog?.[0]?.seconds, 41);
   want("отметка о сверке ключа", after.bankMarks?.[0]?.kind, "ok");
+  want("ответ с ФИПИ не потерялся", after.bankMarks?.find((m) => m.taskId === "0810F0")?.fipiAnswer, "3214");
 }
 
 const text = await page.locator("#root").innerText();

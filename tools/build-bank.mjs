@@ -13,7 +13,9 @@ const SOURCES = [
   // Прежние оставлены — из них берутся задания, которых в новой не оказалось.
   { subject: "Физика", file: UP + "ac16a348-fipi-100.json",
     older: [UP + "4c6d30da-fipi-100.json", UP + "1910c825-fipi-110.json"], answers: "answers/physics.json" },
-  { subject: "Обществознание", file: UP + "b2a0ec16-_________100_______________.json", answers: "answers/social.json" },
+  { subject: "Обществознание", file: UP + "195a230a-__________________i-250.json",
+    older: [UP + "b2a0ec16-_________100_______________.json", UP + "770f85e5-__________________-120.json"],
+    answers: "answers/social.json" },
   { subject: "Информатика", file: UP + "ccaafe63-____________100_______________.json", answers: "answers/informatics.json" },
 ];
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BANK_SECTIONS, BANK_SOURCE, BANK_SUBJECTS, BANK_TASKS, BANK_TOTALS, BANK_URL } from "./fipi-bank.js";
-import { AGREE_NEEDED, consensus, isRight, myVote, streakOf, timeWord, trainerStats } from "./bank-answer.js";
-import { loadVotes, myUserId, saveVote, votesState } from "./bank-votes.js";
+import { AGREE_NEEDED, consensus, isRight, myVote, normalizeAnswer, streakOf, timeWord, trainerStats } from "./bank-answer.js";
+import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer } from "./bank-votes.js";
 
 // Тренажёр по открытому банку ФИПИ.
 //
@@ -70,6 +70,9 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const [currentId, setCurrentId] = useState("");
   const [value, setValue] = useState("");
   const [result, setResult] = useState(null);
+  // Что человек списал с ФИПИ: ответ, который банк там засчитал.
+  const [fromBank, setFromBank] = useState("");
+  const [copied, setCopied] = useState("");
   // Голоса класса: чужие ответы на те же задания. Без облака список пустой —
   // тогда виден только свой голос, и тренажёр от этого не ломается.
   const [votes, setVotes] = useState([]);
@@ -118,6 +121,9 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const stats = useMemo(() => trainerStats(log, mineIds), [log, mineIds]);
   const streak = useMemo(() => streakOf((log || []).filter((a) => mineIds.has(a.taskId))), [log, mineIds]);
   const myMark = task ? (marks || []).find((m) => m.taskId === task.id && (m.kind === "ok" || m.kind === "wrong")) : null;
+  // Что человек уже прислал с ФИПИ по этому заданию.
+  const sentFromBank = (myMark && myMark.fipiAnswer) || "";
+  const takesBankAnswer = shared !== "ready" || votesTakeBankAnswer();
   const myBroken = task ? (marks || []).find((m) => m.taskId === task.id && m.kind === "broken") : null;
 
   // Свой голос считаем из своих же записей: так он виден сразу, даже если
@@ -137,6 +143,23 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     });
     return out;
   }, [marks, mineIds]);
+
+  // Ответы, которые засчитал сам банк: и свои, и присланные классом. Это и есть
+  // список правок для ключей — его переносят в набор заданий руками.
+  const bankAnswers = useMemo(() => {
+    const rows = new Map();
+    const put = (taskId, answer) => {
+      if (!mineIds.has(taskId) || !answer) return;
+      const t = BANK_TASKS.find((x) => x.id === taskId);
+      if (!t) return;
+      const was = rows.get(taskId);
+      if (!was) rows.set(taskId, { task: t, answer, count: 1, same: isRight(t, answer) });
+      else if (normalizeAnswer(was.answer) === normalizeAnswer(answer)) was.count += 1;
+    };
+    (marks || []).forEach((m) => put(m.taskId, m.fipiAnswer));
+    (votes || []).forEach((v) => put(v.taskId, v.fipiAnswer));
+    return [...rows.values()].sort((a, b) => Number(a.same) - Number(b.same) || a.task.id.localeCompare(b.task.id));
+  }, [marks, votes, mineIds]);
 
   const disputed = useMemo(() => {
     const out = [];
@@ -159,20 +182,53 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
       .then((sent) => sent && loadVotes(true).then(setVotes));
   }
 
-  function mark(kind) {
+  function mark(kind, bankAnswer) {
     if (!task) return;
-    onMark({ taskId: task.id, kind });
+    const entry = { taskId: task.id, kind };
+    if (bankAnswer) entry.fipiAnswer = bankAnswer;
+    onMark(entry);
     // «Криво показано» — жалоба на задание, а не ответ банка, поэтому в общий
     // счёт ключей она не уходит.
     if (kind === "broken") return;
-    const same = myMark && myMark.kind === kind;
-    saveVote({ taskId: task.id, answer: value, matches: !!(result && result.ok), fipi: same ? "" : kind })
-      .then((sent) => sent && loadVotes(true).then(setVotes));
+    // Ответ с ФИПИ отменять нечего: его прислали, а не просто нажали кнопку.
+    const same = !bankAnswer && myMark && myMark.kind === kind;
+    saveVote({
+      taskId: task.id,
+      answer: value,
+      matches: !!(result && result.ok),
+      fipi: same ? "" : kind,
+      fipiAnswer: same ? "" : bankAnswer || (myMark && myMark.fipiAnswer) || "",
+    }).then((sent) => sent && loadVotes(true).then(setVotes));
+  }
+
+  // Ответ, списанный с ФИПИ. Сходится он с нашим ключом или нет — решаем здесь:
+  // человеку об этом думать не надо, он просто переписал то, что засчитал банк.
+  function sendFromBank() {
+    if (!task) return;
+    const typed = fromBank.trim();
+    if (!typed) return;
+    mark(isRight(task, typed) ? "ok" : "wrong", typed);
+    setFromBank("");
+  }
+
+  // Ключи правятся у нас в наборе, поэтому собранные ответы нужно вынести
+  // наружу — одной строчкой, которую остаётся переслать.
+  function copyBankAnswers() {
+    const text = bankAnswers.map((r) => r.task.id + " " + r.answer + (r.same ? "" : "  (у нас " + r.task.answer + ")")).join("\n");
+    if (!navigator.clipboard) {
+      setCopied("Скопировать не вышло — выдели список руками.");
+      return;
+    }
+    navigator.clipboard.writeText(text).then(
+      () => setCopied("Скопировано — перешли этот список, и ключи поправят."),
+      () => setCopied("Скопировать не вышло — выдели список руками."),
+    );
   }
 
   function next() {
     setResult(null);
     setValue("");
+    setFromBank("");
     const rest = queue.filter((t) => !task || t.id !== task.id);
     const after = task ? rest.find((t) => t.id > task.id) : null;
     const pick = after || rest[0] || null;
@@ -185,6 +241,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     setCurrentId("");
     setResult(null);
     setValue("");
+    setFromBank("");
   }
 
   function pickSection(name) {
@@ -192,6 +249,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     setCurrentId("");
     setResult(null);
     setValue("");
+    setFromBank("");
   }
 
   if (!BANK_TASKS.length) return null;
@@ -207,9 +265,9 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
 
         <div style={S.alpha}>
           <b>Это альфа-версия, и ответы здесь решены нами, а не взяты у ФИПИ</b> — банк правильный ответ не
-          показывает. Значит, ошибки в ключах не исключение, а дело времени. Если банк ответил не так, как
-          приложение, — жми «В банке другой ответ». Такая отметка сейчас важнее любого решённого задания:
-          по ней ключи и становятся надёжными.
+          показывает, он только говорит «верно» или «неверно». Значит, ошибки в ключах не исключение, а дело
+          времени. Если ты проверил задание в банке — впиши под разбором тот ответ, который банк засчитал.
+          Такой ответ сейчас ценнее любого решённого задания: по нему ключи и правятся.
         </div>
 
         <div style={S.chips}>
@@ -347,43 +405,91 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
                     : key.state === "agreed"
                       ? "Ответ сошёлся у " + key.agree + " " + peopleWord(key.agree) + " — похоже, ключ верный"
                       : key.state === "disputed"
-                        ? key.fipiBad
-                          ? "Спорный: банк ответил иначе"
-                          : "Спорный: чаще отвечают «" + (key.rival ? key.rival.answer : "") + "»"
+                        ? key.fipiAnswer
+                          ? "Спорный: на ФИПИ засчитан ответ «" + key.fipiAnswer.answer + "»"
+                          : key.fipiBad
+                            ? "Спорный: банк ответил иначе"
+                            : "Спорный: чаще отвечают «" + (key.rival ? key.rival.answer : "") + "»"
                         : "Решён нами, не сверен" +
                           (key.agree > 1 ? " · сошёлся у " + key.agree : "") +
                           " · нужно ещё " + key.need}
                 </div>
-                <p style={S.keyNote}>
-                  {key.state === "confirmed"
-                    ? "Банк с этим ответом согласился — ключ надёжный."
-                    : "Банк правильный ответ не показывает: он только говорит «верно» или «неверно». " +
-                      "Ключ считается проверенным, когда его подтвердит банк или когда " + AGREE_NEEDED +
-                      " человека независимо ответят так же."}
-                </p>
-                {key.state !== "confirmed" && (
-                  <p style={S.ask}>
-                    Загляни в банк и перепроверь: найди там задание <b>№ {task.id}</b>, введи свой ответ
-                    и нажми «Ответить» — потом отметь здесь, что вышло. Это минута, а ключ станет надёжным для всех.
+
+                {sentFromBank ? (
+                  <div style={S.sent}>
+                    <div>
+                      Ответ с ФИПИ записан: <b>{sentFromBank}</b>.{" "}
+                      {isRight(task, sentFromBank)
+                        ? "Он сошёлся с нашим ключом — значит, ключ верный."
+                        : "Он расходится с нашим ключом — ключ поправим по твоему ответу."}
+                    </div>
+                    <button onClick={() => mark(myMark.kind)} className="ap-row" style={S.again}>
+                      Отменить и вписать заново
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p style={S.keyNote}>
+                      Банк правильный ответ не показывает: он только говорит «верно» или «неверно».
+                      Поэтому ответ здесь решён нами — и точнее всего его проверяет тот, кто сходил в банк.
+                    </p>
+                    <ol style={S.steps}>
+                      <li>
+                        Открой банк и найди задание <b>№ {task.id}</b> — номер там тот же.
+                      </li>
+                      <li>Впиши свой ответ и нажми «Ответить»: банк скажет «ВЕРНО» или «НЕВЕРНО».</li>
+                      <li>Тот ответ, который банк засчитал, впиши сюда — по нему мы и поправим ключ.</li>
+                    </ol>
+                    <div style={S.bankRow}>
+                      <input
+                        value={fromBank}
+                        onChange={(e) => setFromBank(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && sendFromBank()}
+                        placeholder="Ответ, который засчитал банк"
+                        style={S.bankInput}
+                        aria-label="Ответ, который засчитал банк ФИПИ"
+                      />
+                      <button
+                        onClick={sendFromBank}
+                        className="ap-btn"
+                        style={{ ...S.primary, ...(fromBank.trim() ? null : S.primaryOff) }}
+                        disabled={!fromBank.trim()}
+                      >
+                        Отправить
+                      </button>
+                      <a href={BANK_URL} target="_blank" rel="noreferrer" style={S.bankLink}>Открыть банк</a>
+                    </div>
+                    <div style={S.orRow}>
+                      <span style={S.orText}>Не дошли руки до банка — просто отметь, что вышло:</span>
+                      <button
+                        onClick={() => mark("ok")}
+                        className="ap-row"
+                        style={{ ...S.keyBtn, ...(myMark && myMark.kind === "ok" ? S.keyBtnOn : null) }}
+                      >
+                        Банк засчитал наш ответ
+                      </button>
+                      <button
+                        onClick={() => mark("wrong")}
+                        className="ap-row"
+                        style={{ ...S.keyBtn, ...(myMark && myMark.kind === "wrong" ? S.keyBtnOn : null) }}
+                      >
+                        В банке ответ другой
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {key.fipiAnswer && (!sentFromBank || normalizeAnswer(key.fipiAnswer.answer) !== normalizeAnswer(sentFromBank)) && (
+                  <p style={S.fromClass}>
+                    Из банка уже присылали ответ <b>{key.fipiAnswer.answer}</b>
+                    {key.fipiAnswer.count > 1 ? " — " + key.fipiAnswer.count + " раза" : ""}.
                   </p>
                 )}
-                <div style={S.keyButtons}>
-                  <button
-                    onClick={() => mark("ok")}
-                    className="ap-row"
-                    style={{ ...S.keyBtn, ...(myMark && myMark.kind === "ok" ? S.keyBtnOn : null) }}
-                  >
-                    Сверил — банк согласен
-                  </button>
-                  <button
-                    onClick={() => mark("wrong")}
-                    className="ap-row"
-                    style={{ ...S.keyBtn, ...(myMark && myMark.kind === "wrong" ? S.keyBtnOn : null) }}
-                  >
-                    В банке другой ответ
-                  </button>
-                  <a href={BANK_URL} target="_blank" rel="noreferrer" style={S.bankLink}>Открыть банк</a>
-                </div>
+                {!takesBankAnswer && (
+                  <p style={S.fromClass}>
+                    Общая копилка ещё не знает про ответы с ФИПИ — отметка сохранится на этом устройстве.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -410,6 +516,29 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
           <div style={S.stat}><span style={S.statValue}>{streak}</span><span style={S.statName}>подряд верно</span></div>
           <div style={S.stat}><span style={S.statValue}>{queue.length}</span><span style={S.statName}>осталось в наборе</span></div>
         </div>
+
+        {bankAnswers.length > 0 && (
+          <div style={S.collected}>
+            <div style={S.collectedTop}>
+              <div style={S.disputedTitle}>Ответы с ФИПИ — собрано {bankAnswers.length}</div>
+              <button onClick={copyBankAnswers} className="ap-row" style={S.keyBtn}>Скопировать список</button>
+            </div>
+            <p style={S.collectedNote}>
+              Это ответы, которые засчитал сам банк. Те, что разошлись с нашими, — прямая подсказка,
+              какие ключи править. Перешли список — и они поправятся для всех.
+            </p>
+            {bankAnswers.map((r) => (
+              <div key={r.task.id} style={S.disputedRow}>
+                <span style={S.code}>№ {r.task.id}</span>
+                <span style={S.disputedText}>{r.task.text.slice(0, 70)}…</span>
+                <span style={{ ...S.disputedAnswer, ...(r.same ? null : S.differs) }}>
+                  {r.same ? "совпал: " + r.answer : "ФИПИ: " + r.answer + " · у нас: " + r.task.answer}
+                </span>
+              </div>
+            ))}
+            {copied && <div style={S.copied}>{copied}</div>}
+          </div>
+        )}
 
         {disputed.length > 0 && (
           <div style={S.disputed}>
@@ -544,6 +673,34 @@ const S = {
     fontSize: 13, lineHeight: 1.55, color: "var(--ink2)", margin: "0 0 10px",
     borderLeft: "3px solid var(--warmLine)", paddingLeft: 10,
   },
+  steps: { fontSize: 13, lineHeight: 1.6, color: "var(--ink2)", margin: "0 0 10px", paddingLeft: 20 },
+  bankRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 },
+  // Поле пошире самого ответа: на телефоне оно должно уходить на свою строку,
+  // а не сжиматься до «Ответ, который за…».
+  bankInput: {
+    flex: "1 1 240px", minWidth: 0, border: "1px solid var(--line)", borderRadius: 9, padding: "9px 12px",
+    font: "inherit", fontSize: 15, background: "var(--panel)", color: "var(--ink)",
+  },
+  primaryOff: { opacity: 0.45, cursor: "default" },
+  orRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  orText: { fontSize: 12.5, color: "var(--mute)", flex: "1 1 100%" },
+  sent: {
+    display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap",
+    fontSize: 13.5, lineHeight: 1.55, color: "var(--ink2)", margin: "9px 0 0",
+  },
+  again: {
+    border: "none", background: "none", color: "var(--ink3)", font: "inherit", fontSize: 12.5,
+    textDecoration: "underline", cursor: "pointer", padding: 0,
+  },
+  fromClass: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "9px 0 0" },
+  collected: {
+    marginTop: 16, border: "1px solid var(--line2)", borderRadius: 10, padding: "11px 13px",
+    background: "var(--panel2)",
+  },
+  collectedTop: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between" },
+  collectedNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "7px 0 10px" },
+  differs: { color: "var(--ink)", fontWeight: 600 },
+  copied: { fontSize: 12.5, color: "var(--ink3)", marginTop: 9 },
   keyButtons: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
   keyBtn: {
     border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 8,

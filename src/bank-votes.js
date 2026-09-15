@@ -11,6 +11,11 @@ import { supabase, cloudConfigured, authReady, currentUser } from "./supabase.js
 // обязан работать по-прежнему, просто счёт голосов будет только свой.
 
 const TABLE = "bank_answers";
+const OLD_COLUMNS = "task_id,user_id,answer,matches,fipi";
+const COLUMNS = OLD_COLUMNS + ",fipi_answer";
+// Есть ли в базе столбец с ответом банка. Выясняется при первом чтении:
+// у тех, кто ещё не обновил таблицу, его нет, и слать его туда нельзя.
+let column = true;
 
 let cache = { at: 0, rows: [] };
 const FRESH_MS = 60 * 1000;
@@ -24,6 +29,11 @@ const FRESH_MS = 60 * 1000;
 let state = "off";
 export function votesState() {
   return state;
+}
+
+// Принимает ли база ответы с ФИПИ: пока столбца нет, их некуда складывать.
+export function votesTakeBankAnswer() {
+  return column;
 }
 
 async function client() {
@@ -46,7 +56,13 @@ export async function loadVotes(force) {
     return cache.rows;
   }
   try {
-    const { data, error } = await conn.db.from(TABLE).select("task_id,user_id,answer,matches,fipi");
+    let { data, error } = await conn.db.from(TABLE).select(COLUMNS);
+    // Столбец с ответом банка появился позже самой таблицы. Пока его не
+    // добавили, копилка обязана работать по-старому, а не падать целиком.
+    if (error && String((error && error.code) || "") === "42703") {
+      column = false;
+      ({ data, error } = await conn.db.from(TABLE).select(OLD_COLUMNS));
+    }
     if (error) {
       // Postgres отвечает 42P01, PostgREST — PGRST205: таблицы просто нет.
       const code = String((error && error.code) || "");
@@ -62,6 +78,8 @@ export async function loadVotes(force) {
         answer: r.answer || "",
         matches: !!r.matches,
         fipi: r.fipi || "",
+        // Ответ, который засчитал сам банк: по нему мы и правим ключи.
+        fipiAnswer: r.fipi_answer || "",
       })),
     };
     return cache.rows;
@@ -82,13 +100,21 @@ export async function saveVote(vote) {
       answer: String(vote.answer || "").slice(0, 200),
       matches: !!vote.matches,
       fipi: vote.fipi || "",
+      fipi_answer: String(vote.fipiAnswer || "").slice(0, 200),
       updated_at: new Date().toISOString(),
     };
-    const { error } = await conn.db.from(TABLE).upsert(row, { onConflict: "task_id,user_id" });
+    if (!column) delete row.fipi_answer;
+    let { error } = await conn.db.from(TABLE).upsert(row, { onConflict: "task_id,user_id" });
+    if (error && String((error && error.code) || "") === "42703") {
+      column = false;
+      delete row.fipi_answer;
+      ({ error } = await conn.db.from(TABLE).upsert(row, { onConflict: "task_id,user_id" }));
+    }
     if (error) return false;
     // Свой голос сразу кладём в кеш, чтобы счёт обновился без повторного чтения.
     const rows = cache.rows.filter((r) => !(r.taskId === row.task_id && r.userId === row.user_id));
-    cache = { at: cache.at, rows: rows.concat({ taskId: row.task_id, userId: row.user_id, answer: row.answer, matches: row.matches, fipi: row.fipi }) };
+    cache = { at: cache.at, rows: rows.concat({ taskId: row.task_id, userId: row.user_id, answer: row.answer,
+      matches: row.matches, fipi: row.fipi, fipiAnswer: row.fipi_answer }) };
     return true;
   } catch (e) {
     return false;

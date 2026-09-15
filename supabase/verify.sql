@@ -40,3 +40,10 @@ from public.bank_answers
 group by task_id
 order by сошлось_с_ключом desc
 limit 20;
+
+-- 6. Ответы, которые засчитал сам банк: это и есть список правок для ключей.
+select task_id, fipi_answer, count(*) as прислали
+from public.bank_answers
+where fipi_answer <> ''
+group by task_id, fipi_answer
+order by прислали desc, task_id;
