@@ -1,0 +1,158 @@
+// Проверяет тренажёр по банку ФИПИ в собранном приложении.
+//
+// Смотрим на то, что легко сломать незаметно: идёт ли настоящий секундомер,
+// честно ли считается ответ, видно ли номер задания, работают ли отметки о
+// сверке ключа и переживает ли прогресс перезагрузку страницы.
+//
+// Запуск: npm run check:trainer
+import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { resolve, extname } from "node:path";
+
+const playwright = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
+const { chromium } = playwright.chromium ? playwright : playwright.default;
+const BROWSER = process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+
+const DIST = resolve(process.cwd(), "dist");
+if (!existsSync(resolve(DIST, "index.html"))) {
+  console.error("Нет собранного приложения: сначала BASE_PATH=/-/ npx vite build");
+  process.exit(1);
+}
+
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".webmanifest": "application/manifest+json", ".json": "application/json" };
+const server = createServer(async (req, res) => {
+  let path = req.url.split("?")[0].replace(/^\/[^/]+\//, "/");
+  if (path === "/" || path.endsWith("/")) path += "index.html";
+  try {
+    const body = await readFile(resolve(DIST, "." + path));
+    res.writeHead(200, { "content-type": TYPES[extname(path)] || "application/octet-stream" });
+    res.end(body);
+  } catch (e) {
+    res.writeHead(404).end("not found");
+  }
+});
+await new Promise((done) => server.listen(0, "127.0.0.1", done));
+const port = server.address().port;
+
+const problems = [];
+function want(name, ok, note) {
+  if (!ok) problems.push(name + (note ? ": " + note : ""));
+  console.log((ok ? "✓ " : "✗ ") + name + (note ? " — " + note : ""));
+}
+
+const browser = await chromium.launch({ executablePath: BROWSER });
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+const errors = [];
+page.on("pageerror", (e) => errors.push(e.message));
+
+// Окно «что нового» перекрывает экран и к тренажёру не пускает — для проверки
+// помечаем его как уже показанное.
+await page.addInitScript(() => {
+  try {
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-screen", "trainer");
+  } catch (e) { /* приватный режим — не беда */ }
+});
+
+await page.goto(`http://127.0.0.1:${port}/`);
+await page.waitForTimeout(1500);
+
+// В меню есть раздел, и он открывается.
+const navButton = page.getByRole("button", { name: /Тренажёр/ }).first();
+want("раздел «Тренажёр» есть в меню", await navButton.count() > 0);
+await navButton.click();
+await page.waitForTimeout(400);
+
+const card = page.locator("section.ap-card").first();
+const head = await card.innerText();
+want("видно номер задания", /№\s*[0-9A-Za-zА-Яа-я]{5,8}/.test(head), (head.match(/№\s*\S+/) || [])[0]);
+want("видно условие", head.length > 200);
+
+// Секундомер идёт: через две секунды на экране должно стать больше.
+const clockText = () => page.locator('[aria-label="Время на задание"]').innerText();
+const first = await clockText();
+await page.waitForTimeout(2300);
+const second = await clockText();
+const secs = (s) => (s.includes(":") ? Number(s.split(":")[0]) * 60 + Number(s.split(":")[1]) : parseInt(s, 10) || 0);
+want("секундомер идёт", secs(second) > secs(first), first + " → " + second);
+
+// Какое задание показано и какой у него ответ — берём из набора приложения.
+const shownId = (head.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+const bank = await import("../src/fipi-bank.js");
+const task = bank.BANK_TASKS.find((t) => t.id === shownId);
+want("задание из набора", !!task, shownId);
+
+// Неверный ответ: приложение должно сказать «Неверно», показать ключ и разбор.
+await page.getByLabel("Ваш ответ").fill("этонеответ");
+await page.getByRole("button", { name: "Ответить" }).click();
+await page.waitForTimeout(300);
+const afterWrong = await card.innerText();
+// Разбор обязан относиться к тому заданию, которое на экране: когда набор
+// пересобирался после ответа, карточка успевала показать уже следующее.
+want("на экране осталось то же задание", afterWrong.includes(shownId), (afterWrong.match(/№\s*\S+/) || [])[0]);
+want("неверный ответ распознан", /Неверно/.test(afterWrong));
+want("показан правильный ответ", afterWrong.includes(task.answer));
+want("показан разбор", afterWrong.includes(task.why.slice(0, 20)));
+want("ключ помечен как несверенный", /не сверен/i.test(afterWrong));
+
+// Отметки о сверке: подтверждение и жалоба меняют плашку.
+await page.getByRole("button", { name: /Сверил/ }).click();
+await page.waitForTimeout(250);
+want("подтверждение отмечается", /сверен с банком/i.test(await card.innerText()));
+await page.getByRole("button", { name: /В банке другой ответ/ }).click();
+await page.waitForTimeout(250);
+const disputedText = await page.locator("#root").innerText();
+want("жалоба делает ключ спорным", /Спорный ответ/i.test(disputedText));
+want("спорный ключ попал в список", /Спорные ключи/i.test(disputedText));
+
+// Верный ответ следующего задания.
+await page.getByRole("button", { name: "Следующее" }).click();
+await page.waitForTimeout(300);
+const nextHead = await card.innerText();
+const nextId = (nextHead.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+const nextTask = bank.BANK_TASKS.find((t) => t.id === nextId);
+want("показано другое задание", nextId && nextId !== shownId, shownId + " → " + nextId);
+await page.getByLabel("Ваш ответ").fill(nextTask.answer);
+await page.getByRole("button", { name: "Ответить" }).click();
+await page.waitForTimeout(300);
+const afterRight = await card.innerText();
+want("верный ответ засчитан", /Верно/.test(afterRight) && !/Неверно/.test(afterRight));
+want("после верного ответа задание не подменилось", afterRight.includes(nextId), (afterRight.match(/№\s*\S+/) || [])[0]);
+want("разбор от своего задания", afterRight.includes(nextTask.why.slice(0, 20)));
+
+const stats = await page.locator("#root").innerText();
+want("в итогах учтены попытки", /прорешано/.test(stats) && /подряд верно/.test(stats));
+
+// Самое важное: прогресс должен пережить перезагрузку.
+await page.waitForTimeout(1200);
+await page.reload();
+await page.waitForTimeout(1800);
+await page.getByRole("button", { name: /Тренажёр/ }).first().click();
+await page.waitForTimeout(500);
+const saved = await page.evaluate(() => {
+  const raw = localStorage.getItem("planner:planner-state-v5");
+  const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+  return { log: (value.trainerLog || []).length, marks: (value.bankMarks || []).length };
+});
+want("попытки сохранились", saved.log === 2, "записей: " + saved.log);
+want("отметка о ключе сохранилась", saved.marks === 1, "отметок: " + saved.marks);
+const afterReload = await page.locator("#root").innerText();
+want("итоги на месте после перезагрузки", /прорешано/.test(afterReload) && /Спорные ключи/.test(afterReload));
+
+// Телефон: карточка не должна разъезжаться вбок.
+await page.setViewportSize({ width: 390, height: 780 });
+await page.waitForTimeout(400);
+const wide = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+want("на телефоне ничего не едет вбок", wide);
+
+want("ошибок на странице нет", errors.length === 0, errors[0] || "");
+
+await browser.close();
+server.close();
+
+if (problems.length) {
+  console.error("\nТренажёр работает не так:\n- " + problems.join("\n- "));
+  process.exit(1);
+}
+console.log("\nтренажёр работает");

@@ -22,6 +22,8 @@ import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import NowCard from "./now-card.jsx";
+import Trainer from "./trainer.jsx";
+import { BANK_TASKS } from "./fipi-bank.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
 import { search as searchAll } from "./search.js";
@@ -392,6 +394,10 @@ function eventsWord(n) {
   return plural(n, "событие", "события", "событий");
 }
 
+function tasksWord(n) {
+  return plural(n, "задание", "задания", "заданий");
+}
+
 function daysWord(n) {
   const abs = Math.abs(n) % 100;
   const last = abs % 10;
@@ -560,6 +566,11 @@ export default function StudyPlanner() {
   // позвать дважды подряд.
   const [showcase, setShowcase] = useState(null);
   const [homework, setHomework] = useState([]);
+  // Тренажёр: журнал попыток и отметки о сверке ключей с банком. И то и другое —
+  // список записей со своими id: так правки с телефона и ноутбука сливаются, а не
+  // затирают друг друга.
+  const [trainerLog, setTrainerLog] = useState([]);
+  const [bankMarks, setBankMarks] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
   const undoTimers = useRef({});
@@ -698,6 +709,8 @@ export default function StudyPlanner() {
           if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
+          if (parsed.trainerLog) setTrainerLog(parsed.trainerLog);
+          if (parsed.bankMarks) setBankMarks(parsed.bankMarks);
         }
         setLastSyncedAt(new Date());
         setSyncDebug((res && res.warning) || (found ? "" : "пока нет сохранённых записей"));
@@ -814,6 +827,8 @@ export default function StudyPlanner() {
           weekPlanned,
           openSections,
           homework,
+          trainerLog,
+          bankMarks,
         });
         syncSnapshot.current = stamped;
         const payload = JSON.stringify(stamped);
@@ -839,7 +854,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, bankMarks, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -2094,6 +2109,33 @@ export default function StudyPlanner() {
     goScreen(item.screen);
   }
 
+  // Попытка — отдельная запись: по журналу потом видно и серию, и время.
+  function addAttempt(entry) {
+    setTrainerLog((list) => list.concat({ id: "try-" + entry.taskId + "-" + Date.now(), at: new Date().toISOString(), ...entry }));
+  }
+
+  // Отметка о сверке ключа одна на задание: повторное нажатие меняет прежнюю,
+  // поэтому id у неё постоянный.
+  function addMark(entry) {
+    setBankMarks((list) => {
+      const id = "mark-" + entry.taskId;
+      const rest = list.filter((m) => m.id !== id);
+      const was = list.find((m) => m.id === id);
+      // Повторное нажатие той же кнопки снимает отметку: передумать можно.
+      if (was && was.kind === entry.kind) return rest;
+      return rest.concat({ id, at: new Date().toISOString(), ...entry });
+    });
+  }
+
+  const trainerSolved = useMemo(() => {
+    const last = new Map();
+    trainerLog.forEach((a) => last.set(a.taskId, a.ok));
+    let n = 0;
+    last.forEach((ok) => ok && (n += 1));
+    return n;
+  }, [trainerLog]);
+  const trainerLeft = Math.max(0, BANK_TASKS.length - trainerSolved);
+
   const weeklyBudget = weeklyBudgetHours(budget);
   const navItems = [
     {
@@ -2108,6 +2150,11 @@ export default function StudyPlanner() {
     },
     { key: "budget", label: "Распределение", hint: Math.round(weeklyBudget) + " ч" },
     { key: "study", label: "Подготовка", hint: stats.totalAll ? stats.overallPct + "%" : "" },
+    {
+      key: "trainer",
+      label: "Тренажёр",
+      hint: trainerLeft ? trainerLeft + " " + tasksWord(trainerLeft) : "всё решено",
+    },
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
     { key: "notes", label: "Тетради", hint: "" },
@@ -2124,6 +2171,10 @@ export default function StudyPlanner() {
         "сначала бюджет дня, потом предметы",
     ],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
+    trainer: [
+      "Тренажёр по банку ФИПИ",
+      "Задания открытого банка по физике с настоящим секундомером; ответы решены нами и помечены как несверенные",
+    ],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
@@ -3104,6 +3155,10 @@ export default function StudyPlanner() {
             </div>
             <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
           </section>
+        )}
+
+        {screen === "trainer" && (
+          <Trainer log={trainerLog} marks={bankMarks} onAttempt={addAttempt} onMark={addMark} styles={styles} />
         )}
 
         {screen === "school" && (
