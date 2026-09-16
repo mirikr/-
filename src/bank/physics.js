@@ -533,6 +533,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p><span>Установите соответствие между видами радиоактивного распада <br> и уравнениями, описывающими этот процесс</span>.</p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ВИДЫ РАСПАДА</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p align=\"left\">альфа-распад</p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p>бета-распад</p></td></tr></tbody></table></div><div class=\"col\"><b><u>УРАВНЕНИЯ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mtext>U</mtext><mrow><mn>92</mn></mrow><mrow><mn>238</mn></mrow><mtext></mtext><mo>+</mo><mtext></mtext><mtext>N</mtext><mrow><mn>10</mn></mrow><mrow><mn>22</mn></mrow><mtext>e</mtext><mtext></mtext></mrow></mstyle></math><math><mstyle displaystyle=\"true\"><mrow><mtext></mtext><mo>→</mo><mtext></mtext><mtext>N</mtext><mrow><mn>102</mn></mrow><mrow><mn>256</mn></mrow><mtext>o</mtext><mtext></mtext><mo>+</mo><mtext></mtext><mn>4</mn><mi>n</mi><mn>0</mn><mn>1</mn></mrow></mstyle></math></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mtext>N</mtext><mrow><mn>93</mn></mrow><mrow><mn>238</mn></mrow><mtext>p</mtext><mtext></mtext><mo>→</mo><mtext></mtext></mrow></mstyle></math><math><mstyle displaystyle=\"true\"><mrow><mtext>P</mtext><mrow><mn>94</mn></mrow><mrow><mn>238</mn></mrow><mtext>u</mtext><mtext></mtext><mo>+</mo><mtext></mtext><mi>e</mi><mrow><mo>−</mo><mn>1</mn></mrow><mn>0</mn></mrow></mstyle></math>&nbsp;+ <math><mstyle displaystyle=\"true\"><mrow><msub><mover><mi>v</mi><mo>˜</mo></mover><mi>e</mi></msub></mrow></mstyle></math></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mtext>A</mtext><mrow><mn>89</mn></mrow><mrow><mn>227</mn></mrow><mtext>c</mtext><mtext></mtext><mo>→</mo><mtext></mtext></mrow></mstyle></math><math><mstyle displaystyle=\"true\"><mrow><mtext>F</mtext><mrow><mn>87</mn></mrow><mrow><mn>223</mn></mrow><mtext>r</mtext><mtext></mtext><mo>+</mo><mtext></mtext><mtext>H</mtext><mn>2</mn><mn>4</mn><mtext>e</mtext></mrow></mstyle></math></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mtext>B</mtext><mrow><mn>83</mn></mrow><mrow><mn>209</mn></mrow><mtext>i</mtext><mtext></mtext><mo>+</mo><mtext></mtext><mtext>H</mtext><mn>1</mn><mn>2</mn><mtext></mtext><mo>→</mo><mtext></mtext><mtext>T</mtext><mrow><mn>43</mn></mrow><mrow><mn>105</mn></mrow><mtext>c</mtext><mtext></mtext></mrow></mstyle></math><math><mstyle displaystyle=\"true\"><mrow><mo>+</mo><mtext></mtext><mtext>N</mtext><mrow><mn>41</mn></mrow><mrow><mn>102</mn></mrow><mtext>b</mtext><mo>+</mo><mtext></mtext><mn>4</mn><mi>n</mi><mn>0</mn><mn>1</mn></mrow></mstyle></math></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "C0910B",
+  "subject": "Физика",
+  "guid": "2A4B2593C99BA4524D2F962939F011EB",
+  "kes": "4 Квантовая физика",
+  "section": "Квантовая физика",
+  "type": "Выбор ответов из предложенных вариантов",
+  "lead": "Выберите один или несколько правильных ответов.",
+  "text": "Рассмотрите таблицу, содержащую характеристики планет Солнечной системы.\n\nНазвание планеты\n\nСреднее расстояние от Солнца (в а.е.)\n\nДиаметр в районе экватора, км\n\nНаклон оси вращения\n\nПервая космическая скорость, км/с\n\nМеркурий\n\n0,39\n\n4879\n\n0,6′\n\n3,01\n\nВенера\n\n0,72\n\n12 104\n\n177°22′\n\n7,33\n\nЗемля\n\n1,00\n\n12 756\n\n23°27′\n\n7,91\n\nМарс\n\n1,52\n\n6794\n\n25°11′\n\n3,55\n\nЮпитер\n\n5,20\n\n142 984\n\n3°08′\n\n42,1\n\nСатурн\n\n9,58\n\n120 536\n\n26°44′\n\n25,1\n\nУран\n\n19,19\n\n51 118\n\n97°46′\n\n15,1\n\nНептун\n\n30,02\n\n49 528\n\n28°19′\n\n16,8\n\nВыберите все утверждения, которые соответствуют характеристикам планет.\n\n1)\n\nЧем дальше планета от Солнца, тем больше первая космическая скорость для её спутников.\n\n2)\n\nНа Нептуне может наблюдаться смена времён года.\n\n3)\n\nСатурн удалён от Солнца на расстояние примерно 1437 млн км.\n\n4)\n\nУскорение свободного падения на Меркурии составляет примерно 3,7 м/с2.\n\n5)\n\nВторая космическая скорость при старте с поверхности Урана составляет 10 км/с.",
+  "units": "",
+  "pictures": [],
+  "answer": "234",
+  "accept": [],
+  "why": "2) ось Нептуна наклонена на 28 градусов — времена года будут. 3) 9,58 а.е. * 149,6 млн км = примерно 1433 млн км. 4) g = v1^2/R = 3010^2 / 2 439 500 = 3,7 м/с². Неверны: 1 (у Марса первая космическая меньше, чем у Земли, хотя он дальше) и 5 (вторая космическая больше первой в корень из двух раз: около 21 км/с).",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Рассмотрите таблицу, содержащую характеристики планет Солнечной системы.</p><table class=\"t\"><tbody><tr><td valign=\"top\"><p>Название планеты</p></td><td valign=\"top\"><p align=\"center\">Среднее расстояние от Солнца (в а.е.)</p></td><td valign=\"top\"><p align=\"center\">Диаметр в районе экватора, км</p></td><td valign=\"top\"><p align=\"center\">Наклон оси вращения</p></td><td valign=\"top\"><p align=\"center\">Первая космическая скорость, км/с</p></td></tr><tr><td valign=\"top\"><p>Меркурий</p></td><td valign=\"top\"><p align=\"center\">0,39</p></td><td valign=\"top\"><p align=\"center\">4879</p></td><td valign=\"top\"><p align=\"center\">0,6<span>′</span></p></td><td valign=\"top\"><p align=\"center\">3,01</p></td></tr><tr><td valign=\"top\"><p>Венера</p></td><td valign=\"top\"><p align=\"center\">0,72</p></td><td valign=\"top\"><p align=\"center\">12&nbsp;104</p></td><td valign=\"top\"><p align=\"center\">177<span>°</span>22<span>′</span></p></td><td valign=\"top\"><p align=\"center\">7,33</p></td></tr><tr><td valign=\"top\"><p>Земля</p></td><td valign=\"top\"><p align=\"center\">1,00</p></td><td valign=\"top\"><p align=\"center\">12 756</p></td><td valign=\"top\"><p align=\"center\">23<span>°</span>27<span>′</span></p></td><td valign=\"top\"><p align=\"center\">7,91</p></td></tr><tr><td valign=\"top\"><p>Марс</p></td><td valign=\"top\"><p align=\"center\">1,52</p></td><td valign=\"top\"><p align=\"center\">6794</p></td><td valign=\"top\"><p align=\"center\">25<span>°</span>11<span>′</span></p></td><td valign=\"top\"><p align=\"center\">3,55</p></td></tr><tr><td valign=\"top\"><p>Юпитер</p></td><td valign=\"top\"><p align=\"center\">5,20</p></td><td valign=\"top\"><p align=\"center\">142&nbsp;984</p></td><td valign=\"top\"><p align=\"center\">3<span>°</span>08<span>′</span></p></td><td valign=\"top\"><p align=\"center\">42,1</p></td></tr><tr><td valign=\"top\"><p>Сатурн</p></td><td valign=\"top\"><p align=\"center\">9,58</p></td><td valign=\"top\"><p align=\"center\">120&nbsp;536</p></td><td valign=\"top\"><p align=\"center\">26<span>°</span>44<span>′</span></p></td><td valign=\"top\"><p align=\"center\">25,1</p></td></tr><tr><td valign=\"top\"><p>Уран</p></td><td valign=\"top\"><p align=\"center\">19,19</p></td><td valign=\"top\"><p align=\"center\">51&nbsp;118</p></td><td valign=\"top\"><p align=\"center\">97<span>°</span>46<span>′</span></p></td><td valign=\"top\"><p align=\"center\">15,1</p></td></tr><tr><td valign=\"top\"><p>Нептун</p></td><td valign=\"top\"><p align=\"center\">30,02</p></td><td valign=\"top\"><p align=\"center\">49&nbsp;528</p></td><td valign=\"top\"><p align=\"center\">28<span>°</span>19<span>′</span></p></td><td valign=\"top\"><p align=\"center\">16,8</p></td></tr></tbody></table><p>Выберите <b>все</b> утверждения, которые соответствуют характеристикам планет.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td valign=\"middle\"></td><td>&nbsp;<b>1)</b>&nbsp;</td><td><p>Чем дальше планета от Солнца, тем больше первая космическая скорость для её спутников.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>2)</b>&nbsp;</td><td><p>На Нептуне может наблюдаться смена времён года.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>3)</b>&nbsp;</td><td><p>Сатурн удалён от Солнца на расстояние примерно 1437 млн км.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>4)</b>&nbsp;</td><td><p>Ускорение свободного падения на Меркурии составляет примерно 3,7 м/с<sup>2</sup>.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>5)</b>&nbsp;</td><td><p>Вторая космическая скорость при старте с поверхности Урана составляет 10 км/с.</p></td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "C49040",
   "subject": "Физика",
   "guid": "0A2B020E891EB4BE4834CADF31A5D8DC",
@@ -565,6 +582,23 @@ export const TASKS = [
   "why": "При позитронном распаде протон превращается в нейтрон: нуклонов столько же, значит массовое число не меняется, а протонов становится на один меньше.",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ядро испытывает позитронный распад, в результате которого образуется позитрон <math><mstyle displaystyle=\"true\"><mrow><mrow></mrow><mrow><mo>+</mo><mn>1</mn></mrow><mn>0</mn></mrow></mstyle></math><i>е</i>. Как при этом изменяются <span>массовое число ядра и число протонов в ядре</span>?</p><p><span>Для каждой величины определите соответствующий характер изменения: </span></p><table><tbody><tr><td valign=\"top\"><p><span>1)</span></p></td><td valign=\"top\"><p><span>увеличивается </span></p></td></tr><tr><td valign=\"top\"><p><span>2)</span></p></td><td valign=\"top\"><p><span>уменьшается</span></p></td></tr><tr><td valign=\"top\"><p><span>3)</span></p></td><td valign=\"top\"><p><span>не изменяется</span></p></td></tr></tbody></table><p><span>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</span></p><table><tbody><tr><td valign=\"top\"><p align=\"center\"><span>Массовое число ядра</span></p></td><td valign=\"top\"><p align=\"center\"><span>Число протонов в ядре</span></p></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "CEDB0C",
+  "subject": "Физика",
+  "guid": "2AA7C4261BC5B10D4A424F191FC7517D",
+  "kes": "4.3.3 Закон радиоактивного распада",
+  "section": "Квантовая физика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Образец радиоактивного радия находится в закрытом сосуде. Ядра радия 223\n\n88\n\nRa испытывают α-распад с периодом полураспада 11,4 суток. Определите количество гелия (в мкмоль) в сосуде через 11,4 суток, если образец\nв момент помещения его в сосуд содержал 2 мкмоль радия.\n\nмкмоль",
+  "units": "",
+  "pictures": [],
+  "answer": "1",
+  "accept": [],
+  "why": "За один период полураспада распадается половина ядер. Каждый распад даёт одну альфа-частицу, то есть ядро гелия: из 2 мкмоль радия распалось 1 мкмоль — столько же получилось гелия.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Образец радиоактивного радия находится в закрытом сосуде. Ядра радия <math><mstyle displaystyle=\"true\"><mrow><mrow></mrow><mrow><mn>88</mn></mrow><mrow><mn>223</mn></mrow></mrow></mstyle></math><span>Ra</span> испытывают <span>α</span>-распад с периодом полураспада 11,4 суток. Определите количество <b><u>гелия</u></b> (в мкмоль) в сосуде через 11,4 суток, если образец <br> в момент помещения его в сосуд содержал 2 мкмоль радия.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>мкмоль&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "D4FFF9",
@@ -1303,6 +1337,40 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Материальная точка равномерно движется по окружности радиусом 2&nbsp;м <br>с центростремительным ускорением, равным 2 м/с<sup>2</sup>. Определите скорость точки.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>м/с&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "913207",
+  "subject": "Физика",
+  "guid": "2B3E561B9051AD0A4C17D6186E6D12AB",
+  "kes": "1.1.8 Криволинейное движение. Движение материальной точки по окружности",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Материальная точка равномерно движется по окружности радиусом R\nсо скоростью u. Во сколько раз нужно увеличить скорость её движения, чтобы при увеличении радиуса окружности в 4 раза центростремительное ускорение точки осталось прежним?",
+  "units": "во сколько раз",
+  "pictures": [],
+  "answer": "2",
+  "accept": [],
+  "why": "Центростремительное ускорение a = v^2/R. Радиус вырос вчетверо, значит и v^2 должно вырасти вчетверо — скорость вдвое.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Материальная точка равномерно движется по окружности радиусом <i><span>R</span></i><br> со скоростью <i><span>u</span></i>. Во сколько раз нужно увеличить скорость её движения, чтобы при увеличении радиуса окружности в 4 раза центростремительное ускорение точки осталось прежним? </p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td>в&nbsp;</td><td></td><td>раз(а)&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "94A901",
+  "subject": "Физика",
+  "guid": "2B590B15CA1FA85E47E4CF6D5FD5EFCD",
+  "kes": "1.1 Кинематика",
+  "section": "Механика",
+  "type": "Установление соответствия",
+  "lead": "Установите соответствие и впишите ответ.",
+  "text": "На рисунке показан график зависимости координаты x тела, движущегося вдоль оси Ох, от времени t (парабола). Графики А и Б представляют собой зависимости физических величин, характеризующих движение этого тела, от времени t. Установите соответствие между графиками и физическими величинами, зависимость которых от времени эти графики могут представлять.\n\nК каждой позиции первого столбца подберите соответствующую позицию из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.\n\nГРАФИКИ ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ\n\nА)\n\nБ)\n\n1)\n\nпроекция скорости тела на ось Oх\n\n2)\n\nпроекция перемещения тела на ось Oх\n\n3)\n\nмодуль равнодействующей сил, действующих на тело\n\n4)\n\nкинетическая энергия тела",
+  "units": "",
+  "pictures": [],
+  "answer": "31",
+  "accept": [],
+  "why": "По параболе координаты тело тормозит и в t1 разворачивается, ускорение постоянно. График А — постоянная положительная величина: модуль равнодействующей силы. График Б — прямая, проходящая через ноль в t1: проекция скорости.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/5397a3c09e8894ed.gif\"></p></td></tr></tbody></table><p>На рисунке показан график зависимости координаты <i><span>x</span></i> тела, движущегося вдоль оси <i>Ох</i>, от времени <i><span>t</span></i> (парабола). Графики А и Б представляют собой зависимости физических величин, характеризующих движение этого тела, от времени <i><span>t</span></i>. Установите соответствие между графиками и физическими величинами, зависимость которых от времени эти графики могут представлять. </p><p>К каждой позиции первого столбца подберите соответствующую позицию из&nbsp;второго столбца и запишите в таблицу выбранные цифры под&nbsp;соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"fipi/4238cb4788f3eced.gif\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p align=\"center\"><img src=\"fipi/0bec1ec954170901.gif\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p align=\"left\">проекция скорости тела на ось <i><span>O</span>х</i></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p align=\"left\">проекция перемещения тела на ось <i><span>O</span>х</i></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p align=\"left\">модуль равнодействующей сил, действующих на тело</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p align=\"left\">кинетическая энергия тела</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "97B7FB",
   "subject": "Физика",
   "guid": "1b4433ac442740908572691769495bde",
@@ -1337,6 +1405,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Шарик массой 300&nbsp;г начинает падать с высоты 10&nbsp;м из состояния покоя. Какова его кинетическая энергия в момент перед падением на поверхность Земли, если сопротивление воздуха пренебрежимо малó?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>Дж&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "9A460B",
+  "subject": "Физика",
+  "guid": "2b409db7070340d1932257d8c897683f",
+  "kes": "1.5.1 Гармонические колебания материальной точки. Амплитуда и фаза колебаний. Кинематическое описание. Связь амплитуды колебаний смещения материальной точки с амплитудами колебаний её скорости и ускорения",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Груз, подвешенный к пружине жёсткостью k, совершает свободные вертикальные гармонические колебания с периодом T и амплитудой x0. Что произойдёт с периодом колебаний и максимальной скоростью этого груза, если при неизменной амплитуде колебаний и том же грузе использовать пружину бо́льшей жёсткости?\n\nДля каждой величины определите соответствующий характер её изменения:\n\n1)\n\nувеличится\n\n2)\n\nуменьшится\n\n3)\n\nне изменится\n\nЗапишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.\n\nПериод колебаний\n\nМаксимальное значение скорости",
+  "units": "",
+  "pictures": [],
+  "answer": "21",
+  "accept": [],
+  "why": "T = 2*pi*sqrt(m/k): при большей жёсткости период меньше. Максимальная скорость v = x0 * sqrt(k/m) — наоборот, больше.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Груз, подвешенный к пружине жёсткостью <i><span>k</span></i>, совершает свободные вертикальные гармонические колебания с периодом <i><span>T</span></i> и амплитудой <i><span>x</span></i><sub>0</sub>. Что произойдёт с периодом колебаний и максимальной скоростью этого груза, если при неизменной амплитуде колебаний и том же грузе использовать пружину бо́льшей жёсткости?</p><p>Для каждой величины определите соответствующий характер её изменения: </p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличится</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшится</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменится</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Период колебаний</p></td><td valign=\"top\"><p align=\"center\">Максимальное значение скорости</p></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "9F5549",
   "subject": "Физика",
   "guid": "0BB818BDAED2AB5743612685398B3CAF",
@@ -1352,6 +1437,23 @@ export const TASKS = [
   "why": "F = Gm²/r²; при массах 2m: 4/r'² = 1/r² ⇒ r' = 2r = 80 см",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Два маленьких шарика массой <i><span>m</span></i>каждый находятся на расстоянии 40 см друг от друга. Каково расстояние между шариками вдвое большей массы, если модуль сил гравитационного взаимодействия между ними такой же, как и&nbsp;между первыми двумя шариками?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>см&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "A06301",
+  "subject": "Физика",
+  "guid": "295D2EA69DD8AFE749F8ACC90E2B73B9",
+  "kes": "1.1.6 Равноускоренное прямолинейное движение",
+  "section": "Механика",
+  "type": "Установление соответствия",
+  "lead": "Установите соответствие и впишите ответ.",
+  "text": "После удара шайба начала скользить вверх по гладкой наклонной плоскости со скоростью →𝜐0,\nкак показано на рисунке, и в момент t = t0 вернулась в исходное положение. Графики А и Б отображают изменение\nс течением времени физических величин, характеризующих движение шайбы.\n\nУстановите соответствие между графиками\nи физическими величинами, изменение которых со временем эти графики могут отображать.\n\nК каждой позиции первого столбца подберите соответствующую позицию\nиз второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.\n\nГРАФИКИ ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ\n\nА)\n\nБ)\n\n1)\n\nкинетическая энергия Ек\n\n2)\n\nпроекция скорости 𝜐𝑦\n\n3)\n\nполная механическая энергия Ем\n\n4)\n\nкоордината х",
+  "units": "",
+  "pictures": [],
+  "answer": "43",
+  "accept": [],
+  "why": "График А — горка от нуля до нуля: так ведёт себя координата x, шайба уезжает вверх и возвращается в исходную точку. График Б — постоянная величина: плоскость гладкая, значит полная механическая энергия сохраняется.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p align=\"left\"><img src=\"fipi/ee6cf0556d0d11d1.png\"></p></td></tr></tbody></table><p>После удара шайба начала скользить вверх по гладкой наклонной плоскости со скоростью <math><mrow><msub><mover><mi>υ</mi><mo>→</mo></mover><mn>0</mn></msub><mo>,</mo></mrow></math>&nbsp;как показано на рисунке, и в момент <i><span>t</span></i> =<i><span>t</span></i><sub>0</sub> вернулась в исходное положение. Графики А и Б отображают изменение <br> с течением времени физических величин, характеризующих движение шайбы.</p><p>Установите соответствие между графиками<br> и физическими величинами, изменение которых со временем эти графики могут отображать.</p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"fipi/2b1f86ad88072fee.png\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"fipi/78f6ba48ffc75c20.png\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>кинетическая энергия <i>Е</i><sub>к</sub></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проекция скорости <math><mstyle displaystyle=\"true\"><mrow><msub><mi>υ</mi><mi>y</mi></msub></mrow></mstyle></math></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>полная механическая энергия <i>Е</i><sub>м</sub></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>координата <i>х</i></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "A784FF",
@@ -1575,6 +1677,40 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>В инерциальной системе отсчёта тело движется прямолинейно в одном направлении под действием постоянной силы, равной по модулю 8 Н. Импульс тела изменился на 24 кг<span>×</span>м/с. Сколько времени потребовалось для этого изменения импульса?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>с&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "C7E001",
+  "subject": "Физика",
+  "guid": "2A5C32E4A549939342A1F7D558437C4B",
+  "kes": "1.3.3 Условия равновесия твёрдого тела в ИСО",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Невесомый рычаг находится в равновесии (см. рисунок). Сила F1 = 8 Н, её плечо равно 20 см. Каков модуль силы →𝐹2\n, если её плечо равно 16 см?\n\nН",
+  "units": "",
+  "pictures": [],
+  "answer": "10",
+  "accept": [],
+  "why": "Рычаг в равновесии: F1 * d1 = F2 * d2. F2 = 8 * 20 / 16 = 10 Н.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/8291d2122222ffef.png\"></p></td></tr></tbody></table><p>Невесомый рычаг находится в равновесии (см.&nbsp;рисунок). Сила <i>F</i><sub>1</sub> = 8 Н, её плечо равно 20 см. Каков модуль силы <span><math><mstyle displaystyle=\"true\"><mrow><mover><mrow><msub><mi>F</mi><mn>2</mn></msub></mrow><mo>→</mo></mover></mrow></mstyle></math></span>, если её плечо равно 16&nbsp;см?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>Н&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "CCDA00",
+  "subject": "Физика",
+  "guid": "2A27A94F9FF7A8E9485487444BD5605A",
+  "kes": "1.3.5 Давление в жидкости, покоящейся в ИСО",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "На поверхности воды плавает прямоугольный брусок из древесины плотностью 400 кг/м3. Брусок заменили на другой брусок той же массы и с той же площадью основания, но из древесины плотностью 600 кг/м3. Как при этом изменились глубина погружения бруска и действующая на него сила Архимеда?\n\nДля каждой величины определите соответствующий характер изменения:\n\n1)\n\nувеличилась\n\n2)\n\nуменьшилась\n\n3)\n\nне изменилась\n\nЗапишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могу повторяться.\n\nГлубина погружения\n\nбруска\n\nСила Архимеда",
+  "units": "",
+  "pictures": [],
+  "answer": "33",
+  "accept": [],
+  "why": "Брусок плавает, значит сила Архимеда равна весу: масса та же — сила та же. Объём вытесненной воды тоже тот же, а площадь основания не изменилась, поэтому и глубина погружения прежняя. Изменилась только высота самого бруска.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На поверхности воды плавает прямоугольный брусок из древесины плотностью 400 кг/м<sup>3</sup>. Брусок заменили на другой брусок той же массы и с той же площадью основания, но из древесины плотностью 600 кг/м<sup>3</sup>. Как при этом изменились глубина погружения бруска и действующая на него сила Архимеда?</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличилась</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшилась</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменилась</p></td></tr></tbody></table><p>Запишите <u>в таблицу</u> выбранные цифры для каждой физической величины. Цифры в ответе могу повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Глубина погружения</p><p align=\"center\">бруска</p></td><td valign=\"top\"><p align=\"center\">Сила Архимеда</p></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "CE0949",
   "subject": "Физика",
   "guid": "0AB2CB006A7F955A4EE61C13E443B825",
@@ -1692,6 +1828,23 @@ export const TASKS = [
   "why": "С 0 до 2 с скорость растёт с −9 м/с до нуля: a = 9 / 2 = 4,5 м/с², знак плюс.",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>На рисунке приведён график зависимости проекции <math><mrow><msub><mi>υ</mi><mi>x</mi></msub></mrow></math>&nbsp;скорости тела<br> от времени <i><span>t</span></i>.</p><table><tbody><tr><td valign=\"top\"><p><img src=\"fipi/40e219b089b13131.png\"></p></td></tr></tbody></table><p>Определите проекцию <i>a<sub>x </sub></i>ускорения этого тела в интервале времени <br> от 0 до 2 с. Ответ запишите с учётом знака проекции.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>м/с<sup>2</sup>&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "eeB001",
+  "subject": "Физика",
+  "guid": "2c54c29c6e7f4ad5a196a0ecbbaf33fc",
+  "kes": "1.5 Механические колебания и волны",
+  "section": "Механика",
+  "type": "Выбор ответов из предложенных вариантов",
+  "lead": "Выберите один или несколько правильных ответов.",
+  "text": "В таблице представлены данные о положении грузика, прикреплённого\nк пружине и совершающего гармонические колебания вдоль горизонтальной оси Ох, в различные моменты времени.\n\nt, с\n\n0,0\n\n0,1\n\n0,2\n\n0,3\n\n0,4\n\n0,5\n\n0,6\n\n0,7\n\n0,8\n\n0,9\n\n1,0\n\n1,1\n\n1,2\n\n1,3\n\n1,4\n\n1,5\n\nх, мм\n\n0\n\n2,5\n\n4,5\n\n6,0\n\n7,0\n\n7,5\n\n7,0\n\n6,0\n\n4,5\n\n2,5\n\n0\n\n–2,5\n\n–4,5\n\n–6,0\n\n–7,0\n\n–7,5\n\nИз приведённого ниже списка выберите все верные утверждения относительно движения пружинного маятника.\n\n1)\n\nПериод колебаний грузика равен 1 с.\n\n2)\n\nАмплитуда колебаний грузика равна 15 мм.\n\n3)\n\nПотенциальная энергия пружины маятника в момент времени 1,5 с минимальна.\n\n4)\n\nКинетическая энергия грузика в момент времени 1,0 с максимальна.\n\n5)\n\nМодуль ускорения грузика в момент времени 1,5 с максимален.",
+  "units": "",
+  "pictures": [],
+  "answer": "45",
+  "accept": [],
+  "why": "Грузик проходит нуль в 0 и в 1,0 с, а крайние точки — в 0,5 и 1,5 с: период 2 с, амплитуда 7,5 мм. 4) в 1,0 с грузик в положении равновесия — скорость и кинетическая энергия наибольшие. 5) в 1,5 с он в крайней точке — там наибольшая по модулю сила упругости, а значит и ускорение. Утверждения 1, 2 и 3 неверны.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В таблице представлены данные о положении грузика, прикреплённого <br> к пружине и совершающего гармонические колебания вдоль горизонтальной оси <i>Ох</i>, в различные моменты времени.</p><table><tbody><tr><td><p><i><span>t</span></i><span>, с</span></p></td><td><p align=\"center\"><span>0,0</span></p></td><td><p align=\"center\"><span>0,1</span></p></td><td><p align=\"center\"><span>0,2</span></p></td><td><p align=\"center\"><span>0,3</span></p></td><td><p align=\"center\"><span>0,4</span></p></td><td><p align=\"center\"><span>0,5</span></p></td><td><p align=\"center\"><span>0,6</span></p></td><td><p align=\"center\"><span>0,7</span></p></td><td><p align=\"center\"><span>0,8</span></p></td><td><p align=\"center\"><span>0,9</span></p></td><td><p align=\"center\"><span>1,0</span></p></td><td><p align=\"center\"><span>1,1</span></p></td><td><p align=\"center\"><span>1,2</span></p></td><td><p align=\"center\"><span>1,3</span></p></td><td><p align=\"center\"><span>1,4</span></p></td><td><p align=\"center\"><span>1,5</span></p></td></tr><tr><td><p><i><span>х</span></i><span>, мм</span></p></td><td><p align=\"center\"><span>0</span></p></td><td><p align=\"center\"><span>2,5</span></p></td><td><p align=\"center\"><span>4,5</span></p></td><td><p align=\"center\"><span>6,0</span></p></td><td><p align=\"center\"><span>7,0</span></p></td><td><p align=\"center\"><span>7,5</span></p></td><td><p align=\"center\"><span>7,0</span></p></td><td><p align=\"center\"><span>6,0</span></p></td><td><p align=\"center\"><span>4,5</span></p></td><td><p align=\"center\"><span>2,5</span></p></td><td><p align=\"center\"><span>0</span></p></td><td><p align=\"center\"><span>–2,5</span></p></td><td><p align=\"center\"><span>–4,5</span></p></td><td><p align=\"center\"><span>–6,0</span></p></td><td><p align=\"center\"><span>–7,0</span></p></td><td><p align=\"center\"><span>–7,5</span></p></td></tr></tbody></table><p>Из приведённого ниже списка выберите все верные утверждения относительно движения пружинного маятника.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td valign=\"middle\"></td><td>&nbsp;<b>1)</b>&nbsp;</td><td><p>Период колебаний грузика равен 1 с. </p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>2)</b>&nbsp;</td><td><p>Амплитуда колебаний грузика равна 15 мм.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>3)</b>&nbsp;</td><td><p>Потенциальная энергия пружины маятника в момент времени 1,5&nbsp;с минимальна. </p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>4)</b>&nbsp;</td><td><p>Кинетическая энергия грузика в момент времени 1,0&nbsp;с максимальна.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>5)</b>&nbsp;</td><td><p>Модуль ускорения грузика в момент времени 1,5&nbsp;с максимален. </p></td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "F120FE",
@@ -3524,6 +3677,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Определите показания миллиамперметра (см. рисунок), если абсолютная погрешность прямого измерения силы тока равна цене деления миллиамперметра. </p><p align=\"center\"><img src=\"fipi/12cc1584396f1128.jpg\"></p><p>Ответ: <u>(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> ± <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</u> мА.</p></td></tr></tbody></table></div>"
  },
  {
+  "id": "99C905",
+  "subject": "Физика",
+  "guid": "2B8ABBE99FFBAF434FDA63E402BCA507",
+  "kes": "3.6.2 Законы отражения света",
+  "section": "Электродинамика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Луч света падает на плоское зеркало. Угол падения равен 20°. Определите угол между падающим и отражённым лучами.\n\nградусов",
+  "units": "",
+  "pictures": [],
+  "answer": "40",
+  "accept": [],
+  "why": "Угол отражения равен углу падения: между лучами 20 + 20 = 40 градусов.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Луч света падает на плоское зеркало. Угол падения равен 20<span>°</span>. Определите угол между падающим и отражённым лучами.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>градусов&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "A46BFA",
   "subject": "Физика",
   "guid": "199D040C5A97BB3548A00F69F8C22EBA",
@@ -3621,6 +3791,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/6219ee94291ec736.jpg\"></p></td></tr></tbody></table><p>Определите напряжение на лампочке (см. рисунок), если абсолютная погрешность прямого измерения напряжения равна цене деления вольтметра.</p><p>Ответ: <u>(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> ± <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</u> В.</p></td></tr></tbody></table></div>"
  },
  {
+  "id": "AFC008",
+  "subject": "Физика",
+  "guid": "29FA12723E3C9F6845B44445B8B476B3",
+  "kes": "3.6.8 Ход луча, прошедшего линзу под произвольным углом к её главной оптической оси. Построение изображений точки и отрезка прямой в собирающих и рассеивающих линзах и их системах",
+  "section": "Электродинамика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Небольшой предмет расположен на главной оптической оси тонкой собирающей линзы на тройном фокусном расстоянии от неё. Его начинают удалять от линзы. Как меняются при этом расстояние от линзы до изображения и оптическая сила линзы?\n\nДля каждой величины определите соответствующий характер изменения:\n\n1)\n\nувеличивается\n\n2)\n\nуменьшается\n\n3)\n\nне изменяется\n\nЗапишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.\n\nРасстояние от линзы\nдо изображения\n\nОптическая сила линзы",
+  "units": "",
+  "pictures": [],
+  "answer": "23",
+  "accept": [],
+  "why": "Предмет удаляют, расстояние d растёт, а по формуле линзы f = dF/(d − F) изображение подходит ближе к фокусу — расстояние до него уменьшается. Оптическая сила зависит только от самой линзы и не меняется.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Небольшой предмет расположен на главной оптической оси тонкой собирающей линзы на тройном фокусном расстоянии от неё. Его начинают удалять от линзы. Как меняются при этом расстояние от линзы до изображения и оптическая сила линзы?</p><p>Для каждой величины определите соответствующий характер изменения: </p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличивается</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшается</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменяется</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Расстояние от линзы <br> до изображения</p></td><td valign=\"top\"><p align=\"center\">Оптическая сила линзы</p></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "B00D03",
   "subject": "Физика",
   "guid": "24E2270F53DE89E147CED6EBA7C43EDF",
@@ -3687,6 +3874,23 @@ export const TASKS = [
   "why": "F = qυB: у первой 2q·υ, у второй q·2υ — силы равны",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Две частицы с зарядами <i><span>q</span></i><sub>1</sub> = 2<i><span>q</span></i> и <i><span>q</span></i><sub>2</sub> = <i><span>q</span></i> влетают в однородное магнитное поле перпендикулярно вектору магнитной индукции со скоростями <span><math><mstyle displaystyle=\"true\"><mrow><msub><mi>υ</mi><mn>1</mn></msub><mo>=</mo><mi>υ</mi></mrow></mstyle></math></span>&nbsp;и <span><math><mstyle displaystyle=\"true\"><mrow><msub><mi>υ</mi><mn>2</mn></msub><mo>=</mo><mn>2</mn><mi>υ</mi></mrow></mstyle></math></span>&nbsp;соответственно. Определите отношение <span><math><mstyle displaystyle=\"true\"><mrow><mfrac><mrow><msub><mi>F</mi><mn>1</mn></msub></mrow><mrow><msub><mi>F</mi><mn>2</mn></msub></mrow></mfrac></mrow></mstyle></math></span>&nbsp;модулей сил, действующих на частицы со стороны магнитного поля в этот момент времени.</p></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "c46A08",
+  "subject": "Физика",
+  "guid": "2afd092464154844aee7a8ad3fa3ebcc",
+  "kes": "3.3 Магнитное поле",
+  "section": "Электродинамика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Отрицательно заряженный ион движется равномерно по окружности в однородном магнитном поле. Как изменятся сила, действующая на ион со стороны магнитного поля, и период его обращения, если увеличить скорость иона?\n\nДля каждой величины определите соответствующий характер изменения:\n\n1)\n\nувеличится\n\n2)\n\nуменьшится\n\n3)\n\nне изменится\n\nЗапишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.\n\nСила, действующая\nна ион со стороны магнитного поля\n\nПериод обращения\nиона",
+  "units": "",
+  "pictures": [],
+  "answer": "13",
+  "accept": [],
+  "why": "Сила Лоренца F = qvB растёт вместе со скоростью. Период обращения T = 2*pi*m/(qB) от скорости не зависит — не изменится.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Отрицательно заряженный ион движется равномерно по окружности в однородном магнитном поле. Как изменятся сила, действующая на ион со стороны магнитного поля, и период его обращения, если увеличить скорость иона?</p><p>Для каждой величины определите соответствующий характер изменения:</p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличится</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшится</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменится</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Сила, действующая <br> на ион со стороны магнитного поля</p></td><td valign=\"top\"><p align=\"center\">Период обращения <br> иона</p></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "C771F4",
