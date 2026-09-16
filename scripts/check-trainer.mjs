@@ -64,10 +64,21 @@ want("раздел «Тренажёр» есть в меню", await navButton.c
 await navButton.click();
 await page.waitForTimeout(400);
 
+// Сначала выбор предмета: сразу решать никого не бросает.
 const card = page.locator("section.ap-card").first();
+const picker = await card.innerText();
+want("сперва показан выбор предмета", /Начать тест/.test(picker) && /Обществознание/.test(picker));
+want("сказано, сколько заданий в наборе", /\d+ задани/.test(picker));
+want("есть «решать все задания»", /Решать все задания/.test(picker));
+want("сказано, что это альфа и ключи наши", /альфа-верс/i.test(picker) && /решены нами/i.test(picker));
+want("просьба прислать ответ из банка на виду", /который банк засчитал/i.test(picker));
+
+await page.getByRole("button", { name: "Начать тест" }).first().click();
+await page.waitForTimeout(1200);
 const head = await card.innerText();
 want("видно номер задания", /№\s*[0-9A-Za-zА-Яа-я]{5,8}/.test(head), (head.match(/№\s*\S+/) || [])[0]);
 want("видно условие", head.length > 200);
+want("можно вернуться к выбору предмета", /К выбору предмета/.test(head));
 
 // Секундомер идёт: через две секунды на экране должно стать больше.
 const clockText = () => page.locator('[aria-label="Время на задание"]').innerText();
@@ -79,11 +90,11 @@ want("секундомер идёт", secs(second) > secs(first), first + " → 
 
 // Какое задание показано и какой у него ответ — берём из набора приложения.
 const shownId = (head.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
-const bank = await import("../src/fipi-bank.js");
-const task = bank.BANK_TASKS.find((t) => t.id === shownId);
-want("в наборе три предмета", bank.BANK_SUBJECTS.length === 3, bank.BANK_SUBJECTS.join(", "));
-want("сказано, что это альфа и ключи наши", /альфа-верс/i.test(head) && /решены нами/i.test(head));
-want("просьба прислать ответ из банка на виду", /который банк засчитал/i.test(head));
+const index = await import("../src/fipi-index.js");
+const bankOf = async (file) => (await import("../src/bank/" + file + ".js")).TASKS;
+const society = await bankOf("society");
+const task = society.find((t) => t.id === shownId);
+want("в описи три предмета", index.BANK_SUBJECTS.length === 3, index.BANK_SUBJECTS.map((s) => s.name).join(", "));
 want("задание из набора", !!task, shownId);
 
 // Неверный ответ: приложение должно сказать «Неверно», показать ключ и разбор.
@@ -136,7 +147,7 @@ await page.getByRole("button", { name: "Следующее" }).click();
 await page.waitForTimeout(300);
 const nextHead = await card.innerText();
 const nextId = (nextHead.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
-const nextTask = bank.BANK_TASKS.find((t) => t.id === nextId);
+const nextTask = society.find((t) => t.id === nextId);
 want("показано другое задание", nextId && nextId !== shownId, shownId + " → " + nextId);
 await page.getByLabel("Ваш ответ").fill(nextTask.answer);
 await page.getByRole("button", { name: "Ответить" }).click();
@@ -154,18 +165,24 @@ want("сказано, откуда берётся счёт ключей", /сч�
   (stats.match(/[^\n]*счёт[^\n]*/) || [])[0]);
 
 // Итоги должны относиться к выбранному предмету, а не ко всему сразу.
-const firstSubject = bank.BANK_SUBJECTS[0];
+const firstSubject = index.BANK_SUBJECTS[0].name;
 want("в заголовке итогов назван предмет", stats.toLowerCase().includes("как идут дела · " + firstSubject.toLowerCase()),
   (stats.match(/Как идут дела[^\n]*/) || [])[0]);
-const otherSubject = bank.BANK_SUBJECTS[1];
-await page.getByRole("button", { name: new RegExp("^" + otherSubject) }).first().click();
-await page.waitForTimeout(400);
+const otherSubject = index.BANK_SUBJECTS[1].name;
+const openSubject = async (name) => {
+  const back = page.getByRole("button", { name: "К выбору предмета" });
+  if (await back.count()) { await back.first().click(); await page.waitForTimeout(300); }
+  const row = page.locator("section.ap-card div").filter({ hasText: new RegExp("^" + name) });
+  await page.getByRole("button", { name: /Начать тест|Продолжить/ }).nth(index.BANK_SUBJECTS.findIndex((s) => s.name === name)).click();
+  await page.waitForTimeout(900);
+  return row;
+};
+await openSubject(otherSubject);
 const otherStats = await page.locator("#root").innerText();
 const done = (otherStats.match(/(\d+)\s*\nпрорешано/) || [])[1];
 want("у другого предмета свои итоги", done === "0", otherSubject + ": прорешано " + done);
 want("списки жалоб тоже по предмету", !/Спорные ключи/.test(otherStats) && !/Задания, на которые пожаловались/.test(otherStats));
-await page.getByRole("button", { name: new RegExp("^" + firstSubject) }).first().click();
-await page.waitForTimeout(400);
+await openSubject(firstSubject);
 want("у своего предмета итоги на месте", /Спорные ключи/.test(await page.locator("#root").innerText()));
 
 // Самое важное: прогресс должен пережить перезагрузку.
@@ -173,7 +190,7 @@ await page.waitForTimeout(1200);
 await page.reload();
 await page.waitForTimeout(1800);
 await page.getByRole("button", { name: /Тренажёр/ }).first().click();
-await page.waitForTimeout(500);
+await page.waitForTimeout(1200);
 const saved = await page.evaluate(() => {
   const raw = localStorage.getItem("planner:planner-state-v5");
   const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
@@ -183,6 +200,11 @@ want("попытки сохранились", saved.log === 2, "записей: 
 want("отметка о ключе сохранилась", saved.marks === 1, "отметок: " + saved.marks);
 const afterReload = await page.locator("#root").innerText();
 want("итоги на месте после перезагрузки", /прорешано/.test(afterReload) && /Спорные ключи/.test(afterReload));
+// Приложение должно открыться там же, где его закрыли: на том же предмете и
+// на том же задании, а не на выборе предмета.
+want("после перезагрузки открыт тот же предмет", afterReload.includes(firstSubject), (afterReload.match(/Как идут дела[^\n]*/) || [])[0]);
+const resumedId = ((await card.innerText()).match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+want("и то же задание", !!resumedId, "№ " + resumedId);
 
 // Разметка условия: таблица должна остаться таблицей, а не строкой слов.
 const structured = await page.evaluate(() => {
@@ -209,22 +231,21 @@ const brokenSaved = await page.evaluate(() => {
 want("жалоба на задание сохранилась", brokenSaved === 1, "записей: " + brokenSaved);
 
 // Предметы переключаются, и набор меняется.
-for (const name of bank.BANK_SUBJECTS.slice(1)) {
-  await page.getByRole("button", { name: new RegExp("^" + name) }).first().click();
-  await page.waitForTimeout(400);
+for (const s of index.BANK_SUBJECTS.slice(1)) {
+  await openSubject(s.name);
   const t = await card.innerText();
   const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
-  const found = bank.BANK_TASKS.find((x) => x.id === id);
-  want("предмет «" + name + "» открывается", !!found && found.subject === name, id + " → " + (found ? found.subject : "не нашлось"));
+  const found = (await bankOf(s.file)).find((x) => x.id === id);
+  want("предмет «" + s.name + "» открывается", !!found && found.subject === s.name, id + " → " + (found ? found.subject : "не нашлось"));
 }
 
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
-await page.getByRole("button", { name: /^Физика/ }).first().click();
-await page.waitForTimeout(400);
+await openSubject("Физика");
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,
 // где в разметку не попал.
-const withPictures = new Set(bank.BANK_TASKS
-  .filter((t) => t.subject === "Физика" && (t.pictures.length || /<img/.test(t.body || "")))
+const physics = await bankOf("physics");
+const withPictures = new Set(physics
+  .filter((t) => t.pictures.length || /<img/.test(t.body || ""))
   .map((t) => t.id));
 want("в наборе есть задания с рисунками", withPictures.size > 0, withPictures.size + " шт.");
 let shownPicture = 0;
@@ -232,8 +253,9 @@ for (let step = 0; step < 40; step += 1) {
   const t = await card.innerText();
   const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
   if (withPictures.has(id)) {
+    // Картинки теперь лежат отдельными файлами рядом со сборкой.
     shownPicture = await page.evaluate(() => [...document.querySelectorAll("section.ap-card img")]
-      .filter((i) => i.currentSrc.startsWith("data:image") && i.naturalWidth > 10).length);
+      .filter((i) => /\/fipi\//.test(i.currentSrc) && i.naturalWidth > 10).length);
     break;
   }
   await page.getByRole("button", { name: "Пропустить" }).click();

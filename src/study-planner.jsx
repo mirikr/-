@@ -572,6 +572,9 @@ export default function StudyPlanner() {
   // список записей со своими id: так правки с телефона и ноутбука сливаются, а не
   // затирают друг друга.
   const [trainerLog, setTrainerLog] = useState([]);
+  // Где человек остановился в тренажёре: открытый предмет, раздел и задание.
+  // Это настройка, а не запись со своим номером: последняя всегда верна.
+  const [trainerState, setTrainerState] = useState({ open: "", section: "", taskId: "", again: false });
   const [bankMarks, setBankMarks] = useState([]);
   // Удаления копятся столбиком: каждое со своим таймером на 20 секунд.
   const [undoQueue, setUndoQueue] = useState([]);
@@ -712,6 +715,7 @@ export default function StudyPlanner() {
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
           if (parsed.trainerLog) setTrainerLog(parsed.trainerLog);
+          if (parsed.trainerState) setTrainerState(parsed.trainerState);
           if (parsed.bankMarks) setBankMarks(parsed.bankMarks);
         }
         setLastSyncedAt(new Date());
@@ -830,6 +834,7 @@ export default function StudyPlanner() {
           openSections,
           homework,
           trainerLog,
+          trainerState,
           bankMarks,
         });
         syncSnapshot.current = stamped;
@@ -856,7 +861,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, bankMarks, loaded]);
+  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, trainerState, bankMarks, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -3165,7 +3170,15 @@ export default function StudyPlanner() {
 
         {screen === "trainer" && (
           <Suspense fallback={<section style={styles.plainBlock}><p style={styles.muted}>Задания загружаются…</p></section>}>
-            <Trainer log={trainerLog} marks={bankMarks} onAttempt={addAttempt} onMark={addMark} styles={styles} />
+            <Trainer
+              log={trainerLog}
+              marks={bankMarks}
+              state={trainerState}
+              onState={setTrainerState}
+              onAttempt={addAttempt}
+              onMark={addMark}
+              styles={styles}
+            />
           </Suspense>
         )}
 

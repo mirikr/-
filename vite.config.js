@@ -55,7 +55,11 @@ export default defineConfig(({ mode }) => ({
         // Набор заданий тренажёра — отдельный кусок в пару мегабайт. В офлайн-запас
         // его не кладём: приложение должно ставиться быстро и на мобильном интернете.
         // Один раз открыв тренажёр, ученик получает набор в кэш и дальше решает без сети.
-        globIgnores: ["**/versions/*.png", "**/trainer-*.js"],
+        // Наборы заданий и картинки к ним — десятки мегабайт. В офлайн-запас
+        // они не кладутся: приложение должно ставиться быстро и на мобильном
+        // интернете. Открытый хоть раз набор попадает в кэш и дальше работает
+        // без сети.
+        globIgnores: ["**/versions/*.png", "**/society-*.js", "**/physics-*.js", "**/informatics-*.js", "**/fipi/*"],
         // The planner must open with no network at all; Supabase calls are never cached,
         // they either reach the server or fall back to the local copy in storage.js.
         navigateFallback: base + "index.html",
@@ -63,11 +67,22 @@ export default defineConfig(({ mode }) => ({
           {
             // Имя куска меняется вместе с содержимым, поэтому старый набор
             // подсунуть нельзя: адрес у новой сборки другой.
-            urlPattern: /\/assets\/trainer-[^/]+\.js$/,
+            urlPattern: /\/assets\/(society|physics|informatics)-[^/]+\.js$/,
             handler: "CacheFirst",
             options: {
               cacheName: "trainer-bank",
-              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 180 },
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 180 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Картинки заданий: имя файла — отпечаток содержимого, поэтому
+            // подменить их нельзя, и кэш можно держать долго.
+            urlPattern: /\/fipi\/[^/]+\.(jpg|jpeg|png|gif)$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "trainer-pics",
+              expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

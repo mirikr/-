@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BANK_SECTIONS, BANK_SOURCE, BANK_SUBJECTS, BANK_TASKS, BANK_TOTALS, BANK_URL } from "./fipi-bank.js";
+import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
+import { loadBank, withBase } from "./bank-load.js";
 import { AGREE_NEEDED, consensus, isRight, myVote, normalizeAnswer, streakOf, timeWord, trainerStats } from "./bank-answer.js";
 import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer } from "./bank-votes.js";
 
@@ -59,15 +60,21 @@ function useStopwatch(taskId) {
   return { seconds: shown, read: elapsed };
 }
 
-export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
-  const [subject, setSubject] = useState(BANK_SUBJECTS[0] || "");
-  const [section, setSection] = useState("");
-  const [onlyNew, setOnlyNew] = useState(true);
+export default function Trainer({ log, marks, state, onState, onAttempt, onMark, styles }) {
+  // Что открыто: имя предмета, «Все предметы» или пусто — тогда показан выбор.
+  // Этот выбор хранится вместе с остальными записями, поэтому приложение
+  // открывается там же, где его закрыли, — хоть на другом устройстве.
+  const open = (state && state.open) || "";
+  const [section, setSection] = useState((state && state.section) || "");
+  const [onlyNew, setOnlyNew] = useState(!(state && state.again));
+  // Задания открытого предмета. null — ещё грузятся или не загрузились.
+  const [tasks, setTasks] = useState(null);
+  const [failed, setFailed] = useState(false);
   // Какое задание на экране. Держим именно его, а не позицию в списке: стоит
   // ответить верно, как решённое задание уходит из набора, список сдвигается —
   // и на месте разобранного задания оказывается следующее, а разбор под ним
   // остаётся от предыдущего. По номеру такого не бывает.
-  const [currentId, setCurrentId] = useState("");
+  const [currentId, setCurrentId] = useState((state && state.taskId) || "");
   const [value, setValue] = useState("");
   const [result, setResult] = useState(null);
   // Что человек списал с ФИПИ: ответ, который банк там засчитал.
@@ -78,6 +85,21 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   const [votes, setVotes] = useState([]);
   const [me, setMe] = useState("");
   const [shared, setShared] = useState("off");
+
+  // Набор грузится, когда предмет открыли, и остаётся в памяти: переключаться
+  // между предметами после этого мгновенно.
+  useEffect(() => {
+    if (!open) { setTasks(null); setFailed(false); return undefined; }
+    let alive = true;
+    setFailed(false);
+    const wanted = open === ALL ? BANK_SUBJECTS.map((s) => s.file) : [(BANK_SUBJECTS.find((s) => s.name === open) || {}).file];
+    Promise.all(wanted.filter(Boolean).map((f) => loadBank(f))).then((lists) => {
+      if (!alive) return;
+      if (lists.some((l) => l === null)) { setFailed(true); setTasks(null); return; }
+      setTasks(lists.flat());
+    });
+    return () => { alive = false; };
+  }, [open]);
 
   useEffect(() => {
     let alive = true;
@@ -92,10 +114,15 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     };
   }, []);
 
-  const sections = (BANK_SECTIONS[subject] || []).slice().sort((a, b) => a.localeCompare(b, "ru"));
-  const mine = useMemo(() => BANK_TASKS.filter((t) => t.subject === subject), [subject]);
+  const mine = useMemo(() => tasks || [], [tasks]);
+  const sections = useMemo(
+    () => [...new Set(mine.map((t) => t.section))].sort((a, b) => a.localeCompare(b, "ru")),
+    [mine],
+  );
+  const subject = open === ALL ? "" : open;
+  const card = BANK_SUBJECTS.find((s) => s.name === subject);
   // Сколько заданий по этому предмету всего в банке ФИПИ и какую часть мы уже перенесли.
-  const whole = BANK_TOTALS[subject] || 0;
+  const whole = (card && card.whole) || 0;
   const percent = whole ? Math.max(0.1, (mine.length / whole) * 100).toFixed(1).replace(".0", "").replace(".", ",") : "";
 
   // Что человек уже одолел: по последней попытке, тренируются ведь до победы.
@@ -111,7 +138,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     return mine.filter((t) => (!section || t.section === section) && (!onlyNew || !solved.has(t.id)));
   }, [mine, section, onlyNew, solved]);
 
-  const task = (currentId && BANK_TASKS.find((t) => t.id === currentId)) || queue[0] || null;
+  const task = (currentId && mine.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
 
   // Всё, что показано внизу, считается по выбранному предмету: перемешивать
@@ -138,11 +165,11 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     const out = [];
     (marks || []).forEach((m) => {
       if (m.kind !== "broken" || !mineIds.has(m.taskId)) return;
-      const t = BANK_TASKS.find((x) => x.id === m.taskId);
+      const t = mine.find((x) => x.id === m.taskId);
       if (t && !out.some((x) => x.id === t.id)) out.push(t);
     });
     return out;
-  }, [marks, mineIds]);
+  }, [marks, mineIds, mine]);
 
   // Ответы, которые засчитал сам банк: и свои, и присланные классом. Это и есть
   // список правок для ключей — его переносят в набор заданий руками.
@@ -150,7 +177,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     const rows = new Map();
     const put = (taskId, answer) => {
       if (!mineIds.has(taskId) || !answer) return;
-      const t = BANK_TASKS.find((x) => x.id === taskId);
+      const t = mine.find((x) => x.id === taskId);
       if (!t) return;
       const was = rows.get(taskId);
       if (!was) rows.set(taskId, { task: t, answer, count: 1, same: isRight(t, answer) });
@@ -159,17 +186,17 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     (marks || []).forEach((m) => put(m.taskId, m.fipiAnswer));
     (votes || []).forEach((v) => put(v.taskId, v.fipiAnswer));
     return [...rows.values()].sort((a, b) => Number(a.same) - Number(b.same) || a.task.id.localeCompare(b.task.id));
-  }, [marks, votes, mineIds]);
+  }, [marks, votes, mineIds, mine]);
 
   const disputed = useMemo(() => {
     const out = [];
     (marks || []).forEach((m) => {
       if (m.kind !== "wrong" || !mineIds.has(m.taskId)) return;
-      const t = BANK_TASKS.find((x) => x.id === m.taskId);
+      const t = mine.find((x) => x.id === m.taskId);
       if (t && !out.some((x) => x.task.id === t.id)) out.push({ task: t, mark: m });
     });
     return out;
-  }, [marks, mineIds]);
+  }, [marks, mineIds, mine]);
 
   function answer() {
     if (!task || result) return;
@@ -233,29 +260,53 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
     const after = task ? rest.find((t) => t.id > task.id) : null;
     const pick = after || rest[0] || null;
     setCurrentId(pick ? pick.id : "");
+    onState({ open, section, taskId: pick ? pick.id : "", again: !onlyNew });
   }
 
-  function pickSubject(name) {
-    setSubject(name);
+  // Открыть набор. «Заново» означает пройти всё сначала, включая решённое;
+  // сами записи о решённом при этом целы — терять их нельзя.
+  function start(name, again) {
     setSection("");
-    setCurrentId("");
+    setOnlyNew(!again);
+    setCurrentId(again ? "" : (state && state.open === name && state.taskId) || "");
     setResult(null);
     setValue("");
     setFromBank("");
+    onState({ open: name, section: "", taskId: again ? "" : (state && state.open === name && state.taskId) || "", again: !!again });
+  }
+
+  function leave() {
+    setResult(null);
+    setValue("");
+    setFromBank("");
+    setCurrentId("");
+    onState({ open: "", section: "", taskId: "", again: false });
   }
 
   function pickSection(name) {
     setSection(name);
+    onState({ open, section: name, taskId: "", again: !onlyNew });
     setCurrentId("");
     setResult(null);
     setValue("");
     setFromBank("");
   }
 
-  if (!BANK_TASKS.length) return null;
+  // Сколько заданий предмета уже решено — считается по описи, без загрузки
+  // самого набора: выбор предмета должен открываться мгновенно.
+  const doneIn = (ids) => {
+    const set = new Set(ids);
+    let n = 0;
+    solved.forEach((id) => set.has(id) && (n += 1));
+    return n;
+  };
 
-  return (
-    <>
+  if (!BANK_SUBJECTS.length) return null;
+
+  // --- выбор предмета ------------------------------------------------------
+  if (!open) {
+    const everything = BANK_SUBJECTS.reduce((n, s) => n + s.count, 0);
+    return (
       <section className="ap-card" style={styles.card}>
         <div style={styles.cardTitle}>Тренажёр по банку ФИПИ</div>
         <p style={styles.cardNote}>
@@ -270,36 +321,99 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
           Такой ответ сейчас ценнее любого решённого задания: по нему ключи и правятся.
         </div>
 
-        <div style={S.chips}>
-          {BANK_SUBJECTS.map((name) => (
-            <button
-              key={name}
-              onClick={() => pickSubject(name)}
-              className="ap-row"
-              style={{ ...S.subject, ...(subject === name ? S.subjectOn : null) }}
-            >
-              {name}
-              <span style={S.chipCount}>{BANK_TASKS.filter((t) => t.subject === name).length}</span>
-            </button>
-          ))}
+        <div style={S.picker}>
+          {BANK_SUBJECTS.map((s) => {
+            const done = doneIn(s.ids);
+            return (
+              <div key={s.name} style={S.pick}>
+                <div style={S.pickTop}>
+                  <span style={S.pickName}>{s.name}</span>
+                  <span style={S.pickCount}>{s.count} {taskWord(s.count)}</span>
+                </div>
+                <div style={S.pickLine}>
+                  {done
+                    ? "Решено " + done + " из " + s.count + (done === s.count ? " — весь набор пройден" : "")
+                    : "Ещё не начинали"}
+                </div>
+                {done ? (
+                  <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(2, (done / s.count) * 100) + "%" }} /></div>
+                ) : null}
+                <div style={S.pickButtons}>
+                  <button onClick={() => start(s.name, false)} className="ap-btn" style={S.primary}>
+                    {done ? "Продолжить" : "Начать тест"}
+                  </button>
+                  {done ? (
+                    <button onClick={() => start(s.name, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        <div style={S.moved}>
-          <div style={S.movedTop}>
-            <span>
-              Перенесено из банка ФИПИ: <b>{mine.length}</b> {taskWord(mine.length)} из{" "}
-              <b>{whole || "?"}</b> по предмету «{subject}»
-            </span>
-            {whole ? <span style={S.movedPart}>{percent}%</span> : null}
-          </div>
-          {whole ? (
-            <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(1.5, Math.min(100, (mine.length / whole) * 100)) + "%" }} /></div>
-          ) : null}
-          <div style={S.movedNote}>
-            Задания переносим и решаем вручную, поэтому набор растёт постепенно. Задания второй части
-            с развёрнутым ответом сюда не попадают: их проверяет эксперт, а не строчка с ответом.
-          </div>
+        <div style={S.allRow}>
+          <button onClick={() => start(ALL, false)} className="ap-row" style={S.keyBtn}>
+            Решать все задания подряд
+          </button>
+          <span style={S.allNote}>
+            Все {everything} {taskWord(everything)} трёх предметов вперемешку. Наборы предметов при этом
+            загрузятся все сразу — по мобильному интернету это заметно дольше.
+          </span>
         </div>
+
+        <p style={S.source}>{BANK_SOURCE}</p>
+      </section>
+    );
+  }
+
+  // --- набор ещё грузится или не пришёл ------------------------------------
+  if (failed) {
+    return (
+      <section className="ap-card" style={styles.card}>
+        <div style={styles.cardTitle}>{open === ALL ? "Все предметы" : open}</div>
+        <p style={styles.cardNote}>
+          Задания не загрузились. Если сети нет, набор откроется только после того, как его
+          хоть раз открывали с интернетом.
+        </p>
+        <button onClick={leave} className="ap-row" style={S.keyBtn}>К выбору предмета</button>
+      </section>
+    );
+  }
+  if (!tasks) {
+    return (
+      <section className="ap-card" style={styles.card}>
+        <div style={styles.cardTitle}>{open === ALL ? "Все предметы" : open}</div>
+        <p style={styles.cardNote}>Задания загружаются…</p>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <section className="ap-card" style={styles.card}>
+        <div style={S.head0}>
+          <div style={styles.cardTitle}>{open === ALL ? "Все предметы" : open}</div>
+          <button onClick={leave} className="ap-row" style={S.back}>К выбору предмета</button>
+        </div>
+
+        {open === ALL ? null : (
+          <div style={S.moved}>
+            <div style={S.movedTop}>
+              <span>
+                Перенесено из банка ФИПИ: <b>{mine.length}</b> {taskWord(mine.length)} из{" "}
+                <b>{whole || "?"}</b> по предмету «{subject}»
+              </span>
+              {whole ? <span style={S.movedPart}>{percent}%</span> : null}
+            </div>
+            {whole ? (
+              <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(1.5, Math.min(100, (mine.length / whole) * 100)) + "%" }} /></div>
+            ) : null}
+            <div style={S.movedNote}>
+              Задания переносим и решаем вручную, поэтому набор растёт постепенно. Задания второй части
+              с развёрнутым ответом сюда не попадают: их проверяет эксперт, а не строчка с ответом.
+            </div>
+          </div>
+        )}
 
         <div style={S.chips}>
           <button onClick={() => pickSection("")} className="ap-row" style={{ ...S.chip, ...(section ? null : S.chipOn) }}>
@@ -319,8 +433,19 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
         </div>
 
         <label style={S.only}>
-          <input type="checkbox" checked={onlyNew} onChange={(e) => { setOnlyNew(e.target.checked); setCurrentId(""); setResult(null); setValue(""); }} />
+          <input
+            type="checkbox"
+            checked={onlyNew}
+            onChange={(e) => {
+              setOnlyNew(e.target.checked);
+              setCurrentId("");
+              setResult(null);
+              setValue("");
+              onState({ open, section, taskId: "", again: !e.target.checked });
+            }}
+          />
           Только нерешённые
+          <span style={S.onlyCount}>решено {doneIn(mine.map((t) => t.id))} из {mine.length}</span>
         </label>
 
         {!task ? (
@@ -341,14 +466,14 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
             {task.body ? (
               // Разметка условия приходит из нашего же набора, собранного из банка,
               // и чистится при сборке: ни скриптов, ни чужих ссылок в ней не остаётся.
-              <div className="ap-fipi" style={S.body} dangerouslySetInnerHTML={{ __html: task.body }} />
+              <div className="ap-fipi" style={S.body} dangerouslySetInnerHTML={{ __html: withBase(task.body) }} />
             ) : (
               <div style={S.text}>{task.text}</div>
             )}
             {/* Картинки лежат отдельно только тогда, когда в разметке их не оказалось:
                 иначе рисунок был бы показан дважды. */}
             {(task.pictures || []).map((p, i) => (
-              <img key={i} src={p.data} alt="" style={S.picture} />
+              <img key={i} src={withBase('src="' + p.src + '"').slice(5, -1)} alt="" style={S.picture} />
             ))}
 
             <div style={S.answerRow}>
@@ -571,6 +696,9 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
   );
 }
 
+// Ключ режима «все предметы сразу»: в этом случае грузятся все наборы.
+const ALL = "все";
+
 function taskWord(n) {
   const last = n % 10;
   const two = n % 100;
@@ -693,6 +821,21 @@ const S = {
     textDecoration: "underline", cursor: "pointer", padding: 0,
   },
   fromClass: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "9px 0 0" },
+  picker: { display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: 14 },
+  pick: { border: "1px solid var(--line2)", borderRadius: 12, padding: "12px 14px", background: "var(--panel2)" },
+  pickTop: { display: "flex", alignItems: "baseline", gap: 8, justifyContent: "space-between" },
+  pickName: { fontSize: 16, fontWeight: 600, color: "var(--ink)" },
+  pickCount: { fontSize: 12.5, color: "var(--mute)", flex: "0 0 auto" },
+  pickLine: { fontSize: 13, color: "var(--ink3)", margin: "6px 0 0" },
+  pickButtons: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 },
+  allRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 },
+  allNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, flex: "1 1 240px" },
+  head0: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between", marginBottom: 10 },
+  back: {
+    border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 8,
+    padding: "6px 11px", font: "inherit", fontSize: 13, cursor: "pointer",
+  },
+  onlyCount: { fontSize: 12.5, color: "var(--mute)", marginLeft: "auto" },
   collected: {
     marginTop: 16, border: "1px solid var(--line2)", borderRadius: 10, padding: "11px 13px",
     background: "var(--panel2)",

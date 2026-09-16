@@ -1,6 +1,12 @@
 // Сверка ответов в тренажёре и целость набора заданий.
 import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, streakOf, timeWord, trainerStats } from "../src/bank-answer.js";
-import { BANK_TASKS, BANK_SECTIONS, BANK_SUBJECTS } from "../src/fipi-bank.js";
+import { BANK_SUBJECTS } from "../src/fipi-index.js";
+
+// Набор лежит по файлу на предмет: грузится только тот, который открыли.
+// Проверки идут по всему набору сразу, поэтому здесь собираем его целиком.
+const BANK_TASKS = (await Promise.all(
+  BANK_SUBJECTS.map(async (s) => (await import("../src/bank/" + s.file + ".js")).TASKS),
+)).flat();
 
 let bad = 0;
 const ok = (cond, msg) => {
@@ -14,11 +20,14 @@ ok(new Set(BANK_TASKS.map((t) => t.id)).size === BANK_TASKS.length, "номер�
 ok(BANK_TASKS.every((t) => t.text && t.text.length > 40), "у каждого задания есть условие");
 ok(BANK_TASKS.every((t) => t.answer && String(t.answer).trim()), "у каждого задания есть ответ");
 ok(BANK_TASKS.every((t) => t.why && t.why.length > 5), "у каждого задания есть разбор");
-ok(BANK_TASKS.every((t) => BANK_SUBJECTS.includes(t.subject)), "предмет каждого задания из общего списка");
-ok(BANK_TASKS.every((t) => (BANK_SECTIONS[t.subject] || []).includes(t.section)), "раздел каждого задания принадлежит его предмету");
-ok(BANK_SUBJECTS.every((s) => BANK_TASKS.some((t) => t.subject === s)), "в каждом предмете есть задания");
-ok(BANK_TASKS.every((t) => (t.pictures || []).every((p) => String(p.data || "").startsWith("data:image/"))),
-  "картинки лежат внутри набора, а не ссылками на чужой сайт");
+ok(BANK_TASKS.every((t) => BANK_SUBJECTS.some((s) => s.name === t.subject)), "предмет каждого задания из общего списка");
+ok(BANK_TASKS.every((t) => (BANK_SUBJECTS.find((s) => s.name === t.subject) || { sections: [] }).sections.some((x) => x.name === t.section)),
+  "раздел каждого задания принадлежит его предмету");
+ok(BANK_SUBJECTS.every((s) => BANK_TASKS.some((t) => t.subject === s.name)), "в каждом предмете есть задания");
+// Картинки вынесены в отдельные файлы: внутри набора остаётся только адрес.
+ok(BANK_TASKS.every((t) => (t.pictures || []).every((p) => /^fipi\/[0-9a-f]+\.[a-z]+$/.test(p.src || ""))),
+  "картинки подписаны файлом рядом со сборкой");
+ok(!BANK_TASKS.some((t) => /data:image/.test(t.body || "")), "картинок строкой base64 в наборе не осталось");
 ok(BANK_TASKS.every((t) => /^[0-9A-Za-zА-Яа-я]{5,8}$/.test(t.id)), "номер задания выглядит как номер банка");
 // Служебные строки банка в условие попасть не должны.
 // Разметка условия: она и есть то, ради чего задание читаемо.
@@ -27,8 +36,8 @@ ok(BANK_TASKS.every((t) => t.body && t.body.length > 30), "у каждого з�
 // в base64 находится случайная последовательность вроде «onNotw0=».
 const unsafe = BANK_TASKS.filter((t) => /<script|<iframe|<form|<input|<select|\son\w+\s*=|href\s*=\s*["']javascript:/i.test(t.body));
 ok(unsafe.length === 0, "в разметке нет скриптов, форм и обработчиков" + (unsafe.length ? ": " + unsafe[0].id : ""));
-const remote = BANK_TASKS.filter((t) => /<img[^>]+src=["'](?!data:)/i.test(t.body));
-ok(remote.length === 0, "все картинки вшиты, чужих ссылок нет" + (remote.length ? ": " + remote[0].id : ""));
+const remote = BANK_TASKS.filter((t) => /<img[^>]+src=["'](?!fipi\/)/i.test(t.body));
+ok(remote.length === 0, "картинки берутся из своей папки, чужих ссылок нет" + (remote.length ? ": " + remote[0].id : ""));
 ok(BANK_TASKS.filter((t) => /<table/.test(t.body)).length > 100, "таблицы в условиях сохранены");
 // В серверной разметке рисунок вставляет скрипт, а не тег <img>: если это
 // упустить, вместе с исходной разметкой из задания пропадают все рисунки.
@@ -38,8 +47,16 @@ const callLeft = BANK_TASKS.filter((t) => /ShowPictureQ/.test(t.body));
 ok(callLeft.length === 0, "вызова ShowPictureQ в разметке не осталось" + (callLeft.length ? ": " + callLeft[0].id : ""));
 // Отдельным списком картинка лежит только тогда, когда в разметку она не попала,
 // — иначе набор тащил бы каждый рисунок дважды.
-const twice = BANK_TASKS.filter((t) => (t.pictures || []).some((p) => t.body.includes(p.data)));
-ok(twice.length === 0, "рисунок не хранится дважды" + (twice.length ? ": " + twice[0].id : ""));
+const twice = BANK_TASKS.filter((t) => (t.pictures || []).some((p) => t.body.includes(p.src)));
+ok(twice.length === 0, "рисунок не подписан дважды" + (twice.length ? ": " + twice[0].id : ""));
+
+// «Определите по рисунку» без рисунка решать нечем. Свежая выгрузка сборщика
+// иногда приносит вместо картинки только ссылку на ege.fipi.ru — с сайта она не
+// загрузится, и человек остаётся с условием, к которому нечего смотреть.
+const blind = BANK_TASKS.filter((t) => /рисун|график|схем|диаграмм/i.test(t.lead + " " + t.text) &&
+  !(t.pictures || []).length && !/<img|<table/.test(t.body || ""));
+ok(blind.length === 0, "задание про рисунок не осталось без рисунка" +
+  (blind.length ? ": " + blind.map((t) => t.id).join(", ") : ""));
 
 // Номер варианта в банке рисует галочка: убрав её, номер надо вернуть.
 const numbered = BANK_TASKS.filter((t) => /Выбор ответ/i.test(t.type) && /<td[^>]*>1\)<\/td>/.test(t.body));
