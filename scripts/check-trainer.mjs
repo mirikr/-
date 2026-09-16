@@ -69,7 +69,11 @@ const card = page.locator("section.ap-card").first();
 const picker = await card.innerText();
 want("сперва показан выбор предмета", /Начать тест/.test(picker) && /Обществознание/.test(picker));
 want("сказано, сколько заданий в наборе", /\d+ задани/.test(picker));
-want("есть «решать все задания»", /Решать все задания/.test(picker));
+want("есть «решать все задания»", /Решать все задания подряд/.test(picker));
+// Кнопка живёт на карточке предмета: «все подряд» — это весь предмет целиком,
+// а не три предмета вперемешку.
+want("«все подряд» — про один предмет, а не про все сразу",
+  !/вперемешку|Все предметы/i.test(picker) && /весь предмет целиком/i.test(picker));
 want("сказано, что это альфа и ключи наши", /альфа-верс/i.test(picker) && /решены нами/i.test(picker));
 want("просьба прислать ответ из банка на виду", /который банк засчитал/i.test(picker));
 
@@ -237,6 +241,34 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
   const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
   const found = (await bankOf(s.file)).find((x) => x.id === id);
   want("предмет «" + s.name + "» открывается", !!found && found.subject === s.name, id + " → " + (found ? found.subject : "не нашлось"));
+}
+
+// «Решать все задания подряд» открывает тот же предмет, но вместе с решённым:
+// задание, которое только что решили верно, из набора не выпадает.
+{
+  await page.getByRole("button", { name: "К выбору предмета" }).first().click();
+  await page.waitForTimeout(400);
+  const one = index.BANK_SUBJECTS[0];
+  const i = 0;
+  await page.getByRole("button", { name: "Решать все задания подряд" }).nth(i).click();
+  await page.waitForTimeout(1200);
+  const t = await card.innerText();
+  const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+  const found = (await bankOf(one.file)).find((x) => x.id === id);
+  want("«все подряд» открывает один предмет", !!found && found.subject === one.name,
+    id + " → " + (found ? found.subject : "не нашлось"));
+  const solved = await page.evaluate(() => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    const last = new Map();
+    (value.trainerLog || []).forEach((a) => last.set(a.taskId, a.ok));
+    return [...last.entries()].filter(([, ok]) => ok).map(([k]) => k);
+  });
+  const all = (await bankOf(one.file)).map((x) => x.id);
+  const from = all.indexOf(id);
+  const ahead = all.slice(from).filter((x) => solved.includes(x));
+  want("решённое из набора не выпадает", solved.length > 0 && ahead.length > 0,
+    "решено " + solved.length + ", впереди решённых " + ahead.length);
 }
 
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.

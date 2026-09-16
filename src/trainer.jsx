@@ -92,11 +92,12 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     if (!open) { setTasks(null); setFailed(false); return undefined; }
     let alive = true;
     setFailed(false);
-    const wanted = open === ALL ? BANK_SUBJECTS.map((s) => s.file) : [(BANK_SUBJECTS.find((s) => s.name === open) || {}).file];
-    Promise.all(wanted.filter(Boolean).map((f) => loadBank(f))).then((lists) => {
+    const card = BANK_SUBJECTS.find((s) => s.name === open);
+    if (!card) { setFailed(true); setTasks(null); return undefined; }
+    loadBank(card.file).then((list) => {
       if (!alive) return;
-      if (lists.some((l) => l === null)) { setFailed(true); setTasks(null); return; }
-      setTasks(lists.flat());
+      if (list === null) { setFailed(true); setTasks(null); return; }
+      setTasks(list);
     });
     return () => { alive = false; };
   }, [open]);
@@ -119,7 +120,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     () => [...new Set(mine.map((t) => t.section))].sort((a, b) => a.localeCompare(b, "ru")),
     [mine],
   );
-  const subject = open === ALL ? "" : open;
+  const subject = open;
   const card = BANK_SUBJECTS.find((s) => s.name === subject);
   // Сколько заданий по этому предмету всего в банке ФИПИ и какую часть мы уже перенесли.
   const whole = (card && card.whole) || 0;
@@ -263,16 +264,21 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     onState({ open, section, taskId: pick ? pick.id : "", again: !onlyNew });
   }
 
-  // Открыть набор. «Заново» означает пройти всё сначала, включая решённое;
-  // сами записи о решённом при этом целы — терять их нельзя.
-  function start(name, again) {
+  // Открыть набор предмета.
+  //
+  // «all» — идти по всем заданиям предмета подряд, включая уже решённые, а не
+  // только по новым. «reset» — начать с самого первого задания, а не с того,
+  // где остановились. Сами записи о решённом при этом целы: «заново» — это про
+  // порядок показа, а не про то, чтобы стереть сделанное.
+  function start(name, all, reset) {
+    const back = !reset && state && state.open === name ? state.taskId || "" : "";
     setSection("");
-    setOnlyNew(!again);
-    setCurrentId(again ? "" : (state && state.open === name && state.taskId) || "");
+    setOnlyNew(!all);
+    setCurrentId(back);
     setResult(null);
     setValue("");
     setFromBank("");
-    onState({ open: name, section: "", taskId: again ? "" : (state && state.open === name && state.taskId) || "", again: !!again });
+    onState({ open: name, section: "", taskId: back, again: !!all });
   }
 
   function leave() {
@@ -305,7 +311,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
 
   // --- выбор предмета ------------------------------------------------------
   if (!open) {
-    const everything = BANK_SUBJECTS.reduce((n, s) => n + s.count, 0);
     return (
       <section className="ap-card" style={styles.card}>
         <div style={styles.cardTitle}>Тренажёр по банку ФИПИ</div>
@@ -339,26 +344,23 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                   <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(2, (done / s.count) * 100) + "%" }} /></div>
                 ) : null}
                 <div style={S.pickButtons}>
-                  <button onClick={() => start(s.name, false)} className="ap-btn" style={S.primary}>
+                  <button onClick={() => start(s.name, false, false)} className="ap-btn" style={S.primary}>
                     {done ? "Продолжить" : "Начать тест"}
                   </button>
+                  <button onClick={() => start(s.name, true, false)} className="ap-row" style={S.keyBtn}>
+                    Решать все задания подряд
+                  </button>
                   {done ? (
-                    <button onClick={() => start(s.name, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
+                    <button onClick={() => start(s.name, true, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
                   ) : null}
+                </div>
+                <div style={S.pickHint}>
+                  «Начать тест» — только то, что ещё не решено, и можно выбрать раздел.
+                  «Все задания подряд» — весь предмет целиком, вместе с уже решённым.
                 </div>
               </div>
             );
           })}
-        </div>
-
-        <div style={S.allRow}>
-          <button onClick={() => start(ALL, false)} className="ap-row" style={S.keyBtn}>
-            Решать все задания подряд
-          </button>
-          <span style={S.allNote}>
-            Все {everything} {taskWord(everything)} трёх предметов вперемешку. Наборы предметов при этом
-            загрузятся все сразу — по мобильному интернету это заметно дольше.
-          </span>
         </div>
 
         <p style={S.source}>{BANK_SOURCE}</p>
@@ -370,7 +372,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   if (failed) {
     return (
       <section className="ap-card" style={styles.card}>
-        <div style={styles.cardTitle}>{open === ALL ? "Все предметы" : open}</div>
+        <div style={styles.cardTitle}>{open}</div>
         <p style={styles.cardNote}>
           Задания не загрузились. Если сети нет, набор откроется только после того, как его
           хоть раз открывали с интернетом.
@@ -382,7 +384,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   if (!tasks) {
     return (
       <section className="ap-card" style={styles.card}>
-        <div style={styles.cardTitle}>{open === ALL ? "Все предметы" : open}</div>
+        <div style={styles.cardTitle}>{open}</div>
         <p style={styles.cardNote}>Задания загружаются…</p>
       </section>
     );
@@ -392,11 +394,11 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     <>
       <section className="ap-card" style={styles.card}>
         <div style={S.head0}>
-          <div style={styles.cardTitle}>{open === ALL ? "Все предметы" : open}</div>
+          <div style={styles.cardTitle}>{open}</div>
           <button onClick={leave} className="ap-row" style={S.back}>К выбору предмета</button>
         </div>
 
-        {open === ALL ? null : (
+        {(
           <div style={S.moved}>
             <div style={S.movedTop}>
               <span>
@@ -697,7 +699,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
 }
 
 // Ключ режима «все предметы сразу»: в этом случае грузятся все наборы.
-const ALL = "все";
 
 function taskWord(n) {
   const last = n % 10;
@@ -828,8 +829,7 @@ const S = {
   pickCount: { fontSize: 12.5, color: "var(--mute)", flex: "0 0 auto" },
   pickLine: { fontSize: 13, color: "var(--ink3)", margin: "6px 0 0" },
   pickButtons: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 },
-  allRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 },
-  allNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, flex: "1 1 240px" },
+  pickHint: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, marginTop: 8 },
   head0: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between", marginBottom: 10 },
   back: {
     border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 8,
