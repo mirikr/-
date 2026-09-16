@@ -25,7 +25,8 @@ import NowCard from "./now-card.jsx";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
-import { BANK_IDS } from "./fipi-index.js";
+import { BANK_IDS, BANK_SUBJECTS } from "./fipi-index.js";
+import { dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
@@ -452,6 +453,15 @@ function weeklyBudgetHours(budget) {
 function goalHoursForDate(budget, date) {
   const key = DOW_TO_KEY[date.getDay()];
   return (Number(budget.daily[key]) || 0) / 60;
+}
+
+// Часы в строке дневника. Полчаса — это «0,5 ч», а четыре минуты тренажёра
+// округлились бы в «0 ч», поэтому такое время показываем минутами.
+function hoursLabel(hours) {
+  const h = Number(hours) || 0;
+  const rounded = Math.round(h * 10) / 10;
+  if (rounded >= 0.1) return String(rounded).replace(".", ",") + " ч";
+  return Math.max(1, Math.round(h * 60)) + " мин";
 }
 
 function todayStr() {
@@ -1299,15 +1309,51 @@ export default function StudyPlanner() {
     }
   }
 
+  // Тренажёр — тоже занятие. Время его секундомера идёт в часы, а решённые
+  // задания продлевают серию; и то и другое выводится из журнала попыток, а не
+  // хранится отдельно — иначе эти две записи о том же самом разъезжались бы.
+  const taskSubject = useMemo(() => subjectsByTask(BANK_SUBJECTS), []);
+  const trainerByDay = useMemo(() => trainerDays(trainerLog, taskSubject), [trainerLog, taskSubject]);
+  const subjectIdByName = useCallback(
+    (name) => (ALL_SUBJECTS.find((x) => x.name === name) || {}).id || "",
+    [ALL_SUBJECTS]
+  );
+  // Дневник, каким его видят цель, календарь и диаграмма: свои записи плюс
+  // выведенные из тренажёра.
+  const journalWithTrainer = useMemo(
+    () => journal.concat(trainerEntries(trainerByDay, subjectIdByName)),
+    [journal, trainerByDay, subjectIdByName]
+  );
+
+  // Физики и информатики среди предметов приложения может не быть: там своя
+  // подготовка по частям обществознания. Чтобы время из тренажёра не оказалось
+  // безымянным «Другое» на диаграмме и пустой строкой в дневнике, к списку
+  // предметов приписываются недостающие — только те, по которым правда решали.
+  const subjectsWithTrainer = useMemo(() => {
+    const known = new Set(ALL_SUBJECTS.map((x) => x.id));
+    const extra = [];
+    trainerByDay.forEach((d) => {
+      if (known.has(d.subject) || subjectIdByName(d.subject) || extra.some((x) => x.id === d.subject)) return;
+      extra.push({ id: d.subject, name: d.subject, color: "var(--mute)", fromTrainer: true });
+    });
+    return ALL_SUBJECTS.concat(extra);
+  }, [ALL_SUBJECTS, trainerByDay, subjectIdByName]);
+  const anySubjectById = useMemo(() => new Map(subjectsWithTrainer.map((x) => [x.id, x])), [subjectsWithTrainer]);
+
   // Пульс занятий: сколько записано сегодня, сколько дней подряд идут занятия и
   // сколько прошло с последней записи. Нужен для короткого напоминания на
   // «Сегодня» — без укоров, просто «вернитесь, это недолго».
   const studyPulse = useMemo(() => {
     const byDate = {};
-    journal.forEach((e) => {
+    journalWithTrainer.forEach((e) => {
       byDate[e.date] = (byDate[e.date] || 0) + (Number(e.hours) || 0);
     });
-    const dates = Object.keys(byDate).filter((d) => byDate[d] > 0).sort();
+    // Серию засчитывает не всякая минута: пара заданий по дороге домой — это
+    // пять минут, занятием это не назовёшь. Поэтому день в серию идёт либо по
+    // обычной записи, либо когда в тренажёре взят порог по какому-то предмету.
+    const counts = (date) =>
+      journal.some((e) => e.date === date && (Number(e.hours) || 0) > 0) || dayCounts(trainerByDay, date);
+    const dates = Object.keys(byDate).filter((d) => counts(d)).sort();
     const todayHours = Math.round((byDate[todayStr()] || 0) * 10) / 10;
     if (!dates.length) return { todayHours, daysSince: null, streak: 0 };
 
@@ -1317,12 +1363,12 @@ export default function StudyPlanner() {
     // Серия считается назад от последнего дня с записями: пропуск её обрывает.
     let streak = 0;
     const cursor = new Date(last + "T00:00:00");
-    while (byDate[ymd(cursor)] > 0) {
+    while (counts(ymd(cursor))) {
       streak += 1;
       cursor.setDate(cursor.getDate() - 1);
     }
     return { todayHours, daysSince, streak };
-  }, [journal]);
+  }, [journal, journalWithTrainer, trainerByDay]);
 
   // Напоминание о занятиях: одно и то же и в приложении, и в календаре телефона —
   // чтобы оно доходило и тогда, когда ежедневник не открывали.
@@ -1363,6 +1409,18 @@ export default function StudyPlanner() {
   // Серия идёт, только пока в ней нет пропуска: после него «4 дня подряд» рядом
   // с «занятий не было два дня» звучало бы издевательски.
   const studyStreakOn = studyPulse.streak > 1 && studyPulse.daysSince === 0;
+
+  // Предложение продлить серию тренажёром. Показываем его, пока день не
+  // засчитан, — и не молча: сколько заданий осталось, видно числом. Молчаливый
+  // порог, о котором надо догадываться, серию бы не спасал, а раздражал.
+  const trainerOffer = useMemo(() => {
+    const today = todayStr();
+    const counted = journal.some((e) => e.date === today && (Number(e.hours) || 0) > 0) || dayCounts(trainerByDay, today);
+    if (counted) return null;
+    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "");
+    if (!offer || offer.left <= 0) return null;
+    return offer;
+  }, [journal, trainerByDay, trainerState]);
 
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
   // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
@@ -1894,7 +1952,7 @@ export default function StudyPlanner() {
   const balanceItems = useMemo(() => {
     const since = ymd(new Date(Date.now() - 7 * 86400000));
     const factBySubject = {};
-    journal.forEach((e) => {
+    journalWithTrainer.forEach((e) => {
       if (e.date >= since) factBySubject[e.subjectId] = (factBySubject[e.subjectId] || 0) + (Number(e.hours) || 0);
     });
     return ALL_SUBJECTS.map((s) => ({
@@ -1906,21 +1964,21 @@ export default function StudyPlanner() {
       recommended: recommendedHours[s.id] || 0,
       done: (stats.perSubject[s.id] || { done: 0 }).done,
     }));
-  }, [journal, budget, ALL_SUBJECTS, stats, recommendedHours]);
+  }, [journalWithTrainer, budget, ALL_SUBJECTS, stats, recommendedHours]);
 
   const weeklyJournalHours = useMemo(() => {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 86400000);
-    return Math.round(journal.filter((e) => new Date(e.date) >= weekAgo).reduce((sum, e) => sum + e.hours, 0) * 10) / 10;
-  }, [journal]);
+    return Math.round(journalWithTrainer.filter((e) => new Date(e.date) >= weekAgo).reduce((sum, e) => sum + e.hours, 0) * 10) / 10;
+  }, [journalWithTrainer]);
 
   const dailyTotals = useMemo(() => {
     const map = {};
-    journal.forEach((e) => {
+    journalWithTrainer.forEach((e) => {
       map[e.date] = (map[e.date] || 0) + e.hours;
     });
     return map;
-  }, [journal]);
+  }, [journalWithTrainer]);
 
   const todayDateOnly = useMemo(() => {
     const t = new Date();
@@ -1941,7 +1999,16 @@ export default function StudyPlanner() {
     return cells;
   }, [calMonth]);
 
-  const selectedDayEntries = useMemo(() => journal.filter((e) => e.date === selectedDate), [journal, selectedDate]);
+  const selectedDayEntries = useMemo(
+    () => journalWithTrainer.filter((e) => e.date === selectedDate),
+    [journalWithTrainer, selectedDate]
+  );
+
+  // Общий список записей: свои и выведенные из тренажёра, сверху свежие.
+  const journalListed = useMemo(
+    () => journalWithTrainer.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))),
+    [journalWithTrainer]
+  );
 
   const hwDates = useMemo(() => new Set(homework.map((h) => h.date)), [homework]);
 
@@ -2511,6 +2578,18 @@ export default function StudyPlanner() {
                 <div style={styles.reminderBody}>
                   <div style={styles.reminderTitle}>{studyReminder.title}</div>
                   <div style={styles.reminderText}>{studyReminder.text}</div>
+                  {trainerOffer && (
+                    <button onClick={() => goScreen("trainer")} className="ap-row" style={styles.offerBtn}>
+                      <span style={styles.offerText}>
+                        {trainerOffer.solved > 0
+                          ? "Решено " + trainerOffer.solved + " из " + trainerOffer.need + " — осталось " +
+                            trainerOffer.left + " " + tasksWord(trainerOffer.left) + " по предмету «" + trainerOffer.subject + "»"
+                          : "Прореши " + trainerOffer.need + " " + tasksWord(trainerOffer.need) +
+                            " по предмету «" + trainerOffer.subject + "» — день зачтётся и серия не оборвётся"}
+                      </span>
+                      <span style={styles.offerGo}>В тренажёр →</span>
+                    </button>
+                  )}
                 </div>
                 {/* Серия показывается, только пока она идёт: после пропуска «4 дня подряд»
                     рядом с «занятий не было два дня» звучало издевательски. */}
@@ -2575,7 +2654,7 @@ export default function StudyPlanner() {
                 Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
               </div>
               {/* График не сворачивается: ради него карточка и существует. */}
-              <HoursChart journal={journal} homework={homework} subjects={ALL_SUBJECTS} goalForDate={goalForDate} />
+              <HoursChart journal={journalWithTrainer} homework={homework} subjects={subjectsWithTrainer} goalForDate={goalForDate} />
             </section>
 
             <section className="ap-card" style={styles.card}>
@@ -3478,16 +3557,22 @@ export default function StudyPlanner() {
               </div>
               {selectedDayEntries.length === 0 && <div style={styles.muted}>В этот день записей нет.</div>}
               {selectedDayEntries.map((e) => {
-                const s = ALL_SUBJECTS.find((s) => s.id === e.subjectId);
+                const s = anySubjectById.get(e.subjectId);
                 return (
                   <div key={e.id} style={styles.journalRow}>
                     <span style={{ ...styles.dot, background: s?.color }} />
                     <span style={styles.jSubj}>{s?.name}</span>
-                    <span style={styles.jHours}>{e.hours} ч</span>
+                    <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
                     <span style={styles.jNote}>{e.note}</span>
-                    <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
-                      ×
-                    </button>
+                    {e.fromTrainer ? (
+                      // Эта строка — не отдельная запись, а тот же журнал попыток
+                      // в другом виде. Удалять её нечем: удалять надо попытки.
+                      <span style={styles.jAuto} title="Время из тренажёра">секундомер</span>
+                    ) : (
+                      <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
+                        ×
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -3591,25 +3676,31 @@ export default function StudyPlanner() {
             </div>
 
             <div style={styles.journalList}>
-              {journal.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
-              {journal.slice(0, journalShown).map((e) => {
-                const s = subjectById.get(e.subjectId);
+              {journalListed.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
+              {journalListed.slice(0, journalShown).map((e) => {
+                const s = anySubjectById.get(e.subjectId);
                 return (
                   <div key={e.id} style={styles.journalRow}>
                     <span style={{ ...styles.dot, background: s?.color }} />
                     <span style={styles.jDate}>{new Date(e.date).toLocaleDateString("ru-RU")}</span>
                     <span style={styles.jSubj}>{s?.name}</span>
-                    <span style={styles.jHours}>{e.hours} ч</span>
+                    <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
                     <span style={styles.jNote}>{e.note}</span>
-                    <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
-                      ×
-                    </button>
+                    {e.fromTrainer ? (
+                      // Эта строка — не отдельная запись, а тот же журнал попыток
+                      // в другом виде. Удалять её нечем: удалять надо попытки.
+                      <span style={styles.jAuto} title="Время из тренажёра">секундомер</span>
+                    ) : (
+                      <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
+                        ×
+                      </button>
+                    )}
                   </div>
                 );
               })}
-              {journal.length > journalShown && (
+              {journalListed.length > journalShown && (
                 <button onClick={() => setJournalShown(journalShown + JOURNAL_PAGE)} style={styles.eventsToggle}>
-                  Показать ещё {Math.min(JOURNAL_PAGE, journal.length - journalShown)} из {journal.length - journalShown}
+                  Показать ещё {Math.min(JOURNAL_PAGE, journalListed.length - journalShown)} из {journalListed.length - journalShown}
                 </button>
               )}
             </div>
@@ -5131,6 +5222,14 @@ const styles = {
   reminderBody: { flex: "1 1 240px", minWidth: 0 },
   reminderTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 4 },
   reminderText: { fontSize: 13.5, color: "var(--ink2)", lineHeight: 1.5 },
+  jAuto: { fontSize: 11, color: "var(--mute)", whiteSpace: "nowrap" },
+  offerBtn: {
+    display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", width: "100%",
+    marginTop: 10, padding: "8px 10px", textAlign: "left",
+    border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel)", cursor: "pointer",
+  },
+  offerText: { fontSize: 12.5, lineHeight: 1.5, color: "var(--ink)", flex: "1 1 220px" },
+  offerGo: { fontSize: 12, color: "var(--accent)", whiteSpace: "nowrap" },
   streakBox: { textAlign: "center", minWidth: 78 },
   streakNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, lineHeight: 1, color: "var(--green)" },
   streakWord: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
