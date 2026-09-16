@@ -66,7 +66,10 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // открывается там же, где его закрыли, — хоть на другом устройстве.
   const open = (state && state.open) || "";
   const [section, setSection] = useState((state && state.section) || "");
-  const [onlyNew, setOnlyNew] = useState(!(state && state.again));
+  // Какие задания в наборе: "" — только нерешённые, "all" — все подряд,
+  // "wrong" — те, где последний ответ был неверным. Прежние записи знали лишь
+  // «again», поэтому его продолжаем понимать.
+  const [mode, setMode] = useState((state && state.mode) || (state && state.again ? ALL_MODE : ""));
   // Задания открытого предмета. null — ещё грузятся или не загрузились.
   const [tasks, setTasks] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -135,9 +138,20 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     return out;
   }, [log]);
 
+  // Задания, где последний ответ был неверным. Именно последний: если потом
+  // разобрался и ответил верно, перерешивать нечего.
+  const wrong = useMemo(() => {
+    const last = new Map();
+    (log || []).forEach((a) => last.set(a.taskId, a.ok));
+    const out = new Set();
+    last.forEach((ok, id) => !ok && out.add(id));
+    return out;
+  }, [log]);
+
   const queue = useMemo(() => {
-    return mine.filter((t) => (!section || t.section === section) && (!onlyNew || !solved.has(t.id)));
-  }, [mine, section, onlyNew, solved]);
+    const fits = (t) => (mode === WRONG_MODE ? wrong.has(t.id) : mode === ALL_MODE ? true : !solved.has(t.id));
+    return mine.filter((t) => (!section || t.section === section) && fits(t));
+  }, [mine, section, mode, solved, wrong]);
 
   const task = (currentId && mine.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
@@ -210,7 +224,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     // вписать. Так уезжало первое же задание после «Начать тест».
     if (currentId !== task.id) {
       setCurrentId(task.id);
-      onState({ open, section, taskId: task.id, again: !onlyNew });
+      onState({ open, section, taskId: task.id, again: mode === ALL_MODE, mode });
     }
     onAttempt({ taskId: task.id, answer: value, ok, seconds });
     // Ответ уходит в общую копилку: по таким совпадениям и проверяются ключи.
@@ -272,7 +286,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     const after = task ? rest.find((t) => t.id > task.id) : null;
     const pick = after || rest[0] || null;
     setCurrentId(pick ? pick.id : "");
-    onState({ open, section, taskId: pick ? pick.id : "", again: !onlyNew });
+    onState({ open, section, taskId: pick ? pick.id : "", again: mode === ALL_MODE, mode });
   }
 
   // Открыть набор предмета.
@@ -281,15 +295,15 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // только по новым. «reset» — начать с самого первого задания, а не с того,
   // где остановились. Сами записи о решённом при этом целы: «заново» — это про
   // порядок показа, а не про то, чтобы стереть сделанное.
-  function start(name, all, reset) {
+  function start(name, want, reset) {
     const back = !reset && state && state.open === name ? state.taskId || "" : "";
     setSection("");
-    setOnlyNew(!all);
+    setMode(want || "");
     setCurrentId(back);
     setResult(null);
     setValue("");
     setFromBank("");
-    onState({ open: name, section: "", taskId: back, again: !!all });
+    onState({ open: name, section: "", taskId: back, again: want === ALL_MODE, mode: want });
   }
 
   function leave() {
@@ -297,12 +311,12 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     setValue("");
     setFromBank("");
     setCurrentId("");
-    onState({ open: "", section: "", taskId: "", again: false });
+    onState({ open: "", section: "", taskId: "", again: false, mode: "" });
   }
 
   function pickSection(name) {
     setSection(name);
-    onState({ open, section: name, taskId: "", again: !onlyNew });
+    onState({ open, section: name, taskId: "", again: mode === ALL_MODE, mode });
     setCurrentId("");
     setResult(null);
     setValue("");
@@ -315,6 +329,14 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     const set = new Set(ids);
     let n = 0;
     solved.forEach((id) => set.has(id) && (n += 1));
+    return n;
+  };
+
+  // Сколько заданий предмета остались неверными — тоже по описи.
+  const wrongIn = (ids) => {
+    const set = new Set(ids);
+    let n = 0;
+    wrong.forEach((id) => set.has(id) && (n += 1));
     return n;
   };
 
@@ -340,6 +362,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
         <div style={S.picker}>
           {BANK_SUBJECTS.map((s) => {
             const done = doneIn(s.ids);
+            const missed = wrongIn(s.ids);
             return (
               <div key={s.name} style={S.pick}>
                 <div style={S.pickTop}>
@@ -348,26 +371,35 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                 </div>
                 <div style={S.pickLine}>
                   {done
-                    ? "Решено " + done + " из " + s.count + (done === s.count ? " — весь набор пройден" : "")
-                    : "Ещё не начинали"}
+                    ? "Решено " + done + " из " + s.count + (done === s.count ? " — весь набор пройден" : "") +
+                      (missed ? " · неверных " + missed : "")
+                    : missed
+                      ? "Неверных " + missed + " " + taskWord(missed)
+                      : "Ещё не начинали"}
                 </div>
                 {done ? (
                   <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(2, (done / s.count) * 100) + "%" }} /></div>
                 ) : null}
                 <div style={S.pickButtons}>
-                  <button onClick={() => start(s.name, false, false)} className="ap-btn" style={S.primary}>
+                  <button onClick={() => start(s.name, "", false)} className="ap-btn" style={S.primary}>
                     {done ? "Продолжить" : "Начать тест"}
                   </button>
-                  <button onClick={() => start(s.name, true, false)} className="ap-row" style={S.keyBtn}>
+                  <button onClick={() => start(s.name, ALL_MODE, false)} className="ap-row" style={S.keyBtn}>
                     Решать все задания подряд
                   </button>
+                  {missed ? (
+                    <button onClick={() => start(s.name, WRONG_MODE, true)} className="ap-row" style={S.keyBtn}>
+                      Перерешать неверные ({missed})
+                    </button>
+                  ) : null}
                   {done ? (
-                    <button onClick={() => start(s.name, true, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
+                    <button onClick={() => start(s.name, ALL_MODE, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
                   ) : null}
                 </div>
                 <div style={S.pickHint}>
                   «Начать тест» — только то, что ещё не решено, и можно выбрать раздел.
                   «Все задания подряд» — весь предмет целиком, вместе с уже решённым.
+                  {missed ? " «Перерешать неверные» — те, где последний ответ был неверным." : ""}
                 </div>
               </div>
             );
@@ -448,24 +480,31 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
         <label style={S.only}>
           <input
             type="checkbox"
-            checked={onlyNew}
+            checked={mode === ""}
             onChange={(e) => {
-              setOnlyNew(e.target.checked);
+              const want = e.target.checked ? "" : ALL_MODE;
+              setMode(want);
               setCurrentId("");
               setResult(null);
               setValue("");
-              onState({ open, section, taskId: "", again: !e.target.checked });
+              onState({ open, section, taskId: "", again: want === ALL_MODE, mode: want });
             }}
           />
           Только нерешённые
-          <span style={S.onlyCount}>решено {doneIn(mine.map((t) => t.id))} из {mine.length}</span>
+          <span style={S.onlyCount}>
+            {mode === WRONG_MODE
+              ? "показаны только неверно решённые — " + queue.length + " " + taskWord(queue.length)
+              : "решено " + doneIn(mine.map((t) => t.id)) + " из " + mine.length}
+          </span>
         </label>
 
         {!task ? (
           <p style={styles.muted}>
-            {onlyNew
-              ? "В этом разделе решено всё. Снимите галочку, чтобы прорешать заново."
-              : "Здесь пока нет заданий."}
+            {mode === WRONG_MODE
+              ? "Неверно решённых заданий здесь не осталось — всё разобрано."
+              : mode === ""
+                ? "В этом разделе решено всё. Снимите галочку, чтобы прорешать заново."
+                : "Здесь пока нет заданий."}
           </p>
         ) : (
           <div style={S.task}>
@@ -721,6 +760,9 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
 }
 
 // Ключ режима «все предметы сразу»: в этом случае грузятся все наборы.
+
+const ALL_MODE = "all";
+const WRONG_MODE = "wrong";
 
 function taskWord(n) {
   const last = n % 10;

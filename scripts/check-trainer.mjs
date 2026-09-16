@@ -321,6 +321,47 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
   want("повторное нажатие снимает отметку", off === 0, "отметок: " + off);
 }
 
+// Неверно решённые задания должны возвращаться отдельной кнопкой: разобрать
+// ошибку — это и есть подготовка, а искать её среди сотен заданий нечем.
+{
+  await page.getByRole("button", { name: "К выбору предмета" }).first().click();
+  await page.waitForTimeout(500);
+  const picker = await card.innerText();
+  want("на карточке есть «Перерешать неверные»", /Перерешать неверные \(\d+\)/.test(picker),
+    (picker.match(/Перерешать неверные[^\n]*/) || [])[0] || "кнопки нет");
+  // Неверно отвечали по первому предмету — там кнопка и должна стоять.
+  const wrongIds = await page.evaluate(() => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    const last = new Map();
+    (value.trainerLog || []).forEach((a) => last.set(a.taskId, a.ok));
+    return [...last.entries()].filter(([, ok]) => !ok).map(([k]) => k);
+  });
+  want("в записях есть неверно решённые", wrongIds.length > 0, "их " + wrongIds.length);
+  await page.getByRole("button", { name: /Перерешать неверные/ }).first().click();
+  await page.waitForTimeout(1200);
+  const opened = await card.innerText();
+  const id = (opened.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+  want("открылось именно неверно решённое задание", wrongIds.includes(id),
+    id + " из " + wrongIds.join(", "));
+  want("сказано, что показаны только неверные", /показаны только неверно решённые/.test(opened),
+    (opened.match(/показаны только[^\n]*/) || [])[0] || "");
+
+  // Ответили верно — задание уходит из набора неверных.
+  const t = (await bankOf(index.BANK_SUBJECTS[0].file)).find((x) => x.id === id);
+  await page.getByLabel("Ваш ответ").fill(t.answer);
+  await page.getByRole("button", { name: "Ответить" }).click();
+  await page.waitForTimeout(1600);
+  const left = await page.evaluate((taskId) => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    const last = new Map();
+    (value.trainerLog || []).forEach((a) => last.set(a.taskId, a.ok));
+    return last.get(taskId);
+  }, id);
+  want("разобранное задание больше не числится неверным", left === true, "последняя попытка: " + left);
+}
+
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
 await openSubject("Физика");
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,
