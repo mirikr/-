@@ -152,6 +152,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>В свинцовую капсулу поместили радиоактивный актиний <math><mstyle displaystyle=\"true\"><mrow><mrow></mrow><mrow><mn>89</mn></mrow><mrow><mn>227</mn></mrow></mrow></mstyle></math><span>Ac</span>. Сколько процентов от исходно большого числа ядер этого изотопа актиния останется в капсуле через 20&nbsp;дней? Период полураспада актиния 10 дней.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>%&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "1EFF0B",
+  "subject": "Физика",
+  "guid": "2541C116AA8DA91C464B12FC72DFC38E",
+  "kes": "4.3.3 Закон радиоактивного распада",
+  "section": "Квантовая физика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Ядра хрома 56\n\n24C\n\nr\nиспытывают b–-распад с периодом полураспада 6 мин.\nВ момент начала наблюдения в образце содержится 8×1020 ядер этого изотопа хрома. Через какую из точек (1, 2, 3 или 4), кроме точки А, пройдёт график зависимости от времени числа ещё не распавшихся ядер хрома?\n\nчерез точку",
+  "units": "",
+  "pictures": [],
+  "answer": "3",
+  "accept": [],
+  "why": "Период полураспада 6 минут, вначале 8 * 10^20 ядер. Через 6 минут останется 4, через 12 — 2, через 18 — 1 * 10^20. Точка (18; 1) — это точка 3.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ядра хрома <span><math><mstyle displaystyle=\"true\"><mrow><mtext>C</mtext><mrow><mn>24</mn></mrow><mrow><mn>56</mn></mrow><mtext>r</mtext></mrow></mstyle></math></span>&nbsp;испытывают <span>b</span><sup><span>–</span></sup><span>-распад с периодом полураспада</span> 6 мин. <br> В момент начала наблюдения в образце содержится 8<span>×</span>10<sup>20</sup> ядер этого изотопа хрома. Через какую из точек (1, 2, 3 или 4), кроме точки <i>А</i>, пройдёт график зависимости от времени числа ещё не распавшихся ядер хрома?</p><table><tbody><tr><td valign=\"top\"><p><img src=\"fipi/b49f70ed4f884f99.gif\"></p></td></tr></tbody></table></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td>через&nbsp;точку&nbsp;</td><td></td><td>&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "29eB4c",
   "subject": "Физика",
   "guid": "06acb4def74d477fa66f63b924cab30b",
@@ -682,6 +699,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/16de755b5f5b4273.png\"></p></td></tr></tbody></table><p>В момент <span><math><mstyle displaystyle=\"true\"><mrow><mi>t</mi><mo>=</mo><mn>0</mn></mrow></mstyle></math></span>&nbsp;мячик бросают с начальной скоростью <span><math><mstyle displaystyle=\"true\"><mrow><msub><mover><mi>υ</mi><mo>→</mo></mover><mn>0</mn></msub></mrow></mstyle></math></span>&nbsp;под углом <span><math><mstyle displaystyle=\"true\"><mtext>α</mtext></mstyle></math></span>&nbsp;к горизонту с балкона высотой <i>h</i><br> (см. рисунок). Графики А и Б отображают зависимости физических величин, характеризующих движение мячика в процессе полёта, от времени <i><span>t</span></i>. Установите соответствие между графиками и физическими величинами, зависимости которых от времени эти графики могут отображать. Сопротивлением воздуха пренебречь. Потенциальная энергия мячика отсчитывается от уровня <span><math><mstyle displaystyle=\"true\"><mrow><mi>y</mi><mo>=</mo><mn>0.</mn></mrow></mstyle></math></span>&nbsp;</p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры <br> под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"fipi/87b000d72d5c8d35.jpg\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"fipi/4e0784acc0e56f18.jpg\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>проекция импульса мячика на ось <i><span>y</span></i></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>кинетическая энергия мячика</p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>проекция импульса мячика на ось <i>х</i></p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>потенциальная энергия мячика</p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "109B0A",
+  "subject": "Физика",
+  "guid": "259B24E74B4C83344F2B90F6B31D799D",
+  "kes": "1.3.3 Условия равновесия твёрдого тела в ИСО",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Коромысло весов, к которому подвешены на нитях два груза (см. рисунок), находится в равновесии. Массу первого груза увеличили в 2 раза. Во сколько раз нужно уменьшить плечо d1, чтобы равновесие сохра­нилось? (Коромысло и нити считать невесомыми.)",
+  "units": "во сколько раз",
+  "pictures": [],
+  "answer": "2",
+  "accept": [],
+  "why": "Равновесие коромысла: m1*d1 = m2*d2. Масса выросла вдвое — плечо надо уменьшить вдвое.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/dba6234cd1bd5a9c.png\"></p></td></tr></tbody></table><p>Коромысло весов, к которому подвешены на нитях два груза (см. рисунок), находится в равновесии. Массу первого груза увеличили в 2 раза. Во сколько раз нужно уменьшить плечо <i><span>d</span></i><sub>1</sub>, чтобы равновесие сохра­нилось? (Коромысло и нити считать невесомыми.)</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td>в&nbsp;</td><td></td><td>раз(а)&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "11044D",
   "subject": "Физика",
   "guid": "057250EE9BD1A4FD45593B31D450FEC1",
@@ -716,6 +750,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>Тело движется вдоль оси <i>Ох</i>, <span>при этом его координата изменяется с течением времени в соответствии с формулой <math><mstyle displaystyle=\"true\"><mrow><mi>x</mi><mrow><mo>(</mo><mi>t</mi><mo>)</mo></mrow><mo>=</mo><mn>5</mn><mo>−</mo><mn>4</mn><msup><mi>t</mi><mn>2</mn></msup></mrow></mstyle></math>&nbsp;</span>(все величины выражены в СИ)<span>.</span></p><p>Установите соответствие между графиками и физическими величинами, зависимости которых от времени эти графики могут представлять. </p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите <u>в таблицу</u> выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ГРАФИКИ</u></b><table><tbody><tr valign=\"top\"><td><b>А)</b>&nbsp;</td><td><p><img src=\"fipi/67540a5f5e43af83.png\"></p></td></tr><tr valign=\"top\"><td><b>Б)</b>&nbsp;</td><td><p><img src=\"fipi/8adc3e950d1a66e7.png\"></p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"top\"><td><b>1)</b>&nbsp;</td><td><p>проекция перемещения тела <i><span>S</span><sub>х</sub></i></p></td></tr><tr valign=\"top\"><td><b>2)</b>&nbsp;</td><td><p>проекция скорости тела <math><mstyle displaystyle=\"true\"><mrow><msub><mi>υ</mi><mi>x</mi></msub></mrow></mstyle></math></p></td></tr><tr valign=\"top\"><td><b>3)</b>&nbsp;</td><td><p>модуль равнодействующей <math><mstyle displaystyle=\"true\"><mover><mi>F</mi><mo>→</mo></mover></mstyle></math>&nbsp;сил, действующих на тело</p></td></tr><tr valign=\"top\"><td><b>4)</b>&nbsp;</td><td><p>проекция ускорения тела <i>а<sub>х</sub></i></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "176001",
+  "subject": "Физика",
+  "guid": "255D323FD557AAF04365C0CAEB89E29B",
+  "kes": "1.3.6 Закон Архимеда. Условия плавания тел",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Полый стальной шар массой 10 кг плавает на поверхности озера. Объём шара равен 15 дм3. Чему равна сила Архимеда, действующая на шар?\n\nН",
+  "units": "",
+  "pictures": [],
+  "answer": "100",
+  "accept": [],
+  "why": "Шар плавает, значит сила Архимеда уравновешивает вес: F = mg = 10 * 10 = 100 Н.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Полый стальной шар массой 10 кг плавает на поверхности озера. Объём шара равен 15 дм<sup>3</sup>. Чему равна сила Архимеда, действующая на шар?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>Н&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "17F546",
   "subject": "Физика",
   "guid": "05D138EF78A3934E4F10E53D3039CC70",
@@ -731,6 +782,28 @@ export const TASKS = [
   "why": "нужна одинаковая длина нити и разная масса: №3 и №5 — оба L = 1,0 м, V = 5 см³, но сталь и алюминий",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Ученик изучает свободные колебания маятника. В его распоряжении имеется пять маятников, характеристики которых указаны в таблице. Какие <b>два</b> маятника необходимо взять ученику для того, чтобы на опыте выяснить, зависит ли период свободных колебаний маятника от массы шарика? </p><table class=\"t\"><tbody><tr><td valign=\"top\"><p align=\"center\"><math><mstyle displaystyle=\"true\"><mo>№</mo></mstyle></math>&nbsp;маятника</p></td><td valign=\"top\"><p align=\"center\">Длина нити маятника, м</p></td><td valign=\"top\"><p align=\"center\">Объём шарика, </p><p align=\"center\">см<sup>3</sup></p></td><td valign=\"top\"><p align=\"center\">Материал, из которого сделан шарик</p></td></tr><tr><td valign=\"top\"><p align=\"center\">1</p></td><td valign=\"top\"><p align=\"center\">2,0</p></td><td valign=\"top\"><p align=\"center\">8</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">2</p></td><td valign=\"top\"><p align=\"center\">0,5</p></td><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">3</p></td><td valign=\"top\"><p align=\"center\">1,0</p></td><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">сталь</p></td></tr><tr><td valign=\"top\"><p align=\"center\">4</p></td><td valign=\"top\"><p align=\"center\">1,5</p></td><td valign=\"top\"><p align=\"center\">8</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr><tr><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">1,0</p></td><td valign=\"top\"><p align=\"center\">5</p></td><td valign=\"top\"><p align=\"center\">алюминий</p></td></tr></tbody></table><p>Запишите в ответе номера выбранных маятников.</p><table><tbody><tr><td><p>Ответ:</p></td><td valign=\"top\"></td><td valign=\"top\"></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "189A00",
+  "subject": "Физика",
+  "guid": "252BF9B730449CCE47C659250B3E6F64",
+  "kes": "1.2.3 Сила. Принцип суперпозиции сил",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Определите показания динамометра (см. рисунок), если погрешность прямого измерения силы равна цене деления динамометра. Динамометр проградуирован в ньютонах.\n\nОтвет: ( ± ) Н.",
+  "units": "",
+  "pictures": [],
+  "answer": "1,8 ± 0,1",
+  "accept": [
+   "1,8 +- 0,1",
+   "1,8+-0,1",
+   "1,8 0,1",
+   "1,80,1"
+  ],
+  "why": "Между подписанными значениями по пять делений, значит цена деления 0,1 Н. Красный указатель стоит на два деления выше отметки 2,0: 1,8 Н, погрешность 0,1 Н.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Определите показания динамометра (см. рисунок), если погрешность прямого измерения силы равна цене деления динамометра. Динамометр проградуирован в ньютонах.</p><table><tbody><tr><td valign=\"top\"><p><img src=\"fipi/7d66327fdb07291e.jpg\"></p></td></tr></tbody></table><p>Ответ: <u>(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> ± <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</u> Н.</p></td></tr></tbody></table></div>"
  },
  {
   "id": "1B3E4D",
@@ -782,6 +855,23 @@ export const TASKS = [
   "why": "1) F = ro * g * V — прямо пропорциональна объёму. 4) любое электромагнитное излучение в вакууме идёт со скоростью света. 5) при бета-минус-распаде заряд растёт на единицу, элемент смещается к концу таблицы. Неверны 2 (при постоянной температуре внутренняя энергия одноатомного газа не меняется) и 3 (по закону Кулона сила прямо пропорциональна произведению зарядов).",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Выберите все верные утверждения о физических явлениях, величинах <br> и закономерностях. Запишите цифры, под которыми они указаны.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td valign=\"middle\"></td><td>&nbsp;<b>1)</b>&nbsp;</td><td><p>Сила Архимеда, действующая на однородное тело, полностью погружённое в жидкость, прямо пропорциональна объёму тела.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>2)</b>&nbsp;</td><td><p>При изотермическом расширении внутренняя энергия постоянной массы одноатомного идеального газа уменьшается.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>3)</b>&nbsp;</td><td><p>Модуль сил взаимодействия двух неподвижных точечных заряженных тел ввакууме обратно пропорционален произведению модулей зарядов.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>4)</b>&nbsp;</td><td><p>Скорость распространения ультрафиолетового излучения в вакууме равна скорости света в вакууме.</p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>5)</b>&nbsp;</td><td><p>В результате электронного β-распада образовавшийся новый элемент смещается на одну клетку ближе к&nbsp;концу Периодической системы элементов Д.И. Менделеева.</p></td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "259807",
+  "subject": "Физика",
+  "guid": "263B8F6081E892B24727F1957649D4C2",
+  "kes": "1.1.4 Ускорение материальной точки",
+  "section": "Механика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "На рисунке показан график зависимости от времени для проекции 𝜐𝑥\nскорости тела. Какова проекция 𝑎𝑥\nускорения этого тела в интервале времени от 4 до 8 c?",
+  "units": "м/с2",
+  "pictures": [],
+  "answer": "-2",
+  "accept": [],
+  "why": "С 4-й по 8-ю секунду скорость падает с 12 до 4 м/с: a = (4 − 12)/4 = −2 м/с².",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>На рисунке показан график зависимости от времени для проекции <math><mstyle displaystyle=\"true\"><mrow><msub><mi>υ</mi><mi>x</mi></msub></mrow></mstyle></math>&nbsp;скорости тела. Какова проекция <math><mstyle displaystyle=\"true\"><mrow><msub><mi>a</mi><mi>x</mi></msub></mrow></mstyle></math>&nbsp;ускорения этого тела в интервале времени от 4 до 8&nbsp;<span>c</span>? </p><table><tbody><tr><td valign=\"top\"><p><img src=\"fipi/7a6d0441cc624320.png\"></p></td></tr></tbody></table></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>м/с<sup>2</sup>&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "2622F3",
@@ -1757,6 +1847,23 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Какую массу льда, находящегося при 0&nbsp;<span>°</span>С, можно превратить в воду, если льду сообщить количество теплоты 0,33<span>×</span>10<sup>5</sup> Дж?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>кг&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "1D2B0A",
+  "subject": "Физика",
+  "guid": "25967428740c46a9887694e91acc138b",
+  "kes": "2.2.7 Первый закон термодинамики",
+  "section": "Молекулярная физика и термодинамика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Постоянная масса одноатомного идеального газа в изохорном процессе отдаёт количество теплоты Q > 0. Как меняются в этом процессе объём и внутренняя энергия газа?\n\nДля каждой величины определите соответствующий характер изменения:\n\n1)\n\nувеличивается\n\n2)\n\nуменьшается\n\n3)\n\nне изменяется\n\nЗапишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.\n\nОбъём газа\n\nВнутренняя энергия газа",
+  "units": "",
+  "pictures": [],
+  "answer": "32",
+  "accept": [],
+  "why": "Изохорный процесс — объём по определению постоянен. Газ отдаёт тепло, работы не совершает, значит внутренняя энергия уменьшается.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Постоянная масса одноатомного идеального газа в изохорном процессе отдаёт количество теплоты <i><span>Q</span></i>&nbsp;&gt;&nbsp;0. Как меняются в этом процессе объём и внутренняя энергия газа?</p><p>Для каждой величины определите соответствующий характер изменения: </p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличивается</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшается</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменяется</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждой физической величины. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Объём газа</p></td><td valign=\"top\"><p align=\"center\">Внутренняя энергия газа</p></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "1F660F",
   "subject": "Физика",
   "guid": "251D1DB20093AC4749F1CB559CC1C962",
@@ -1777,6 +1884,23 @@ export const TASKS = [
   "why": "Между подписанными 10 и 20 десять делений, значит цена деления 1 градус. Столбик стоит на первом делении ниже двадцати: 19 °С, погрешность 1 °С.",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/4b9f5cebe9a5cc98.jpg\"></p></td></tr></tbody></table><p>Запишите показания термометра с учётом абсолютной погрешности измерений. Абсолютная погрешность измерения температуры равна цене деления термометра.</p><p>Ответ: <u>(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</u> ± <u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</u> °С.</p></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "217002",
+  "subject": "Физика",
+  "guid": "266352601B298EAE45BADC418E0FD217",
+  "kes": "2.2.5 Удельная теплота парообразования. Удельная теплота плавления. Удельная теплота сгорания топлива",
+  "section": "Молекулярная физика и термодинамика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "На рисунке показан график изменения температуры вещества по мере поглощения им количества теплоты. Вещество находится в сосуде под поршнем. Масса вещества равна 0,5 кг. Первоначально вещество было в жидком состоянии. Какова удельная теплота парообразования вещества?",
+  "units": "кДж/кг",
+  "pictures": [],
+  "answer": "30",
+  "accept": [],
+  "why": "Горизонтальный участок — кипение: от 0,5*10^4 до 2*10^4 Дж, то есть 15000 Дж на 0,5 кг. L = 15000/0,5 = 30000 Дж/кг = 30 кДж/кг.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table align=\"right\"><tbody><tr><td valign=\"top\"><p><img src=\"fipi/785fe4c378a9e3b8.png\"></p></td></tr></tbody></table><p>На рисунке показан график изменения температуры вещества по мере поглощения им количества теплоты. Вещество находится в сосуде под поршнем. &nbsp;Масса вещества равна 0,5&nbsp;кг. Первоначально вещество было в жидком состоянии. Какова удельная теплота парообразования вещества?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>кДж/кг&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "25664A",
@@ -2476,6 +2600,40 @@ export const TASKS = [
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Необходимо экспериментально изучить зависимость ускорения тела, скользящего по шероховатой наклонной плоскости, от коэффициента трения груза о плоскость. На всех приведённых ниже рисунках указаны массы тел,<br> углы наклона плоскостей к горизонту, коэффициенты трения. Какие <b>две</b>&nbsp; установки следует использовать для проведения такого исследования?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td valign=\"middle\"></td><td>&nbsp;<b>1)</b>&nbsp;</td><td><p><img src=\"fipi/f5d37d54ef8956f4.png\"></p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>2)</b>&nbsp;</td><td><p><img src=\"fipi/03cfd05b35c9566f.png\"></p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>3)</b>&nbsp;</td><td><p><img src=\"fipi/68a49c46f80d9fc5.png\"></p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>4)</b>&nbsp;</td><td><p><img src=\"fipi/0d4438f7b85df974.png\"></p></td></tr><tr><td valign=\"middle\"></td><td>&nbsp;<b>5)</b>&nbsp;</td><td><p><img src=\"fipi/e08423dd906b365b.png\"></p></td></tr></tbody></table>Запишите в ответе номера выбранных установок.</div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
+  "id": "1EB20A",
+  "subject": "Физика",
+  "guid": "2594C6509E5DA54249A154D85F61BE2E",
+  "kes": "",
+  "section": "Разное",
+  "type": "Установление соответствия",
+  "lead": "Установите соответствие и впишите ответ.",
+  "text": "С высоты h по наклонной плоскости из состояния покоя соскальзывает брусок массой m. Длина наклонной плоскости равна S, коэффициент трения между бруском и плоскостью равен μ.\n\nУстановите соответствие между физическими величинами и формулами, по которым их можно рассчитать.\n\nК каждой позиции первого столбца подберите соответствующую позицию\nиз второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.\n\nФИЗИЧЕСКИЕ ВЕЛИЧИНЫ ФОРМУЛЫ\n\nА)\n\nускорение бруска\n\nБ)\n\nмодуль работы силы трения при спуске бруска по наклонной плоскости\n\n1)\n\n𝑚⁢𝑔𝑆⁢√𝑆2−ℎ2\n\n2)\n\n𝑔𝑆⁢(μℎ⁡ −√𝑆2−ℎ2)\n\n3)\n\nμ𝑚⁢𝑔⁡√𝑆2−ℎ2\n\n4)\n\n𝑔𝑆⁢(ℎ⁡ −μ⁢√𝑆2−ℎ2)",
+  "units": "",
+  "pictures": [],
+  "answer": "43",
+  "accept": [],
+  "why": "Высота h, длина S, значит sin = h/S, cos = sqrt(S^2 − h^2)/S. А) a = g(sin − mu*cos) = (g/S)(h − mu*sqrt(S^2 − h^2)). Б) работа трения = mu*m*g*cos*S = mu*m*g*sqrt(S^2 − h^2).",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><table><tbody><tr><td><p>С высоты <i><span>h</span></i> по наклонной плоскости из состояния покоя соскальзывает брусок массой <i>m</i>. Длина наклонной плоскости равна <i>S</i>, коэффициент трения между бруском и плоскостью равен μ.</p><p>Установите соответствие между физическими величинами и формулами, по которым их можно рассчитать.</p><p>К каждой позиции первого столбца подберите соответствующую позицию <br> из второго столбца и запишите в таблицу выбранные цифры под соответствующими буквами.</p></td></tr></tbody></table><table align=\"center\"><tbody><tr><td>&nbsp;&nbsp;</td><td><div class=\"cols\"><div class=\"col\"><b><u>ФИЗИЧЕСКИЕ ВЕЛИЧИНЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>А)</b>&nbsp;</td><td><p>ускорение бруска</p></td></tr><tr valign=\"middle\"><td><b>Б)</b>&nbsp;</td><td><p>модуль работы силы трения при спуске бруска по наклонной плоскости</p></td></tr></tbody></table></div><div class=\"col\"><b><u>ФОРМУЛЫ</u></b><table><tbody><tr valign=\"middle\"><td><b>1)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mfrac><mrow><mi>m</mi><mi>g</mi></mrow><mi>S</mi></mfrac><msqrt><mrow><msup><mi>S</mi><mn>2</mn></msup><mo>−</mo><msup><mi>h</mi><mn>2</mn></msup></mrow></msqrt></mrow></mstyle></math></p></td></tr><tr valign=\"middle\"><td><b>2)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mfrac><mi>g</mi><mi>S</mi></mfrac><mrow><mo>(</mo><mrow><mtext>μ</mtext><mi>h</mi><mtext></mtext><mo>−</mo><msqrt><mrow><msup><mi>S</mi><mn>2</mn></msup><mo>−</mo><msup><mi>h</mi><mn>2</mn></msup></mrow></msqrt></mrow><mo>)</mo></mrow></mrow></mstyle></math></p></td></tr><tr valign=\"middle\"><td><b>3)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mtext>μ</mtext><mi>m</mi><mi>g</mi><msqrt><mrow><msup><mi>S</mi><mn>2</mn></msup><mo>−</mo><msup><mi>h</mi><mn>2</mn></msup></mrow></msqrt></mrow></mstyle></math></p></td></tr><tr valign=\"middle\"><td><b>4)</b>&nbsp;</td><td><p><math><mstyle displaystyle=\"true\"><mrow><mfrac><mi>g</mi><mi>S</mi></mfrac><mrow><mo>(</mo><mrow><mi>h</mi><mtext></mtext><mo>−</mo><mtext>μ</mtext><msqrt><mrow><msup><mi>S</mi><mn>2</mn></msup><mo>−</mo><msup><mi>h</mi><mn>2</mn></msup></mrow></msqrt></mrow><mo>)</mo></mrow></mrow></mstyle></math></p></td></tr></tbody></table></div></div></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "1FCB02",
+  "subject": "Физика",
+  "guid": "256A14C9CD65A84C4599AFBEF4DD7C9F",
+  "kes": "",
+  "section": "Разное",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "В первой серии опытов брусок с грузом перемещали при помощи нити равномерно и прямолинейно вверх по наклонной плоскости. Во второй серии опытов точно так же перемещали этот брусок, но сняв с него груз. Как изменились при переходе от первой серии опытов ко второй модуль работы силы трения при перемещении бруска на одинаковые расстояния\nи коэффициент трения между бруском и плоскостью?\n\nДля каждой величины определите соответствующий характер её изменения:\n\n1)\n\nувеличилась\n\n2)\n\nуменьшилась\n\n3)\n\nне изменилась\n\nЗапишите в таблицу выбранные цифры для каждого ответа. Цифры в ответе могут повторяться.\n\nМодуль работы силы трения\n\nКоэффициент трения",
+  "units": "",
+  "pictures": [],
+  "answer": "23",
+  "accept": [],
+  "why": "Без груза брусок давит на плоскость слабее, сила трения меньше, и на том же пути её работа меньше. Коэффициент трения зависит только от самих поверхностей — он не изменился.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>В первой серии опытов брусок с грузом перемещали при помощи нити равномерно и прямолинейно вверх по наклонной плоскости<span>.</span> Во второй серии опытов точно так же перемещали этот брусок, но сняв с него груз. Как изменились при переходе от первой серии опытов ко второй модуль работы силы трения при перемещении бруска на одинаковые расстояния<br> и коэффициент трения между бруском и плоскостью?</p><p><span>Для каждой величины определите соответствующий характер её изменения:</span></p><table><tbody><tr><td valign=\"top\"><p>1)</p></td><td valign=\"top\"><p>увеличилась</p></td></tr><tr><td valign=\"top\"><p>2)</p></td><td valign=\"top\"><p>уменьшилась</p></td></tr><tr><td valign=\"top\"><p>3)</p></td><td valign=\"top\"><p>не изменилась</p></td></tr></tbody></table><p>Запишите в таблицу выбранные цифры для каждого ответа. Цифры в ответе могут повторяться.</p><table><tbody><tr><td valign=\"top\"><p align=\"center\">Модуль работы силы трения</p></td><td valign=\"top\"><p align=\"center\">Коэффициент трения</p></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
   "id": "51C0F9",
   "subject": "Физика",
   "guid": "18BA52315108926E498E42583D704255",
@@ -2648,6 +2806,23 @@ export const TASKS = [
   "why": "Угол падения равен углу отражения — 30 градусов. Между падающим и отражённым лучами 30 + 30 = 60 градусов.",
   "sure": "",
   "body": "<div><table><tbody><tr><td valign=\"top\"><p>Луч света падает на плоское зеркало. Угол отражения равен 30<span>°</span>. Определите угол между падающим и отражённым лучами.</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>градусов&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
+ },
+ {
+  "id": "19F401",
+  "subject": "Физика",
+  "guid": "2551b084a5e245a6800da97d4097c866",
+  "kes": "3.6.2 Законы отражения света",
+  "section": "Электродинамика",
+  "type": "Краткий ответ",
+  "lead": "Впишите правильный ответ.",
+  "text": "Луч света падает на плоское зеркало. Угол падения равен 22°. Чему равен угол между падающим и отражённым лучами?\n\nградус(а, -ов)",
+  "units": "",
+  "pictures": [],
+  "answer": "44",
+  "accept": [],
+  "why": "Угол отражения равен углу падения, значит между лучами 22 + 22 = 44 градуса.",
+  "sure": "",
+  "body": "<div><table><tbody><tr><td valign=\"top\"><p>Луч света падает на плоское зеркало. Угол падения равен 22<span>°</span>. Чему равен угол между падающим и отражённым лучами?</p></td></tr><tr><td><table><tbody><tr><td><br><div><table><tbody><tr><td></td><td>градус(а, -ов)&nbsp;</td></tr></tbody></table></div><br></td></tr></tbody></table></td></tr></tbody></table></div>"
  },
  {
   "id": "1A3704",
