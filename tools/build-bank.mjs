@@ -236,6 +236,32 @@ export const BANK_IDS = ${JSON.stringify(out.map((t) => t.id))};
 `;
 writeFileSync(new URL("../src/fipi-index.js", import.meta.url), index);
 
+// Опись для поиска: номер, предмет, раздел и начало условия. Поиск по номеру
+// задания нужен там же, где ищется всё остальное, — но тянуть ради него
+// полтора мегабайта условий нельзя. Поэтому здесь только начало текста: по нему
+// и ищется, и показывается строчка находки. Файл грузится отдельным куском и
+// только тогда, когда открыли поиск.
+const HEAD = 200;
+const findable = out.map((t) => {
+  const plain = String(t.text || "").replace(/\s+/g, " ").trim();
+  return {
+    id: t.id,
+    subject: t.subject,
+    section: t.section,
+    text: plain.length > HEAD ? plain.slice(0, HEAD).replace(/\s+\S*$/, "") + "…" : plain,
+  };
+});
+const find = `// Опись для поиска: номер задания, предмет, раздел и начало условия.
+// Сами условия лежат по файлу на предмет в src/bank — здесь их нет: опись
+// грузится отдельным куском, когда открыли поиск, и должна оставаться лёгкой.
+// Файл собран из выгрузок сборщика, менять его руками не нужно.
+// По строке на задание: так в истории правок видно, что именно изменилось.
+export const FIND = [
+${findable.map((t) => JSON.stringify(t)).join(",\n")}
+];
+`;
+writeFileSync(new URL("../src/bank-find.js", import.meta.url), find);
+
 // Сторож: разметка не должна терять текст условия. Однажды вместе с полями
 // ввода вылетала вся таблица, а с ней — все варианты ответа.
 const plainOf = (html) => String(html).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
@@ -261,3 +287,4 @@ subjects.forEach((s) => console.log("  набор «" + s + "»:", Math.round(si
 let picBytes = 0;
 savedPics.forEach((n) => { picBytes += n; });
 console.log("картинок отдельными файлами:", savedPics.size, "|", Math.round(picBytes / 1024), "КБ");
+console.log("опись для поиска:", Math.round(readFileSync(new URL("../src/bank-find.js", import.meta.url)).length / 1024), "КБ");

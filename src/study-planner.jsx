@@ -26,6 +26,7 @@ import NowCard from "./now-card.jsx";
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
 import { BANK_IDS } from "./fipi-index.js";
+import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
 import { search as searchAll } from "./search.js";
@@ -2093,9 +2094,26 @@ export default function StudyPlanner() {
 
   const currentNotebook = notebookOwners.find((o) => o.key === notebookOwner) || notebookOwners[0] || null;
 
+  // Опись заданий банка для поиска: номер, предмет и начало условия. Она
+  // приходит отдельным куском и только когда открыли поиск, — тянуть её вместе
+  // с приложением ради экрана, куда заходят не каждый день, незачем.
+  const [bankFind, setBankFind] = useState(null);
+  const [findFailed, setFindFailed] = useState(false);
+  useEffect(() => {
+    if (screen !== "search" || bankFind) return undefined;
+    let alive = true;
+    loadFind().then((list) => {
+      if (!alive) return;
+      setFindFailed(list === null);
+      setBankFind(list || []);
+    });
+    return () => { alive = false; };
+  }, [screen, bankFind]);
+
   const found = useMemo(
     () =>
       searchAll(query, {
+        bankTasks: bankFind || [],
         subjects: subjectsWithTopics,
         journal,
         subjectName: subjectNameById,
@@ -2105,7 +2123,7 @@ export default function StudyPlanner() {
         notebookOwners,
         notebooks,
       }),
-    [query, subjectsWithTopics, journal, subjectNameById, homework, allEvents, lyceumSchedule, notebookOwners, notebooks]
+    [query, bankFind, subjectsWithTopics, journal, subjectNameById, homework, allEvents, lyceumSchedule, notebookOwners, notebooks]
   );
 
   // Находка ведёт туда, где она живёт: экран, а при надобности — предмет или
@@ -2113,6 +2131,10 @@ export default function StudyPlanner() {
   function openFound(item) {
     if (item.subjectId) setOpenSubject(item.subjectId);
     if (item.notebook) setNotebookOwner(item.notebook);
+    // Найденное задание открывается само, а не «где-то там в тренажёре».
+    // Раздел не выставляем, а решённые не прячем: иначе задание, которое искали,
+    // на экране не покажется — именно потому, что его уже решали.
+    if (item.task) setTrainerState({ open: item.task.subject, section: "", taskId: item.task.id, again: true });
     goScreen(item.screen);
   }
 
@@ -2189,7 +2211,7 @@ export default function StudyPlanner() {
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
-    search: ["Поиск", "По темам, дневнику, заданиям, событиям, расписанию и тетрадям сразу"],
+    search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка сразу — задание ищется и по своему номеру"],
     settings: ["Синхронизация и данные", "Облако, резервная копия, оформление, установка на устройство и версия"],
   };
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
@@ -3684,14 +3706,22 @@ export default function StudyPlanner() {
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Что ищем?"
+              placeholder="Что ищем? Можно номер задания — 0810F0"
               style={styles.searchInput}
               aria-label="Поиск по записям"
             />
+            {findFailed && (
+              <div style={styles.searchWarn}>
+                Опись заданий банка не загрузилась — без сети её сначала нужно хоть раз открыть.
+                Свои записи ищутся как обычно.
+              </div>
+            )}
             {query.trim().length < 2 ? (
               <p style={styles.muted}>
-                Наберите хотя бы две буквы. Ищется везде сразу: темы подготовки, записи дневника, задания, события,
-                уроки расписания и текст тетрадей.
+                Наберите хотя бы две буквы. Ищется везде сразу: темы подготовки, записи дневника, домашка, события,
+                уроки расписания, текст тетрадей и задания банка ФИПИ. Задание находится по своему номеру —
+                тому самому, что подписан у него в тренажёре, — целиком или по началу; найденное открывается
+                сразу в тренажёре. По условию ищется его начало: опись нарочно лёгкая.
               </p>
             ) : found.total === 0 ? (
               <p style={styles.muted}>Ничего не нашлось. Попробуйте короче — ищется по части слова.</p>
@@ -5020,6 +5050,10 @@ const styles = {
     marginBottom: 12,
   },
   searchCount: { fontSize: 12.5, color: "var(--mute)", marginBottom: 10 },
+  searchWarn: {
+    fontSize: 12.5, lineHeight: 1.5, color: "var(--mute)", background: "var(--panel)",
+    border: "1px solid var(--line)", borderRadius: 10, padding: "8px 10px", margin: "10px 0",
+  },
   searchGroup: { marginBottom: 16 },
   searchGroupTitle: {
     display: "flex",
