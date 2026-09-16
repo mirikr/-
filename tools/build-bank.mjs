@@ -2,7 +2,8 @@
 // Сборка набора заданий: из выгрузок сборщика ФИПИ и наших ответов получается
 // src/fipi-bank.js. Запуск: FIPI_DIR=<папка с выгрузками> node tools/build-bank.mjs
 // (нужен playwright с Chromium — им разбирается разметка условий).
-import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { cleanBodies } from "./clean-body.mjs";
 
 // Где лежат выгрузки сборщика и наши ответы. Пути передаются переменной
@@ -74,6 +75,8 @@ const EXTRA_ACCEPT = {
   F13F4D: ["0,75 0,05", "0,75±0,05", "0,750,05"],
   "2B1449": ["5069", "50 69", "50;69"],
   B00348: ["3138", "31 38", "31;38"],
+  // Знака «±» на клавиатуре телефона нет — принимаем и то, чем его заменяют.
+  "4A99FA": ["0,4 +- 0,1", "0,4+-0,1", "0,4 0,1", "0,40,1"],
 };
 
 const out = [];
@@ -126,6 +129,22 @@ out.forEach((t) => {
   t.pictures = t.pictures.filter((p) => !t.body.includes(p.data));
 });
 
+// Сторож: задание без своего рисунка решать нечем. Свежая выгрузка сборщика
+// иногда приносит не саму картинку, а только ссылку на ege.fipi.ru — с сайта
+// она не загрузится, и в тренажёре останется условие «определите по рисунку»
+// без рисунка. Такие задания в набор не берём и называем вслух: их нужно снять
+// сборщиком заново.
+// Таблица истинности в банке тоже называется «рисунком», но она приходит
+// разметкой и читается прекрасно — такие задания не трогаем.
+const blind = out.filter((t) => /рисун|график|схем|диаграмм/i.test(t.lead + " " + t.text) &&
+  !t.pictures.length && !/<img|<table/.test(t.body || ""));
+if (blind.length) {
+  console.log("!! без рисунка, в набор не взяты — " + blind.length + ":");
+  blind.forEach((t) => console.log("   " + t.subject + " " + t.id));
+}
+const blindIds = new Set(blind.map((t) => t.id));
+for (let i = out.length - 1; i >= 0; i -= 1) if (blindIds.has(out[i].id)) out.splice(i, 1);
+
 out.sort((a, b) => a.section.localeCompare(b.section, "ru") || a.id.localeCompare(b.id));
 
 // Порядок предметов в приложении: сначала тот, к чему готовятся всерьёз.
@@ -138,32 +157,81 @@ subjects.forEach((s) => { sections[s] = [...new Set(out.filter((t) => t.subject 
 const totals = {};
 subjects.forEach((s) => { if (TOTALS[s]) totals[s] = TOTALS[s]; });
 
-const header = `// Задания открытого банка ФИПИ: условия сняты со страницы банка, у каждого сохранён
-// его номер — по нему задание находится в самом банке.
+// Латинское имя файла для предмета: кириллица в путях сборки только мешает.
+const SLUG = { "Обществознание": "society", "Физика": "physics", "Информатика": "informatics" };
+
+// Картинки уезжают из набора в отдельные файлы. Раньше каждая лежала внутри
+// разметки строкой base64: это на треть толще самой картинки, одна и та же
+// диаграмма повторялась в разных заданиях, и весь ворох грузился разом — даже
+// если человек решал одно задание. Имя файла — отпечаток содержимого, поэтому
+// повторы сами склеиваются в один файл.
+const picsDir = new URL("../public/fipi/", import.meta.url);
+rmSync(picsDir, { recursive: true, force: true });
+mkdirSync(picsDir, { recursive: true });
+const savedPics = new Map();
+function savePicture(data) {
+  const m = String(data).match(/^data:image\/([a-z]+);base64,(.+)$/);
+  if (!m) return "";
+  const kind = m[1] === "jpeg" ? "jpg" : m[1];
+  const bytes = Buffer.from(m[2], "base64");
+  const name = createHash("sha1").update(bytes).digest("hex").slice(0, 16) + "." + kind;
+  if (!savedPics.has(name)) {
+    writeFileSync(new URL(name, picsDir), bytes);
+    savedPics.set(name, bytes.length);
+  }
+  return "fipi/" + name;
+}
+// Адрес пишем без начального слэша: приложение живёт и в подпапке сайта, и в
+// предпросмотре, и подставляет свой корень само.
+out.forEach((t) => {
+  t.body = String(t.body || "").replace(/src="(data:image\/[a-z]+;base64,[^"]+)"/g,
+    (all, data) => { const src = savePicture(data); return src ? 'src="' + src + '"' : all; });
+  t.pictures = (t.pictures || []).map((p) => {
+    const src = savePicture(p.data);
+    return src ? { src, w: p.w, h: p.h } : null;
+  }).filter(Boolean);
+});
+
+const head = (subject) => `// Задания открытого банка ФИПИ по предмету «${subject}»: условия сняты со страницы
+// банка, у каждого сохранён его номер — по нему задание находится в самом банке.
 //
 // Правильных ответов банк не отдаёт: его страница отправляет ответ на сервер и получает
 // в ответ только «верно» или «неверно». Поэтому ответы здесь решены нами и помечены как
 // несверенные, а проверяются они сообща — по совпадениям и отметкам учеников.
 //
 // Файл собран из выгрузок сборщика, менять его руками не нужно.
+export const TASKS = `;
+
+// По файлу на предмет: набор грузится тот, который открыли, а не все сразу.
+const bankDir = new URL("../src/bank/", import.meta.url);
+mkdirSync(bankDir, { recursive: true });
+readdirSync(bankDir).forEach((f) => { if (f.endsWith(".js")) rmSync(new URL(f, bankDir)); });
+const sizes = {};
+subjects.forEach((s) => {
+  const list = out.filter((t) => t.subject === s);
+  const file = (SLUG[s] || s.toLowerCase()) + ".js";
+  writeFileSync(new URL(file, bankDir), head(s) + JSON.stringify(list, null, 1) + ";\n");
+  sizes[s] = readFileSync(new URL(file, bankDir)).length;
+});
+
+// Опись набора: имена предметов, разделы и номера заданий. Она крошечная и
+// грузится вместе с приложением — по ней рисуется выбор предмета и считается,
+// сколько решено, ещё до того как открыт хоть один набор.
+const index = `// Опись набора заданий: предметы, разделы и номера. Сами задания лежат по
+// файлу на предмет в src/bank — грузится только открытый.
+// Файл собран из выгрузок сборщика, менять его руками не нужно.
 export const BANK_SOURCE = "Открытый банк заданий ЕГЭ, ФИПИ — ege.fipi.ru/bank";
 export const BANK_URL = "https://ege.fipi.ru/bank/";
 
-export const BANK_SUBJECTS = ${JSON.stringify(subjects, null, 2)};
+export const BANK_SUBJECTS = ${JSON.stringify(subjects.map((s) => ({
+  name: s,
+  file: SLUG[s] || s.toLowerCase(),
+  count: out.filter((t) => t.subject === s).length,
+  whole: TOTALS[s] || 0,
+  sections: sections[s].map((name) => ({ name, count: out.filter((t) => t.subject === s && t.section === name).length })),
+  ids: out.filter((t) => t.subject === s).map((t) => t.id),
+})), null, 2)};
 
-export const BANK_SECTIONS = ${JSON.stringify(sections, null, 2)};
-
-export const BANK_TOTALS = ${JSON.stringify(totals, null, 2)};
-
-export const BANK_TASKS = `;
-
-writeFileSync(new URL("../src/fipi-bank.js", import.meta.url), header + JSON.stringify(out, null, 1) + ";\n");
-
-// Рядом кладётся крошечный список номеров. Сам набор весит мегабайты и грузится
-// отдельным куском, только когда открывают тренажёр, — а чтобы посчитать, сколько
-// заданий осталось, приложению хватает одних номеров.
-const index = `// Номера заданий набора — чтобы считать решённые, не загружая весь набор.
-// Файл собран из выгрузок сборщика вместе с fipi-bank.js, менять его руками не нужно.
 export const BANK_IDS = ${JSON.stringify(out.map((t) => t.id))};
 `;
 writeFileSync(new URL("../src/fipi-index.js", import.meta.url), index);
@@ -186,8 +254,10 @@ console.log("всего заданий:", out.length, "| с разметкой �
   "| с таблицами:", out.filter((t) => /<table/.test(t.body)).length);
 subjects.forEach((s) => {
   const list = out.filter((t) => t.subject === s);
-  console.log("  " + s + ":", list.length, "| с картинками:", list.filter((t) => t.pictures.length || /data:image/.test(t.body || "")).length,
+  console.log("  " + s + ":", list.length, "| с картинками:", list.filter((t) => t.pictures.length || /<img/.test(t.body || "")).length,
     "| разделы:", sections[s].join(", "));
 });
-const size = readFileSync(new URL("../src/fipi-bank.js", import.meta.url)).length;
-console.log("размер файла:", Math.round(size / 1024), "КБ");
+subjects.forEach((s) => console.log("  набор «" + s + "»:", Math.round(sizes[s] / 1024), "КБ"));
+let picBytes = 0;
+savedPics.forEach((n) => { picBytes += n; });
+console.log("картинок отдельными файлами:", savedPics.size, "|", Math.round(picBytes / 1024), "КБ");
