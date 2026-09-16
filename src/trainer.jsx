@@ -460,7 +460,7 @@ export default function Trainer({ log, marks, onAttempt, onMark, styles }) {
                       <a href={BANK_URL} target="_blank" rel="noreferrer" style={S.bankLink}>Открыть банк</a>
                     </div>
                     <div style={S.orRow}>
-                      <span style={S.orText}>Не дошли руки до банка — просто отметь, что вышло:</span>
+                      <span style={S.orText}>Не хочешь вписывать ответ — отметь хотя бы, что сказал банк:</span>
                       <button
                         onClick={() => mark("ok")}
                         className="ap-row"
