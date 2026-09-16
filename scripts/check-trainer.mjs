@@ -271,6 +271,56 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
     "решено " + solved.length + ", впереди решённых " + ahead.length);
 }
 
+// Первое задание после «Начать тест» ни за кем не закреплено: оно просто
+// первое в очереди. Верный ответ убирает его из очереди — и на экране молча
+// оказывалось следующее: ни разбора прочитать, ни ответ с ФИПИ вписать.
+{
+  await page.getByRole("button", { name: "К выбору предмета" }).first().click();
+  await page.waitForTimeout(400);
+  const i = index.BANK_SUBJECTS.findIndex((x) => x.name === "Информатика");
+  await page.getByRole("button", { name: /Начать тест|Продолжить/ }).nth(i).click();
+  await page.waitForTimeout(1200);
+  const first = await card.innerText();
+  const id = (first.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+  const t = (await bankOf("informatics")).find((x) => x.id === id);
+  want("первое задание предмета показано", !!t, "№ " + id);
+  await page.getByLabel("Ваш ответ").fill(t.answer);
+  await page.getByRole("button", { name: "Ответить" }).click();
+  await page.waitForTimeout(400);
+  const after = await card.innerText();
+  want("после верного ответа первое задание не убежало", after.includes(id),
+    id + " → " + ((after.match(/№\s*(\S+)/) || [])[1] || "?"));
+  want("разбор от своего задания", after.includes(t.why.slice(0, 20)));
+
+  // Кнопка «Банк засчитал наш ответ» — это и есть ответ с ФИПИ: наш же ключ.
+  // Раньше она ставила отметку, но ответ в копилку не попадал, и его
+  // приходилось вписывать руками второй раз.
+  await page.getByRole("button", { name: /Банк засчитал наш ответ/ }).click();
+  await page.waitForTimeout(1600);
+  const marked = await card.innerText();
+  want("кнопка сама записывает ответ с ФИПИ", /Ответ с ФИПИ записан/i.test(marked) && marked.includes(t.answer),
+    (marked.match(/Ответ с ФИПИ записан[^\n]*/) || [])[0] || marked.slice(0, 60));
+  const savedAnswer = await page.evaluate((taskId) => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    const m = (value.bankMarks || []).find((x) => x.taskId === taskId && x.kind === "ok");
+    return m ? { fipiAnswer: m.fipiAnswer || "", byButton: "byButton" in m } : null;
+  }, id);
+  want("ответ с ФИПИ сохранился", savedAnswer && savedAnswer.fipiAnswer === t.answer,
+    savedAnswer ? JSON.stringify(savedAnswer) : "отметки нет");
+  want("служебный признак кнопки в записи не хранится", savedAnswer && !savedAnswer.byButton);
+
+  // Нажали ту же кнопку второй раз — передумали, отметка снимается.
+  await page.getByRole("button", { name: /Банк засчитал наш ответ/ }).click();
+  await page.waitForTimeout(1600);
+  const off = await page.evaluate((taskId) => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    return (value.bankMarks || []).filter((x) => x.taskId === taskId && x.kind === "ok").length;
+  }, id);
+  want("повторное нажатие снимает отметку", off === 0, "отметок: " + off);
+}
+
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
 await openSubject("Физика");
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,

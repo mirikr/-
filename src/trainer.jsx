@@ -204,22 +204,33 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     const ok = isRight(task, value);
     const seconds = Math.round(watch.read());
     setResult({ ok, seconds });
+    // Задание закрепляем за собой прямо сейчас. Пока на него не ответили, оно
+    // бралось первым из очереди, — а верный ответ убирает его из очереди, и на
+    // экране молча оказывалось следующее: ни разбора прочитать, ни ответ с ФИПИ
+    // вписать. Так уезжало первое же задание после «Начать тест».
+    if (currentId !== task.id) {
+      setCurrentId(task.id);
+      onState({ open, section, taskId: task.id, again: !onlyNew });
+    }
     onAttempt({ taskId: task.id, answer: value, ok, seconds });
     // Ответ уходит в общую копилку: по таким совпадениям и проверяются ключи.
     saveVote({ taskId: task.id, answer: value, matches: ok, fipi: myMark ? myMark.kind : "" })
       .then((sent) => sent && loadVotes(true).then(setVotes));
   }
 
-  function mark(kind, bankAnswer) {
+  // Отметка о том, что сказал банк. byButton — нажали кнопку (её же нажатием
+  // можно и передумать), иначе ответ вписали руками.
+  function mark(kind, bankAnswer, byButton) {
     if (!task) return;
     const entry = { taskId: task.id, kind };
     if (bankAnswer) entry.fipiAnswer = bankAnswer;
+    if (byButton) entry.byButton = true;
     onMark(entry);
     // «Криво показано» — жалоба на задание, а не ответ банка, поэтому в общий
     // счёт ключей она не уходит.
     if (kind === "broken") return;
-    // Ответ с ФИПИ отменять нечего: его прислали, а не просто нажали кнопку.
-    const same = !bankAnswer && myMark && myMark.kind === kind;
+    // Повторное нажатие той же кнопки снимает отметку — значит и голос снимаем.
+    const same = byButton && myMark && myMark.kind === kind;
     saveVote({
       taskId: task.id,
       answer: value,
@@ -235,7 +246,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     if (!task) return;
     const typed = fromBank.trim();
     if (!typed) return;
-    mark(isRight(task, typed) ? "ok" : "wrong", typed);
+    mark(isRight(task, typed) ? "ok" : "wrong", typed, false);
     setFromBank("");
   }
 
@@ -499,7 +510,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
             <div style={S.underRow}>
               {!result && <button onClick={next} className="ap-row" style={S.skip}>Пропустить</button>}
               <button
-                onClick={() => mark("broken")}
+                onClick={() => mark("broken", "", true)}
                 className="ap-row"
                 style={{ ...S.report, ...(myBroken ? S.reportOn : null) }}
                 title="Условие показано криво, непонятно или не хватает рисунка"
@@ -542,7 +553,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                           " · нужно ещё " + key.need}
                 </div>
 
-                {sentFromBank ? (
+                {sentFromBank && !isRight(task, sentFromBank) ? (
                   <div style={S.sent}>
                     <div>
                       Ответ с ФИПИ записан: <b>{sentFromBank}</b>.{" "}
@@ -550,7 +561,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                         ? "Он сошёлся с нашим ключом — значит, ключ верный."
                         : "Он расходится с нашим ключом — ключ поправим по твоему ответу."}
                     </div>
-                    <button onClick={() => mark(myMark.kind)} className="ap-row" style={S.again}>
+                    <button onClick={() => mark(myMark.kind, "", true)} className="ap-row" style={S.again}>
                       Отменить и вписать заново
                     </button>
                   </div>
@@ -560,6 +571,12 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                       Банк правильный ответ не показывает: он только говорит «верно» или «неверно».
                       Поэтому ответ здесь решён нами — и точнее всего его проверяет тот, кто сходил в банк.
                     </p>
+                    {sentFromBank && (
+                      <div style={S.sentLine}>
+                        Ответ с ФИПИ записан: <b>{sentFromBank}</b> — он сошёлся с нашим ключом,
+                        значит ключ верный. Передумал? Нажми ту же кнопку ещё раз.
+                      </div>
+                    )}
                     <ol style={S.steps}>
                       <li>
                         Открой банк и найди задание <b>№ {task.id}</b> — номер там тот же.
@@ -587,16 +604,21 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                       <a href={BANK_URL} target="_blank" rel="noreferrer" style={S.bankLink}>Открыть банк</a>
                     </div>
                     <div style={S.orRow}>
-                      <span style={S.orText}>Не хочешь вписывать ответ — отметь хотя бы, что сказал банк:</span>
+                      <span style={S.orText}>
+                        Если банк засчитал наш ответ, вписывать ничего не надо — нажми кнопку, и ответ
+                        уйдёт в копилку сам:
+                      </span>
                       <button
-                        onClick={() => mark("ok")}
+                        // Раз банк засчитал наш ответ, то ответ с ФИПИ — он и есть.
+                        // Вписывать его второй раз руками незачем.
+                        onClick={() => mark("ok", task.answer, true)}
                         className="ap-row"
                         style={{ ...S.keyBtn, ...(myMark && myMark.kind === "ok" ? S.keyBtnOn : null) }}
                       >
                         Банк засчитал наш ответ
                       </button>
                       <button
-                        onClick={() => mark("wrong")}
+                        onClick={() => mark("wrong", "", true)}
                         className="ap-row"
                         style={{ ...S.keyBtn, ...(myMark && myMark.kind === "wrong" ? S.keyBtnOn : null) }}
                       >
@@ -813,6 +835,10 @@ const S = {
   primaryOff: { opacity: 0.45, cursor: "default" },
   orRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
   orText: { fontSize: 12.5, color: "var(--mute)", flex: "1 1 100%" },
+  sentLine: {
+    fontSize: 12.5, lineHeight: 1.5, color: "var(--ink)", background: "var(--panel)",
+    border: "1px solid var(--line)", borderRadius: 10, padding: "8px 10px", margin: "0 0 10px",
+  },
   sent: {
     display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap",
     fontSize: 13.5, lineHeight: 1.55, color: "var(--ink2)", margin: "9px 0 0",

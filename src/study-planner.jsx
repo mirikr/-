@@ -26,7 +26,7 @@ import NowCard from "./now-card.jsx";
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
 import { BANK_IDS, BANK_SUBJECTS } from "./fipi-index.js";
-import { dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
+import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
@@ -1417,9 +1417,11 @@ export default function StudyPlanner() {
     const today = todayStr();
     const counted = journal.some((e) => e.date === today && (Number(e.hours) || 0) > 0) || dayCounts(trainerByDay, today);
     if (counted) return null;
-    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "");
+    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", BANK_SUBJECTS);
     if (!offer || offer.left <= 0) return null;
-    return offer;
+    // Пятнадцать заданий по обществознанию выглядят неподъёмно, когда времени
+    // нет совсем. Поэтому рядом называем предмет, где хватит пяти.
+    return { ...offer, cheaper: offer.solved ? null : cheapestGoal(BANK_SUBJECTS, offer.subject) };
   }, [journal, trainerByDay, trainerState]);
 
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
@@ -2220,9 +2222,12 @@ export default function StudyPlanner() {
       const rest = list.filter((m) => m.id !== id);
       const was = list.find((m) => m.id === id);
       // Повторное нажатие той же кнопки снимает отметку: передумать можно.
-      // А вот присланный с ФИПИ ответ — не нажатие кнопки: он всегда записывается.
-      if (was && was.kind === entry.kind && !entry.fipiAnswer && !was.fipiAnswer) return rest;
-      return rest.concat({ id, at: new Date().toISOString(), ...entry });
+      // А вот вписанный руками ответ с ФИПИ так не снимается — его прислали,
+      // а не просто нажали кнопку. Само «откуда пришло» не храним: это про
+      // нажатие, а не про запись.
+      const { byButton, ...saved } = entry;
+      if (was && was.kind === entry.kind && byButton) return rest;
+      return rest.concat({ id, at: new Date().toISOString(), ...saved });
     });
   }
 
@@ -2585,7 +2590,11 @@ export default function StudyPlanner() {
                           ? "Решено " + trainerOffer.solved + " из " + trainerOffer.need + " — осталось " +
                             trainerOffer.left + " " + tasksWord(trainerOffer.left) + " по предмету «" + trainerOffer.subject + "»"
                           : "Прореши " + trainerOffer.need + " " + tasksWord(trainerOffer.need) +
-                            " по предмету «" + trainerOffer.subject + "» — день зачтётся и серия не оборвётся"}
+                            " по предмету «" + trainerOffer.subject + "» — день зачтётся и серия не оборвётся" +
+                            (trainerOffer.cheaper
+                              ? ". По предмету «" + trainerOffer.cheaper.subjects.join("» или «") + "» хватит " +
+                                trainerOffer.cheaper.need
+                              : "")}
                       </span>
                       <span style={styles.offerGo}>В тренажёр →</span>
                     </button>
