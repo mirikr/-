@@ -19,6 +19,11 @@ const sources = {
     { id: "s2", subjectName: "Право", teacher: "Иванов И.И.", room: "каб. 401" },
     { id: "s3", subjectName: "История", teacher: "Маслак Е.Н.", room: "каб. 504" },
   ],
+  bankTasks: [
+    { id: "0810F0", subject: "Обществознание", section: "Право", text: "Выберите верные суждения о правовом государстве и запишите цифры…" },
+    { id: "0810AB", subject: "Физика", section: "Механика", text: "Тело движется равноускоренно. Определите ускорение…" },
+    { id: "F13F4D", subject: "Физика", section: "Электродинамика", text: "Определите показания амперметра, если цена деления…" },
+  ],
   notebookOwners: [{ key: "lyceum:Право", name: "Право", color: "#8C7326" }],
   notebooks: {
     "lyceum:Право": [
@@ -33,7 +38,7 @@ check("ищет во всех разделах сразу", () => {
   const res = search("прав", sources);
   assert.deepStrictEqual(
     res.groups.map((g) => g.id),
-    ["topics", "journal", "homework", "events", "schedule", "notes"]
+    ["topics", "journal", "homework", "events", "schedule", "bank", "notes"]
   );
 });
 
@@ -70,6 +75,46 @@ check("находка знает, куда за ней идти", () => {
   assert.strictEqual(notes.screen, "notes");
   assert.strictEqual(notes.notebook, "lyceum:Право");
   assert.strictEqual(groupOf(search("Источники", sources), "topics").shown[0].subjectId, "law");
+});
+
+// Ради этого поиск заданий и затевался: номер задания подписан в тренажёре,
+// по нему задание и ищут.
+check("задание находится по номеру целиком", () => {
+  const g = groupOf(search("0810F0", sources), "bank");
+  assert.strictEqual(g.total, 1);
+  assert.strictEqual(g.shown[0].title, "№ 0810F0");
+});
+
+check("регистр в номере не мешает", () => {
+  assert.strictEqual(groupOf(search("0810f0", sources), "bank").total, 1);
+});
+
+check("задание находится по началу номера", () => {
+  const g = groupOf(search("0810", sources), "bank");
+  assert.strictEqual(g.total, 2);
+});
+
+check("точное совпадение номера идёт первым", () => {
+  const g = groupOf(search("0810F0", { ...sources, bankTasks: sources.bankTasks.slice().reverse() }), "bank");
+  assert.strictEqual(g.shown[0].title, "№ 0810F0");
+});
+
+check("задание находится по тексту условия", () => {
+  const g = groupOf(search("равноускоренно", sources), "bank");
+  assert.strictEqual(g.total, 1);
+  assert.strictEqual(g.shown[0].title, "№ 0810AB");
+});
+
+check("находка ведёт в тренажёр и знает предмет с номером", () => {
+  const item = groupOf(search("0810F0", sources), "bank").shown[0];
+  assert.strictEqual(item.screen, "trainer");
+  assert.deepStrictEqual(item.task, { id: "0810F0", subject: "Обществознание" });
+  assert.strictEqual(item.note, "Обществознание · Право");
+});
+
+check("без описи заданий поиск не ломается", () => {
+  const res = search("0810F0", { ...sources, bankTasks: [] });
+  assert.strictEqual(groupOf(res, "bank"), undefined);
 });
 
 check("кусок текста вокруг найденного", () => {

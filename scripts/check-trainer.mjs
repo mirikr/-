@@ -295,6 +295,38 @@ for (let step = 0; step < 40; step += 1) {
 }
 want("рисунок задания виден на экране", shownPicture > 0, "картинок в карточке: " + shownPicture);
 
+// Поиск по номеру задания. Номер подписан у каждого задания в тренажёре — по
+// нему задание и ищут; найденное должно открываться сразу на нём, а не «где-то
+// там в тренажёре» — и открываться даже тогда, когда его уже решали.
+{
+  const wanted = (await bankOf("physics"))[3];
+  await page.getByRole("button", { name: /Поиск/ }).first().click();
+  await page.waitForTimeout(400);
+  const box = page.locator('[aria-label="Поиск по записям"]');
+  await box.fill(wanted.id);
+  // Опись заданий приезжает отдельным куском — ей нужно время долететь.
+  await page.waitForTimeout(1500);
+  const list = await page.locator("section.ap-card").first().innerText();
+  want("задание нашлось по номеру", list.includes("№ " + wanted.id) && /задания банка/i.test(list),
+    (list.match(/№\s*\S+/) || [])[0] || list.slice(0, 80));
+  want("у находки подписан предмет", list.includes(wanted.subject));
+
+  // По началу номера — тоже: весь номер на память никто не держит.
+  await box.fill(wanted.id.slice(0, 4));
+  await page.waitForTimeout(500);
+  want("задание находится по началу номера",
+    (await page.locator("section.ap-card").first().innerText()).includes("№ " + wanted.id));
+
+  await box.fill(wanted.id);
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: new RegExp("№ " + wanted.id) }).first().click();
+  await page.waitForTimeout(1500);
+  const opened = await page.locator("section.ap-card").first().innerText();
+  want("находка открывает именно это задание", opened.includes("№ " + wanted.id),
+    (opened.match(/№\s*\S+/) || [])[0] || opened.slice(0, 80));
+  want("и открывает его в нужном предмете", opened.includes(wanted.subject));
+}
+
 // Телефон: карточка не должна разъезжаться вбок.
 await page.setViewportSize({ width: 390, height: 780 });
 await page.waitForTimeout(400);

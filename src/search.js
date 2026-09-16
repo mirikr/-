@@ -1,5 +1,5 @@
-// Поиск по всему, что накопилось: темы, дневник, задания, события, расписание
-// и тетради.
+// Поиск по всему, что накопилось: темы, дневник, домашка, события, расписание,
+// тетради и задания банка ФИПИ.
 //
 // Ищется подстрокой без учёта регистра и буквы «ё»: набирать точное написание,
 // чтобы найти свою же запись, — издевательство. Ничего умнее не нужно, записей
@@ -83,7 +83,7 @@ export function search(query, sources) {
       note: [h.subjectName, h.date, h.done ? "сделано" : ""].filter(Boolean).join(" · "),
       screen: "journal",
     }));
-  add("homework", "Задания", "journal", homework);
+  add("homework", "Домашние задания", "journal", homework);
 
   const events = (s.events || [])
     .filter((e) => hit(e.name, needle))
@@ -107,6 +107,35 @@ export function search(query, sources) {
     });
   }
   add("schedule", "Расписание", "school", lessons);
+
+  // Задания банка ФИПИ. Номер задания подписан у каждого задания в тренажёре —
+  // по нему задание и ищут, поэтому номер весомее текста: точное совпадение
+  // идёт первым, потом начало номера, и только потом совпадения по условию.
+  //
+  // Опись приходит отдельным куском и только на этом экране: пока она едет,
+  // sources.bankTasks пустой, и группа просто не показывается.
+  const tasks = [];
+  // За номер принимаем только запрос, который сам похож на номер: буквы и цифры
+  // без ничего лишнего. Иначе «<b>» превращается в «b» и находит половину банка.
+  const bare = /^[0-9a-zа-я]+$/.test(needle) ? needle : "";
+  for (const t of s.bankTasks || []) {
+    const id = normalize(t.id);
+    const exact = bare && id === bare;
+    const starts = bare && !exact && id.startsWith(bare);
+    const byText = !exact && !starts && hit(t.text, needle);
+    if (!exact && !starts && !byText) continue;
+    tasks.push({
+      rank: exact ? 0 : starts ? 1 : 2,
+      id: "task:" + t.id,
+      title: "№ " + t.id,
+      note: t.subject + " · " + t.section,
+      body: hit(t.text, needle) ? excerpt(t.text, needle) : t.text.slice(0, 120),
+      screen: "trainer",
+      task: { id: t.id, subject: t.subject },
+    });
+  }
+  tasks.sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
+  add("bank", "Задания банка ФИПИ", "trainer", tasks);
 
   const notes = [];
   for (const owner of s.notebookOwners || []) {

@@ -52,14 +52,13 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
         // Снимки прошлых версий — это пара мегабайт ради одного окна истории:
         // в офлайн-кэш они не нужны, подгрузятся, когда откроют сравнение.
-        // Набор заданий тренажёра — отдельный кусок в пару мегабайт. В офлайн-запас
-        // его не кладём: приложение должно ставиться быстро и на мобильном интернете.
-        // Один раз открыв тренажёр, ученик получает набор в кэш и дальше решает без сети.
-        // Наборы заданий и картинки к ним — десятки мегабайт. В офлайн-запас
-        // они не кладутся: приложение должно ставиться быстро и на мобильном
-        // интернете. Открытый хоть раз набор попадает в кэш и дальше работает
-        // без сети.
-        globIgnores: ["**/versions/*.png", "**/society-*.js", "**/physics-*.js", "**/informatics-*.js", "**/fipi/*"],
+        //
+        // Наборы заданий, картинки к ним и опись для поиска — десятки мегабайт.
+        // В офлайн-запас они не кладутся: приложение должно ставиться быстро и
+        // на мобильном интернете. Открытое хоть раз попадает в кэш и дальше
+        // работает без сети.
+        globIgnores: ["**/versions/*.png", "**/society-*.js", "**/physics-*.js", "**/informatics-*.js",
+          "**/bank-find-*.js", "**/fipi/*"],
         // The planner must open with no network at all; Supabase calls are never cached,
         // they either reach the server or fall back to the local copy in storage.js.
         navigateFallback: base + "index.html",
@@ -67,7 +66,7 @@ export default defineConfig(({ mode }) => ({
           {
             // Имя куска меняется вместе с содержимым, поэтому старый набор
             // подсунуть нельзя: адрес у новой сборки другой.
-            urlPattern: /\/assets\/(society|physics|informatics)-[^/]+\.js$/,
+            urlPattern: /\/assets\/(society|physics|informatics|bank-find)-[^/]+\.js$/,
             handler: "CacheFirst",
             options: {
               cacheName: "trainer-bank",

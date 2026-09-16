@@ -12,8 +12,9 @@ const UP = process.env.FIPI_DIR || "./fipi";
 const SOURCES = [
   // Свежая выгрузка физики идёт первой: в ней целы и формулы, и картинки.
   // Прежние оставлены — из них берутся задания, которых в новой не оказалось.
-  { subject: "Физика", file: UP + "ac16a348-fipi-100.json",
-    older: [UP + "4c6d30da-fipi-100.json", UP + "1910c825-fipi-110.json"], answers: "answers/physics.json" },
+  { subject: "Физика", file: UP + "6b6f257f-_______300________.json",
+    older: [UP + "4c6d30da-fipi-100.json", UP + "1910c825-fipi-110.json", UP + "ac16a348-fipi-100.json"],
+    answers: "answers/physics.json" },
   { subject: "Обществознание", file: UP + "195a230a-__________________i-250.json",
     older: [UP + "b2a0ec16-_________100_______________.json", UP + "770f85e5-__________________-120.json"],
     answers: "answers/social.json" },
@@ -77,6 +78,14 @@ const EXTRA_ACCEPT = {
   B00348: ["3138", "31 38", "31;38"],
   // Знака «±» на клавиатуре телефона нет — принимаем и то, чем его заменяют.
   "4A99FA": ["0,4 +- 0,1", "0,4+-0,1", "0,4 0,1", "0,40,1"],
+  // Два поля ответа — «число протонов» и «число нейтронов»: их пишут и слитно.
+  "10ACF0": ["34", "3 4", "3;4"],
+  "1182F1": ["2936", "29 36", "29;36"],
+  "2B6FF4": ["82210", "82 210", "82;210"],
+  "DD65FF": ["3,8 +- 0,2", "3,8+-0,2", "3,8 0,2", "3,80,2"],
+  "A46BFA": ["0,36 +- 0,02", "0,36+-0,02", "0,36 0,02", "0,360,02"],
+  "9503F7": ["36 +- 2", "36+-2", "36 2", "362"],
+  "51C0F9": ["48", "4 8", "4;8"],
 };
 
 const out = [];
@@ -236,6 +245,32 @@ export const BANK_IDS = ${JSON.stringify(out.map((t) => t.id))};
 `;
 writeFileSync(new URL("../src/fipi-index.js", import.meta.url), index);
 
+// Опись для поиска: номер, предмет, раздел и начало условия. Поиск по номеру
+// задания нужен там же, где ищется всё остальное, — но тянуть ради него
+// полтора мегабайта условий нельзя. Поэтому здесь только начало текста: по нему
+// и ищется, и показывается строчка находки. Файл грузится отдельным куском и
+// только тогда, когда открыли поиск.
+const HEAD = 200;
+const findable = out.map((t) => {
+  const plain = String(t.text || "").replace(/\s+/g, " ").trim();
+  return {
+    id: t.id,
+    subject: t.subject,
+    section: t.section,
+    text: plain.length > HEAD ? plain.slice(0, HEAD).replace(/\s+\S*$/, "") + "…" : plain,
+  };
+});
+const find = `// Опись для поиска: номер задания, предмет, раздел и начало условия.
+// Сами условия лежат по файлу на предмет в src/bank — здесь их нет: опись
+// грузится отдельным куском, когда открыли поиск, и должна оставаться лёгкой.
+// Файл собран из выгрузок сборщика, менять его руками не нужно.
+// По строке на задание: так в истории правок видно, что именно изменилось.
+export const FIND = [
+${findable.map((t) => JSON.stringify(t)).join(",\n")}
+];
+`;
+writeFileSync(new URL("../src/bank-find.js", import.meta.url), find);
+
 // Сторож: разметка не должна терять текст условия. Однажды вместе с полями
 // ввода вылетала вся таблица, а с ней — все варианты ответа.
 const plainOf = (html) => String(html).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
@@ -261,3 +296,4 @@ subjects.forEach((s) => console.log("  набор «" + s + "»:", Math.round(si
 let picBytes = 0;
 savedPics.forEach((n) => { picBytes += n; });
 console.log("картинок отдельными файлами:", savedPics.size, "|", Math.round(picBytes / 1024), "КБ");
+console.log("опись для поиска:", Math.round(readFileSync(new URL("../src/bank-find.js", import.meta.url)).length / 1024), "КБ");
