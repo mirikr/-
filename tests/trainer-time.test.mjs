@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import {
-  dayCounts, goalFor, offerFor, subjectsByTask, taskWord, trainerDays, trainerEntries,
+  cheapestGoal, dayCounts, goalFor, offerFor, subjectsByTask, taskWord, trainerDays, trainerEntries,
 } from "../src/trainer-time.js";
 
 let passed = 0;
@@ -88,16 +88,31 @@ check("пять заданий по физике день засчитывают
 
 check("предложение считает остаток по начатому предмету", () => {
   const days = trainerDays([at("2026-09-16", "P1", 60), at("2026-09-16", "P2", 60)], byTask);
-  const offer = offerFor(days, "2026-09-16", "Обществознание");
+  const offer = offerFor(days, "2026-09-16", "Обществознание", bank);
   assert.strictEqual(offer.subject, "Физика");
   assert.strictEqual(offer.left, 3);
   assert.strictEqual(offer.need, 5);
 });
 
 check("если сегодня не решали, предмет подсказывает тренажёр", () => {
-  const offer = offerFor([], "2026-09-16", "Информатика");
+  const offer = offerFor([], "2026-09-16", "Информатика", bank);
   assert.deepStrictEqual(offer, { subject: "Информатика", solved: 0, need: 5, left: 5 });
-  assert.strictEqual(offerFor([], "2026-09-16", ""), null);
+});
+
+// Тому, кто ещё не открывал тренажёр, предложение нужнее всего — оно обязано
+// быть и без всякой истории.
+check("без истории предложение всё равно есть", () => {
+  const offer = offerFor([], "2026-09-16", "", bank);
+  assert.deepStrictEqual(offer, { subject: "Обществознание", solved: 0, need: 15, left: 15 });
+  assert.strictEqual(offerFor([], "2026-09-16", "", []), null);
+});
+
+check("рядом называется предмет с порогом пониже", () => {
+  const cheap = cheapestGoal(bank, "Обществознание");
+  assert.strictEqual(cheap.need, 5);
+  assert.deepStrictEqual(cheap.subjects, ["Физика", "Информатика"]);
+  assert.strictEqual(cheapestGoal(bank, "Физика").need, 5);
+  assert.strictEqual(cheapestGoal([{ name: "Физика", ids: [] }], "Физика"), null);
 });
 
 check("счёт заданий склоняется по-русски", () => {

@@ -86,9 +86,13 @@ export function dayCounts(days, date) {
 }
 
 // Что показать в предложении: по какому предмету сегодня ближе всего к порогу и
-// сколько заданий осталось. Если сегодня ещё не решали — предмет подсказывает
-// тренажёр: тот, который открывали последним.
-export function offerFor(days, date, lastOpened) {
+// сколько заданий осталось.
+//
+// Если сегодня ещё не решали, предмет подсказывает тренажёр — тот, который
+// открывали последним. А если тренажёр не открывали вовсе, предложение всё
+// равно должно быть: человеку, который ещё не начинал, оно нужнее всего.
+// Тогда берём первый предмет описи — тот, к чему готовятся всерьёз.
+export function offerFor(days, date, lastOpened, subjects) {
   const today = days.filter((d) => d.date === date);
   const started = today
     .slice()
@@ -96,7 +100,20 @@ export function offerFor(days, date, lastOpened) {
   if (started) {
     return { subject: started.subject, solved: started.solved, need: started.need, left: Math.max(0, started.need - started.solved) };
   }
-  const subject = lastOpened && STREAK_GOAL[lastOpened] ? lastOpened : "";
+  const known = (subjects || []).map((x) => (typeof x === "string" ? x : x && x.name)).filter(Boolean);
+  const subject = lastOpened && STREAK_GOAL[lastOpened] ? lastOpened : known.find((n) => STREAK_GOAL[n]) || known[0] || "";
   if (!subject) return null;
   return { subject, solved: 0, need: goalFor(subject), left: goalFor(subject) };
+}
+
+// Чем можно отделаться быстрее всего: самый низкий порог и по каким предметам.
+// Нужно, чтобы предложение не выглядело неподъёмным, когда открыт предмет
+// с порогом в пятнадцать заданий.
+export function cheapestGoal(subjects, except) {
+  const names = (subjects || [])
+    .map((x) => (typeof x === "string" ? x : x && x.name))
+    .filter((n) => n && n !== except && STREAK_GOAL[n]);
+  if (!names.length) return null;
+  const need = Math.min(...names.map((n) => STREAK_GOAL[n]));
+  return { need, subjects: names.filter((n) => STREAK_GOAL[n] === need) };
 }

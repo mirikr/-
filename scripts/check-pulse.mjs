@@ -62,6 +62,20 @@ const open = async (state) => {
   return { browser, page, errors };
 };
 
+// --- совсем чистое приложение: предложение всё равно на виду ---------------
+// Тому, кто ещё ни разу не открывал тренажёр, оно нужнее всего.
+{
+  const { browser, page, errors } = await open({});
+  const card = await page.locator("section.ap-card").nth(1).innerText();
+  want("на чистом приложении предложение есть", /Прореши \d+ задани/i.test(card),
+    (card.match(/Прореши[^\n]*/i) || [])[0] || card.slice(0, 80));
+  want("названы и предмет, и порог пониже", /Обществознание/.test(card) && /хватит 5/.test(card),
+    (card.match(/Прореши[^\n]*/i) || [])[0] || "");
+  want("предложение ведёт в тренажёр", /В тренажёр/.test(card));
+  want("ошибок нет", errors.length === 0, errors[0] || "");
+  await browser.close();
+}
+
 // --- мало заданий: день ещё не засчитан, но предложение видно --------------
 {
   const { browser, page, errors } = await open(seed(phys.ids.slice(0, 2), 360));
