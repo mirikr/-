@@ -346,12 +346,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   if (!open) {
     return (
       <section className="ap-card" style={styles.card}>
-        <div style={styles.cardTitle}>Тренажёр по банку ФИПИ</div>
-        <p style={styles.cardNote}>
-          Условия взяты из открытого банка заданий ЕГЭ. У каждого задания подписан его номер —
-          по нему задание находится в самом банке. Время засекается настоящим секундомером, а не прикидкой.
-        </p>
-
         <div style={S.alpha}>
           <b>Это альфа-версия, и ответы здесь решены нами, а не взяты у ФИПИ</b> — банк правильный ответ не
           показывает, он только говорит «верно» или «неверно». Значит, ошибки в ключах не исключение, а дело
@@ -369,6 +363,14 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                   <span style={S.pickName}>{s.name}</span>
                   <span style={S.pickCount}>{s.count} {taskWord(s.count)}</span>
                 </div>
+                {/* Сколько заданий предмета уже перенесено из банка: у него там
+                    тысячи, и без этой строчки «68 заданий» выглядит как весь банк. */}
+                {s.whole ? (
+                  <div style={S.pickWhole}>
+                    Перенесено из банка ФИПИ: {s.count} из {s.whole} —{" "}
+                    {Math.max(0.1, (s.count / s.whole) * 100).toFixed(1).replace(".0", "").replace(".", ",")}%
+                  </div>
+                ) : null}
                 <div style={S.pickLine}>
                   {done
                     ? "Решено " + done + " из " + s.count + (done === s.count ? " — весь набор пройден" : "") +
@@ -396,14 +398,15 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                     <button onClick={() => start(s.name, ALL_MODE, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
                   ) : null}
                 </div>
-                <div style={S.pickHint}>
-                  «Начать тест» — только то, что ещё не решено, и можно выбрать раздел.
-                  «Все задания подряд» — весь предмет целиком, вместе с уже решённым.
-                  {missed ? " «Перерешать неверные» — те, где последний ответ был неверным." : ""}
-                </div>
               </div>
             );
           })}
+        </div>
+
+        <div style={S.pickHint}>
+          «Начать тест» — только то, что ещё не решено, и можно выбрать раздел.
+          «Все задания подряд» — весь предмет целиком, вместе с уже решённым.
+          «Перерешать неверные» — те, где последний ответ был неверным.
         </div>
 
         <p style={S.source}>{BANK_SOURCE}</p>
@@ -897,7 +900,8 @@ const S = {
   pickCount: { fontSize: 12.5, color: "var(--mute)", flex: "0 0 auto" },
   pickLine: { fontSize: 13, color: "var(--ink3)", margin: "6px 0 0" },
   pickButtons: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 },
-  pickHint: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, marginTop: 8 },
+  pickHint: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, marginTop: 12 },
+  pickWhole: { fontSize: 12, color: "var(--mute)", marginTop: 2 },
   head0: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between", marginBottom: 10 },
   back: {
     border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 8,
