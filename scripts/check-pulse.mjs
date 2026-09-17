@@ -67,10 +67,10 @@ const open = async (state) => {
 {
   const { browser, page, errors } = await open({});
   const card = await page.locator("section.ap-card").nth(1).innerText();
-  want("на чистом приложении предложение есть", /Прореши \d+ задани/i.test(card),
-    (card.match(/Прореши[^\n]*/i) || [])[0] || card.slice(0, 80));
+  want("на чистом приложении предложение есть", /Реши \d+ задани/i.test(card),
+    (card.match(/Реши[^\n]*/i) || [])[0] || card.slice(0, 80));
   want("названы и предмет, и порог пониже", /Обществознание/.test(card) && /хватит 5/.test(card),
-    (card.match(/Прореши[^\n]*/i) || [])[0] || "");
+    (card.match(/Реши[^\n]*/i) || [])[0] || "");
   want("предложение ведёт в тренажёр", /В тренажёр/.test(card));
   want("ошибок нет", errors.length === 0, errors[0] || "");
   await browser.close();
