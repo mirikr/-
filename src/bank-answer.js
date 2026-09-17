@@ -169,3 +169,47 @@ export function streakOf(log) {
   }
   return n;
 }
+
+// Таблица решающих: кто сколько заданий одолел и с какой долей верных.
+//
+// Считается по той же общей копилке, что и согласие класса: в ней на каждое
+// задание у человека одна строка — его последний ответ. Ничего личного там
+// нет, поэтому и здесь только имя, которое человек выбрал сам, и два числа.
+//
+// Порядок: сначала по числу решённых, потом по доле верных. Наоборот было бы
+// нечестно: сто процентов с двух заданий — это не результат.
+export const TOP_MIN = 5;
+
+export function topPeople(votes, me) {
+  const by = new Map();
+  (votes || []).forEach((v) => {
+    if (!v.userId) return;
+    if (!by.has(v.userId)) by.set(v.userId, { userId: v.userId, name: "", done: 0, right: 0 });
+    const row = by.get(v.userId);
+    row.done += 1;
+    if (v.matches) row.right += 1;
+    // Имя человек может сменить: берём то, что пришло с последним голосом,
+    // а пустое не затирает прежнее.
+    if (v.name) row.name = v.name;
+  });
+  const rows = [...by.values()].map((r) => ({
+    ...r,
+    percent: r.done ? Math.round((r.right / r.done) * 100) : 0,
+    mine: !!me && r.userId === me,
+    // Без имени показываем короткий код: это всё-таки таблица, а не список
+    // безымянных строк, и себя в ней надо узнавать.
+    label: r.name || "участник " + String(r.userId).replace(/[^0-9a-z]/gi, "").slice(0, 4),
+  }));
+  rows.sort((a, b) => b.done - a.done || b.percent - a.percent || a.label.localeCompare(b.label, "ru"));
+  return rows.map((r, i) => ({ ...r, place: i + 1 }));
+}
+
+// Место по доле верных считается отдельно и только среди тех, кто решил
+// достаточно: иначе первым будет человек с одним верным ответом.
+export function topByPercent(rows, min = TOP_MIN) {
+  return (rows || [])
+    .filter((r) => r.done >= min)
+    .slice()
+    .sort((a, b) => b.percent - a.percent || b.done - a.done || a.label.localeCompare(b.label, "ru"))
+    .map((r, i) => ({ ...r, place: i + 1 }));
+}
