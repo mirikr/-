@@ -1,5 +1,5 @@
 // Сверка ответов в тренажёре и целость набора заданий.
-import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "../src/bank-answer.js";
+import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "../src/bank-answer.js";
 import { BANK_SUBJECTS } from "../src/fipi-index.js";
 
 // Набор лежит по файлу на предмет: грузится только тот, который открыли.
@@ -204,6 +204,34 @@ ok(topPeople([], "").length === 0 && topPeople(null, "").length === 0, "пуст
 // Имя человек может сменить, и пустое имя не должно затирать прежнее.
 const renamed = topPeople([vote2("u1", "A", true, "Мир"), vote2("u1", "B", true, "")], "");
 ok(renamed[0].label === "Мир", "пустое имя не затирает прежнее: " + renamed[0].label);
+
+
+// Разбор ошибок по темам: где именно сыпется.
+const where = [
+  { id: "A", section: "Электродинамика" }, { id: "B", section: "Электродинамика" },
+  { id: "C", section: "Электродинамика" }, { id: "D", section: "Механика" },
+  { id: "E", section: "Механика" }, { id: "F", section: "Оптика" },
+];
+const tries = (taskId, okAnswer) => ({ taskId, ok: okAnswer });
+const errs = sectionErrors([
+  tries("A", false), tries("B", false), tries("C", true),
+  tries("D", false), tries("E", true),
+  tries("F", true),
+], where);
+ok(errs.length === 3, "разделы в разборе те, по которым решали: " + errs.length);
+ok(errs[0].section === "Электродинамика" && errs[0].wrong === 2 && errs[0].done === 3,
+  "первым идёт раздел с наибольшим числом ошибок: " + errs[0].section);
+ok(errs[0].right === 1 && errs[0].percent === 67, "доля ошибок считается: " + errs[0].percent);
+ok(errs[2].section === "Оптика" && errs[2].wrong === 0, "раздел без ошибок в конце");
+// Разобрался со второго раза — раздел больше не проблемный.
+const fixed = sectionErrors([tries("A", false), tries("A", true)], where);
+ok(fixed.length === 1 && fixed[0].wrong === 0 && fixed[0].done === 1,
+  "учитывается последняя попытка, а не все подряд");
+// Чужие записи (другой предмет) в разбор не попадают.
+const alien = sectionErrors([tries("A", false), tries("ZZZ", false)], where);
+ok(alien.length === 1 && alien[0].done === 1, "чужие задания в разбор не попадают");
+ok(sectionErrors([], where).length === 0 && sectionErrors(null, null).length === 0,
+  "пустой журнал не роняет разбор");
 
 console.log(bad ? "\nпровалов: " + bad : "\nвсе проверки банка прошли");
 process.exit(bad ? 1 : 0);

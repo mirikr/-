@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
 import { loadBank, withBase } from "./bank-load.js";
-import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
+import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
 import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer, votesTakeName } from "./bank-votes.js";
 
 // Тренажёр по открытому банку ФИПИ.
@@ -165,6 +165,10 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // не значат.
   const mineIds = useMemo(() => new Set(mine.map((t) => t.id)), [mine]);
   const stats = useMemo(() => trainerStats(log, mineIds), [log, mineIds]);
+  // Разбор по темам: не «неверных шесть», а в каких разделах.
+  const byTheme = useMemo(() => sectionErrors(log, mine), [log, mine]);
+  const weak = byTheme.filter((r) => r.wrong > 0);
+  const firm = byTheme.filter((r) => r.wrong === 0);
   const streak = useMemo(() => streakOf((log || []).filter((a) => mineIds.has(a.taskId))), [log, mineIds]);
   const myMark = task ? (marks || []).find((m) => m.taskId === task.id && (m.kind === "ok" || m.kind === "wrong")) : null;
   // Что человек уже прислал с ФИПИ по этому заданию.
@@ -317,6 +321,19 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     setFromBank("");
     setCurrentId("");
     onState({ open: "", section: "", taskId: "", again: false, mode: "" });
+  }
+
+  // Перейти к работе над разделом: тот же выбор раздела, но сразу в режиме
+  // «перерешать неверные» — иначе с разбора ошибок пришлось бы идти вручную.
+  function fixSection(name) {
+    setSection(name);
+    setMode(WRONG_MODE);
+    setCurrentId("");
+    setResult(null);
+    setValue("");
+    setFromBank("");
+    onState({ open, section: name, taskId: "", again: false, mode: WRONG_MODE });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function pickSection(name) {
@@ -802,6 +819,45 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
           <div style={S.stat}><span style={S.statValue}>{queue.length}</span><span style={S.statName}>осталось в наборе</span></div>
         </div>
 
+        {stats.done > 0 && (
+          <div style={S.themes}>
+            <div style={S.disputedTitle}>Разбор ошибок по темам</div>
+            {weak.length === 0 ? (
+              <p style={S.themeNote}>
+                Ошибок пока нет — по всем разделам, где ты решал, ответы верные.
+              </p>
+            ) : (
+              <>
+                <p style={S.themeNote}>
+                  Считается по последней попытке: разобрался и ответил верно — раздел из списка уходит.
+                  Нажми на раздел, чтобы перерешать неверные в нём.
+                </p>
+                {weak.map((r) => (
+                  <button
+                    key={r.section}
+                    onClick={() => fixSection(r.section)}
+                    className="ap-row"
+                    style={S.themeRow}
+                  >
+                    <span style={S.themeName}>{r.section}</span>
+                    <span style={S.themeCount}>
+                      {r.wrong} из {r.done} {r.wrong === 1 ? "неверно" : "неверны"}
+                    </span>
+                    <span style={S.themeBar}>
+                      <span style={{ ...S.themeBarFill, width: Math.max(4, r.percent) + "%" }} />
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+            {firm.length > 0 && (
+              <p style={S.themeFirm}>
+                Без ошибок: {firm.map((r) => r.section + " (" + r.done + ")").join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
         {bankAnswers.length > 0 && (
           <div style={S.collected}>
             <div style={S.collectedTop}>
@@ -1044,6 +1100,22 @@ const S = {
   stat: { display: "flex", flexDirection: "column", gap: 2, minWidth: 92 },
   statValue: { fontSize: 22, fontFamily: "'PT Serif', Georgia, serif", fontVariantNumeric: "tabular-nums" },
   statName: { fontSize: 12, color: "var(--mute)" },
+
+  themes: { marginTop: 16, borderTop: "1px solid var(--line2)", paddingTop: 12 },
+  themeNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "0 0 10px" },
+  themeRow: {
+    display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", width: "100%",
+    background: "none", border: "none", borderRadius: 8, padding: "6px 8px",
+    textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit",
+  },
+  themeName: { fontSize: 13.5, flex: "0 1 auto" },
+  themeCount: { fontSize: 12.5, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
+  themeBar: {
+    flex: "1 1 80px", minWidth: 60, height: 6, borderRadius: 3,
+    background: "var(--line2)", overflow: "hidden", alignSelf: "center",
+  },
+  themeBarFill: { display: "block", height: "100%", background: "var(--ink3)" },
+  themeFirm: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "10px 0 0" },
 
   disputed: { marginTop: 16, borderTop: "1px solid var(--line2)", paddingTop: 12 },
   disputedTitle: { fontSize: 13, fontWeight: 600, marginBottom: 8 },

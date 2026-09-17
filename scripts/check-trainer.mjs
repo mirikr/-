@@ -380,6 +380,32 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
   want("разобранное задание больше не числится неверным", left === true, "последняя попытка: " + left);
 }
 
+// Разбор ошибок по темам: видно, в каких разделах сыпешься, и одним нажатием
+// можно взяться именно за них.
+{
+  await openSubject(firstSubject);
+  // Нарочно ошибаемся: без ошибки разбирать нечего.
+  await page.getByLabel("Ваш ответ").fill("заведомо не тот ответ");
+  await page.getByRole("button", { name: "Ответить" }).click();
+  await page.waitForTimeout(1600);
+  const shown = await card.innerText();
+  const themeName = (shown.match(/№\s*\S+\s*\n([^\n]+)/) || [])[1] || "";
+  const whole = await page.locator("#root").innerText();
+  want("в итогах есть разбор ошибок по темам", /Разбор ошибок по темам/.test(whole));
+  const row = page.locator("button").filter({ hasText: /\d+ из \d+ неверн/ }).first();
+  want("в разборе перечислен раздел, где ошиблись", await row.count() > 0,
+    (whole.match(/Разбор ошибок по темам[\s\S]{0,120}/) || [])[0]);
+  const line = await row.innerText();
+  want("у раздела сказано, сколько из скольких неверно", /\d+ из \d+ неверн/.test(line), line);
+  want("назван тот самый раздел", !themeName || line.includes(themeName), themeName + " · " + line);
+  await row.click();
+  await page.waitForTimeout(1200);
+  const opened = await card.innerText();
+  want("нажатие на раздел ведёт к его неверным заданиям",
+    /показаны только неверно решённые/.test(opened) && (!themeName || opened.includes(themeName)),
+    themeName + " · " + (opened.match(/показаны только[^\n]*/) || [])[0]);
+}
+
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
 await openSubject("Физика");
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,
