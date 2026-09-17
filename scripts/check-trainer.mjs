@@ -162,7 +162,7 @@ want("после верного ответа задание не подмени�
 want("разбор от своего задания", afterRight.includes(nextTask.why.slice(0, 20)));
 
 const stats = await page.locator("#root").innerText();
-want("в итогах учтены попытки", /прорешано/.test(stats) && /подряд верно/.test(stats));
+want("в итогах учтены попытки", /\nрешено/.test(stats) && /подряд верно/.test(stats));
 
 // Видно ли, считается счёт по всему классу или только по себе.
 want("сказано, откуда берётся счёт ключей", /счёт идёт только по твоим ответам|Общий счёт ответов подключён/.test(stats),
@@ -183,8 +183,8 @@ const openSubject = async (name) => {
 };
 await openSubject(otherSubject);
 const otherStats = await page.locator("#root").innerText();
-const done = (otherStats.match(/(\d+)\s*\nпрорешано/) || [])[1];
-want("у другого предмета свои итоги", done === "0", otherSubject + ": прорешано " + done);
+const done = (otherStats.match(/(\d+)\s*\nрешено/) || [])[1];
+want("у другого предмета свои итоги", done === "0", otherSubject + ": решено " + done);
 want("списки жалоб тоже по предмету", !/Спорные ключи/.test(otherStats) && !/Задания, на которые пожаловались/.test(otherStats));
 await openSubject(firstSubject);
 want("у своего предмета итоги на месте", /Спорные ключи/.test(await page.locator("#root").innerText()));
@@ -203,7 +203,7 @@ const saved = await page.evaluate(() => {
 want("попытки сохранились", saved.log === 2, "записей: " + saved.log);
 want("отметка о ключе сохранилась", saved.marks === 1, "отметок: " + saved.marks);
 const afterReload = await page.locator("#root").innerText();
-want("итоги на месте после перезагрузки", /прорешано/.test(afterReload) && /Спорные ключи/.test(afterReload));
+want("итоги на месте после перезагрузки", /\nрешено/.test(afterReload) && /Спорные ключи/.test(afterReload));
 // Приложение должно открыться там же, где его закрыли: на том же предмете и
 // на том же задании, а не на выборе предмета.
 want("после перезагрузки открыт тот же предмет", afterReload.includes(firstSubject), (afterReload.match(/Как идут дела[^\n]*/) || [])[0]);

@@ -503,7 +503,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
             {mode === WRONG_MODE
               ? "Неверно решённых заданий здесь не осталось — всё разобрано."
               : mode === ""
-                ? "В этом разделе решено всё. Снимите галочку, чтобы прорешать заново."
+                ? "В этом разделе решено всё. Снимите галочку, чтобы решать заново."
                 : "Здесь пока нет заданий."}
           </p>
         ) : (
@@ -698,7 +698,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
         </div>
 
         <div style={S.stats}>
-          <div style={S.stat}><span style={S.statValue}>{stats.done}</span><span style={S.statName}>прорешано</span></div>
+          <div style={S.stat}><span style={S.statValue}>{stats.done}</span><span style={S.statName}>решено</span></div>
           <div style={S.stat}><span style={S.statValue}>{stats.percent}%</span><span style={S.statName}>верных</span></div>
           <div style={S.stat}><span style={S.statValue}>{stats.averageSeconds ? timeWord(stats.averageSeconds) : "—"}</span><span style={S.statName}>в среднем</span></div>
           <div style={S.stat}><span style={S.statValue}>{streak}</span><span style={S.statName}>подряд верно</span></div>

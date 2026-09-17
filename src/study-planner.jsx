@@ -2589,7 +2589,7 @@ export default function StudyPlanner() {
                         {trainerOffer.solved > 0
                           ? "Решено " + trainerOffer.solved + " из " + trainerOffer.need + " — осталось " +
                             trainerOffer.left + " " + tasksWord(trainerOffer.left) + " по предмету «" + trainerOffer.subject + "»"
-                          : "Прореши " + trainerOffer.need + " " + tasksWord(trainerOffer.need) +
+                          : "Реши " + trainerOffer.need + " " + tasksWord(trainerOffer.need) +
                             " по предмету «" + trainerOffer.subject + "» — день зачтётся и серия не оборвётся" +
                             (trainerOffer.cheaper
                               ? ". По предмету «" + trainerOffer.cheaper.subjects.join("» или «") + "» хватит " +
