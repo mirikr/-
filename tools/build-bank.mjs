@@ -162,7 +162,16 @@ if (blind.length) {
   console.log("!! без рисунка, в набор не взяты — " + blind.length + ":");
   blind.forEach((t) => console.log("   " + t.subject + " " + t.id));
 }
-const blindIds = new Set(blind.map((t) => t.id));
+// Тот же разговор про задания «с прилагаемыми файлами»: в банке к ним идёт
+// таблица или текст, который надо открыть у себя. К нам файл не приезжает, и
+// решать такое в тренажёре нечем — сколько ни смотри на условие.
+const noFile = out.filter((t) => /прилагаем|откройте файл|скачайте файл|в форме электронной таблицы/i.test(t.lead + " " + t.text));
+if (noFile.length) {
+  console.log("!! нужен прилагаемый файл, в набор не взяты — " + noFile.length + ":");
+  noFile.forEach((t) => console.log("   " + t.subject + " " + t.id));
+}
+
+const blindIds = new Set(blind.concat(noFile).map((t) => t.id));
 for (let i = out.length - 1; i >= 0; i -= 1) if (blindIds.has(out[i].id)) out.splice(i, 1);
 
 out.sort((a, b) => a.section.localeCompare(b.section, "ru") || a.id.localeCompare(b.id));

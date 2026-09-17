@@ -11,11 +11,25 @@ import { supabase, cloudConfigured, authReady, currentUser } from "./supabase.js
 // обязан работать по-прежнему, просто счёт голосов будет только свой.
 
 const TABLE = "bank_answers";
-const OLD_COLUMNS = "task_id,user_id,answer,matches,fipi";
-const COLUMNS = OLD_COLUMNS + ",fipi_answer";
-// Есть ли в базе столбец с ответом банка. Выясняется при первом чтении:
-// у тех, кто ещё не обновил таблицу, его нет, и слать его туда нельзя.
-let column = true;
+// Столбцы у таблицы прибавлялись со временем, и у тех, кто не обновил базу,
+// свежих ещё нет. Поэтому читаем по убыванию: сначала со всеми, а на ошибку
+// «нет такого столбца» пробуем набор попроще. Копилка обязана работать и на
+// старой таблице, просто без новых полей.
+const BASE = "task_id,user_id,answer,matches,fipi";
+const SETS = [BASE + ",fipi_answer,name", BASE + ",fipi_answer", BASE];
+// Какой набор столбцов подошёл: 0 — все, дальше по убыванию.
+let level = 0;
+const has = (what) => SETS[level].includes(what);
+
+// Принимает ли база ответы с ФИПИ: пока столбца нет, их некуда складывать.
+export function votesTakeBankAnswer() {
+  return has("fipi_answer");
+}
+
+// Принимает ли база имя: без него таблица решающих обойдётся кодами.
+export function votesTakeName() {
+  return has("name");
+}
 
 let cache = { at: 0, rows: [] };
 const FRESH_MS = 60 * 1000;
@@ -29,11 +43,6 @@ const FRESH_MS = 60 * 1000;
 let state = "off";
 export function votesState() {
   return state;
-}
-
-// Принимает ли база ответы с ФИПИ: пока столбца нет, их некуда складывать.
-export function votesTakeBankAnswer() {
-  return column;
 }
 
 async function client() {
@@ -56,12 +65,11 @@ export async function loadVotes(force) {
     return cache.rows;
   }
   try {
-    let { data, error } = await conn.db.from(TABLE).select(COLUMNS);
-    // Столбец с ответом банка появился позже самой таблицы. Пока его не
-    // добавили, копилка обязана работать по-старому, а не падать целиком.
-    if (error && String((error && error.code) || "") === "42703") {
-      column = false;
-      ({ data, error } = await conn.db.from(TABLE).select(OLD_COLUMNS));
+    let data = null;
+    let error = null;
+    for (let i = level; i < SETS.length; i += 1) {
+      ({ data, error } = await conn.db.from(TABLE).select(SETS[i]));
+      if (!error || String((error && error.code) || "") !== "42703") { level = i; break; }
     }
     if (error) {
       // Postgres отвечает 42P01, PostgREST — PGRST205: таблицы просто нет.
@@ -80,6 +88,8 @@ export async function loadVotes(force) {
         fipi: r.fipi || "",
         // Ответ, который засчитал сам банк: по нему мы и правим ключи.
         fipiAnswer: r.fipi_answer || "",
+        // Имя человек выбирает сам, и оно нужно только для таблицы решающих.
+        name: r.name || "",
       })),
     };
     return cache.rows;
@@ -101,20 +111,24 @@ export async function saveVote(vote) {
       matches: !!vote.matches,
       fipi: vote.fipi || "",
       fipi_answer: String(vote.fipiAnswer || "").slice(0, 200),
+      name: String(vote.name || "").slice(0, 40),
       updated_at: new Date().toISOString(),
     };
-    if (!column) delete row.fipi_answer;
+    if (!has("fipi_answer")) delete row.fipi_answer;
+    if (!has("name")) delete row.name;
     let { error } = await conn.db.from(TABLE).upsert(row, { onConflict: "task_id,user_id" });
-    if (error && String((error && error.code) || "") === "42703") {
-      column = false;
-      delete row.fipi_answer;
+    // Столбца нет — пробуем набор попроще, пока не запишется.
+    while (error && String((error && error.code) || "") === "42703" && level < SETS.length - 1) {
+      level += 1;
+      if (!has("fipi_answer")) delete row.fipi_answer;
+      if (!has("name")) delete row.name;
       ({ error } = await conn.db.from(TABLE).upsert(row, { onConflict: "task_id,user_id" }));
     }
     if (error) return false;
     // Свой голос сразу кладём в кеш, чтобы счёт обновился без повторного чтения.
     const rows = cache.rows.filter((r) => !(r.taskId === row.task_id && r.userId === row.user_id));
     cache = { at: cache.at, rows: rows.concat({ taskId: row.task_id, userId: row.user_id, answer: row.answer,
-      matches: row.matches, fipi: row.fipi, fipiAnswer: row.fipi_answer }) };
+      matches: row.matches, fipi: row.fipi, fipiAnswer: row.fipi_answer || "", name: row.name || "" }) };
     return true;
   } catch (e) {
     return false;

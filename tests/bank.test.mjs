@@ -1,5 +1,5 @@
 // Сверка ответов в тренажёре и целость набора заданий.
-import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, streakOf, timeWord, trainerStats } from "../src/bank-answer.js";
+import { AGREE_NEEDED, consensus, isRight, keyState, myVote, normalizeAnswer, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "../src/bank-answer.js";
 import { BANK_SUBJECTS } from "../src/fipi-index.js";
 
 // Набор лежит по файлу на предмет: грузится только тот, который открыли.
@@ -57,6 +57,12 @@ const blind = BANK_TASKS.filter((t) => /рисун|график|схем|диа�
   !(t.pictures || []).length && !/<img|<table/.test(t.body || ""));
 ok(blind.length === 0, "задание про рисунок не осталось без рисунка" +
   (blind.length ? ": " + blind.map((t) => t.id).join(", ") : ""));
+
+// «Откройте прилагаемый файл» — а файла нет: к нам из банка приезжает только
+// условие. Решать такое задание в тренажёре нечем.
+const needFile = BANK_TASKS.filter((t) => /прилагаем|откройте файл|скачайте файл|в форме электронной таблицы/i.test(t.lead + " " + t.text));
+ok(needFile.length === 0, "заданий, которым нужен прилагаемый файл, в наборе нет" +
+  (needFile.length ? ": " + needFile.slice(0, 5).map((t) => t.id).join(", ") : ""));
 
 // Номер варианта в банке рисует галочка: убрав её, номер надо вернуть.
 const numbered = BANK_TASKS.filter((t) => /Выбор ответ/i.test(t.type) && /<td[^>]*>1\)<\/td>/.test(t.body));
@@ -174,6 +180,30 @@ ok(bothFromBank.fipiAnswer.count === 2, "одинаковые ответы с Ф
 ok(!consensus([withBank("u1", "A", "60", true)], "A").fipiAnswer, "без ответа с ФИПИ поле пустое");
 const mineBank = myVote([{ taskId: "A", answer: "45", ok: false }], [{ taskId: "A", kind: "wrong", fipiAnswer: "45" }], "A");
 ok(mineBank.fipiAnswer === "45", "свой ответ с ФИПИ попадает в голос");
+
+// --- таблица решающих ------------------------------------------------------
+const vote2 = (userId, taskId, matches, name) => ({ userId, taskId, matches, name });
+const people = topPeople([
+  vote2("u1", "A", true, "Мир"), vote2("u1", "B", true, "Мир"), vote2("u1", "C", false, "Мир"),
+  vote2("u2", "A", true), vote2("u2", "B", true),
+  vote2("u3", "A", false, "Лиза"),
+], "u2");
+ok(people.length === 3, "в таблице столько строк, сколько людей");
+ok(people[0].label === "Мир" && people[0].done === 3, "первым идёт тот, кто решил больше");
+ok(people[0].percent === 67, "доля верных округляется: " + people[0].percent);
+ok(people[1].mine === true && people[0].mine === false, "себя в таблице видно");
+ok(/^участник /.test(people[1].label), "без имени показан короткий код: " + people[1].label);
+ok(people.every((r, i) => r.place === i + 1), "места идут подряд");
+// Сто процентов с двух заданий — не результат: в таблице по доле верных
+// таких вообще нет, пока не наберётся порог.
+ok(topByPercent(people, 5).length === 0, "с малым числом решённых в зачёт по доле не берут");
+const byPercent = topByPercent(people, 2);
+ok(byPercent.length === 2 && byPercent[0].label === "Мир" || byPercent[0].percent >= byPercent[1].percent,
+  "по доле верных порядок свой");
+ok(topPeople([], "").length === 0 && topPeople(null, "").length === 0, "пустая копилка не роняет таблицу");
+// Имя человек может сменить, и пустое имя не должно затирать прежнее.
+const renamed = topPeople([vote2("u1", "A", true, "Мир"), vote2("u1", "B", true, "")], "");
+ok(renamed[0].label === "Мир", "пустое имя не затирает прежнее: " + renamed[0].label);
 
 console.log(bad ? "\nпровалов: " + bad : "\nвсе проверки банка прошли");
 process.exit(bad ? 1 : 0);

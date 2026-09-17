@@ -58,12 +58,16 @@ create table if not exists public.bank_answers (
   matches    boolean     not null default false,
   fipi       text        not null default '',
   fipi_answer text       not null default '',
+  name        text       not null default '',
   updated_at timestamptz not null default now(),
   primary key (task_id, user_id)
 );
 
 -- Столбец с ответом банка добавился позже: у таблицы, заведённой раньше, его нет.
 alter table public.bank_answers add column if not exists fipi_answer text not null default '';
+-- Имя для таблицы решающих: человек выбирает его сам, и оно едет вместе
+-- с ответом. Пустое — значит в таблице он будет коротким кодом.
+alter table public.bank_answers add column if not exists name text not null default '';
 
 alter table public.bank_answers enable row level security;
 
