@@ -213,3 +213,39 @@ export function topByPercent(rows, min = TOP_MIN) {
     .sort((a, b) => b.percent - a.percent || b.done - a.done || a.label.localeCompare(b.label, "ru"))
     .map((r, i) => ({ ...r, place: i + 1 }));
 }
+
+// Разбор ошибок по темам: не «неверных шесть», а где именно.
+//
+// Считается по последней попытке на каждое задание — как и всё остальное в
+// тренажёре: разобрался и ответил верно со второго раза — значит тема уже не
+// проблемная. Разделы без единой ошибки тоже возвращаем: по ним видно, что
+// уже держится, и это решает показывающий, а не счёт.
+//
+// Порядок — по числу ошибок, потом по их доле: пять из сорока тревожат меньше,
+// чем четыре из пяти, но первыми всё-таки должны идти те, где ошибок больше
+// всего в штуках — это то, что реально теряется на экзамене.
+export function sectionErrors(log, tasks) {
+  const where = new Map();
+  (tasks || []).forEach((t) => where.set(t.id, t.section || ""));
+  const last = new Map();
+  (log || []).forEach((a) => {
+    if (where.has(a.taskId)) last.set(a.taskId, a);
+  });
+  const by = new Map();
+  last.forEach((a, id) => {
+    const name = where.get(id);
+    if (!by.has(name)) by.set(name, { section: name, done: 0, wrong: 0 });
+    const row = by.get(name);
+    row.done += 1;
+    if (!a.ok) row.wrong += 1;
+  });
+  const rows = [...by.values()].map((r) => ({
+    ...r,
+    right: r.done - r.wrong,
+    percent: r.done ? Math.round((r.wrong / r.done) * 100) : 0,
+  }));
+  rows.sort(
+    (a, b) => b.wrong - a.wrong || b.percent - a.percent || a.section.localeCompare(b.section, "ru"),
+  );
+  return rows;
+}

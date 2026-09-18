@@ -380,6 +380,110 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
   want("разобранное задание больше не числится неверным", left === true, "последняя попытка: " + left);
 }
 
+// Разбор ошибок по темам: видно, в каких разделах сыпешься, и одним нажатием
+// можно взяться именно за них.
+{
+  await openSubject(firstSubject);
+  // Нарочно ошибаемся: без ошибки разбирать нечего.
+  await page.getByLabel("Ваш ответ").fill("заведомо не тот ответ");
+  await page.getByRole("button", { name: "Ответить" }).click();
+  await page.waitForTimeout(1600);
+  const shown = await card.innerText();
+  const themeName = (shown.match(/№\s*\S+\s*\n([^\n]+)/) || [])[1] || "";
+  const whole = await page.locator("#root").innerText();
+  want("в итогах есть разбор ошибок по темам", /Разбор ошибок по темам/.test(whole));
+  const row = page.locator("button").filter({ hasText: /\d+ из \d+ неверн/ }).first();
+  want("в разборе перечислен раздел, где ошиблись", await row.count() > 0,
+    (whole.match(/Разбор ошибок по темам[\s\S]{0,120}/) || [])[0]);
+  const line = await row.innerText();
+  want("у раздела сказано, сколько из скольких неверно", /\d+ из \d+ неверн/.test(line), line);
+  want("назван тот самый раздел", !themeName || line.includes(themeName), themeName + " · " + line);
+  await row.click();
+  await page.waitForTimeout(1200);
+  const opened = await card.innerText();
+  want("нажатие на раздел ведёт к его неверным заданиям",
+    /показаны только неверно решённые/.test(opened) && (!themeName || opened.includes(themeName)),
+    themeName + " · " + (opened.match(/показаны только[^\n]*/) || [])[0]);
+}
+
+// Порядок заданий: по банку, вперемешку, по темам. Порядок запоминается — иначе
+// после перезагрузки человек оказался бы неизвестно где.
+{
+  await openSubject(firstSubject);
+  const shownId = async () => ((await card.innerText()).match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
+  // Пять номеров подряд в выбранном порядке: листаем «Пропустить», ничего не решая.
+  const walk = async () => {
+    const out = [];
+    for (let i = 0; i < 5; i += 1) {
+      out.push(await shownId());
+      await page.getByRole("button", { name: "Пропустить" }).click();
+      await page.waitForTimeout(350);
+    }
+    return out;
+  };
+  const pickOrder = async (name) => {
+    await page.getByRole("button", { name }).first().click();
+    await page.waitForTimeout(500);
+  };
+
+  const rootText = await page.locator("#root").innerText();
+  want("есть выбор порядка заданий", /Порядок/.test(rootText) && /Вперемешку/.test(rootText) && /По темам/.test(rootText),
+    (rootText.match(/Порядок[^\n]*(\n[^\n]+){0,4}/) || [])[0]);
+
+  await pickOrder("По порядку");
+  const byBank = await walk();
+  await pickOrder("Вперемешку");
+  const mixed = await walk();
+  want("вперемешку идёт другой порядок", mixed.join() !== byBank.join(), byBank.join(" ") + " → " + mixed.join(" "));
+  want("в перемешанном наборе задания не повторяются", new Set(mixed).size === mixed.length, mixed.join(" "));
+
+  // Порядок должен пережить перезагрузку вместе с зерном: иначе «вперемешку»
+  // каждый раз новое, и продолжить с того же места нельзя.
+  const before = await shownId();
+  const orderOf = () => page.evaluate(() => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    return value.trainerState || {};
+  });
+  await page.waitForTimeout(1600);
+  const wasOrder = await orderOf();
+  want("порядок записан вместе с зерном", wasOrder.order === "shuffle" && wasOrder.orderSeed > 0,
+    wasOrder.order + " · зерно " + wasOrder.orderSeed);
+  await page.reload();
+  await page.waitForTimeout(1800);
+  await page.getByRole("button", { name: /Тренажёр/ }).first().click();
+  await page.waitForTimeout(1200);
+  want("после перезагрузки порядок остался перемешанным",
+    /Перемешать заново/.test(await page.locator("#root").innerText()));
+  want("и задание то же", (await shownId()) === before, before + " → " + (await shownId()));
+  // Зерно то же — значит и порядок тот же: что при одном зерне он повторяется,
+  // проверено отдельно в tests/trainer-order.test.mjs.
+  const nowOrder = await orderOf();
+  want("зерно перемешивания пережило перезагрузку", nowOrder.orderSeed === wasOrder.orderSeed,
+    wasOrder.orderSeed + " → " + nowOrder.orderSeed);
+  const again = await walk();
+
+  // «Перемешать заново» действительно тасует.
+  await pickOrder("Перемешать заново");
+  const reshuffled = await walk();
+  want("«перемешать заново» даёт новый порядок", reshuffled.join() !== again.join(),
+    again.join(" ") + " → " + reshuffled.join(" "));
+
+  // По темам задания идут разделами, а не вперемешку.
+  await pickOrder("По темам");
+  const themes = [];
+  for (let i = 0; i < 6; i += 1) {
+    const text = await card.innerText();
+    themes.push((text.match(/№\s*\S+\s*\n([^\n]+)/) || [])[1] || "");
+    await page.getByRole("button", { name: "Пропустить" }).click();
+    await page.waitForTimeout(350);
+  }
+  const jumps = themes.filter((t, i) => i > 0 && t !== themes[i - 1] && themes.slice(0, i).includes(t));
+  want("по темам разделы идут подряд, а не вперемешку", jumps.length === 0, themes.join(" · "));
+
+  await pickOrder("По порядку");
+}
+
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
 await openSubject("Физика");
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,

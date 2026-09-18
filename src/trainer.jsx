@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
 import { loadBank, withBase } from "./bank-load.js";
-import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
+import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
+import { ORDERS, newSeed, orderTasks } from "./trainer-order.js";
 import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer, votesTakeName } from "./bank-votes.js";
 
 // Тренажёр по открытому банку ФИПИ.
@@ -70,6 +71,11 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // "wrong" — те, где последний ответ был неверным. Прежние записи знали лишь
   // «again», поэтому его продолжаем понимать.
   const [mode, setMode] = useState((state && state.mode) || (state && state.again ? ALL_MODE : ""));
+  // В каком порядке идут задания: "" — как в банке, "shuffle" — вперемешку,
+  // "section" — по темам, "fresh" — сначала нерешённые. Зерно перемешивания
+  // хранится рядом, иначе после перезагрузки набор оказался бы другим.
+  const [order, setOrder] = useState((state && state.order) || "");
+  const [seed, setSeed] = useState((state && state.orderSeed) || 1);
   // Задания открытого предмета. null — ещё грузятся или не загрузились.
   const [tasks, setTasks] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -152,10 +158,24 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     return out;
   }, [log]);
 
+  // Весь предмет в выбранном порядке. Отбор по разделу и режиму идёт уже по
+  // нему, поэтому «дальше» ведёт туда, куда показывает порядок, а не туда,
+  // где задание лежит в банке.
+  const ordered = useMemo(
+    () => orderTasks(mine, order, { seed, solved }),
+    [mine, order, seed, solved],
+  );
+  // Место задания в этом порядке: по нему ищется следующее.
+  const orderIndex = useMemo(() => {
+    const out = new Map();
+    ordered.forEach((t, i) => out.set(t.id, i));
+    return out;
+  }, [ordered]);
+
   const queue = useMemo(() => {
     const fits = (t) => (mode === WRONG_MODE ? wrong.has(t.id) : mode === ALL_MODE ? true : !solved.has(t.id));
-    return mine.filter((t) => (!section || t.section === section) && fits(t));
-  }, [mine, section, mode, solved, wrong]);
+    return ordered.filter((t) => (!section || t.section === section) && fits(t));
+  }, [ordered, section, mode, solved, wrong]);
 
   const task = (currentId && mine.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
@@ -165,6 +185,10 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // не значат.
   const mineIds = useMemo(() => new Set(mine.map((t) => t.id)), [mine]);
   const stats = useMemo(() => trainerStats(log, mineIds), [log, mineIds]);
+  // Разбор по темам: не «неверных шесть», а в каких разделах.
+  const byTheme = useMemo(() => sectionErrors(log, mine), [log, mine]);
+  const weak = byTheme.filter((r) => r.wrong > 0);
+  const firm = byTheme.filter((r) => r.wrong === 0);
   const streak = useMemo(() => streakOf((log || []).filter((a) => mineIds.has(a.taskId))), [log, mineIds]);
   const myMark = task ? (marks || []).find((m) => m.taskId === task.id && (m.kind === "ok" || m.kind === "wrong")) : null;
   // Что человек уже прислал с ФИПИ по этому заданию.
@@ -228,7 +252,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     // вписать. Так уезжало первое же задание после «Начать тест».
     if (currentId !== task.id) {
       setCurrentId(task.id);
-      onState({ open, section, taskId: task.id, again: mode === ALL_MODE, mode });
+      onState({ open, section, taskId: task.id, again: mode === ALL_MODE, mode, order, orderSeed: seed });
     }
     onAttempt({ taskId: task.id, answer: value, ok, seconds });
     // Ответ уходит в общую копилку: по таким совпадениям и проверяются ключи.
@@ -288,10 +312,11 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     setValue("");
     setFromBank("");
     const rest = queue.filter((t) => !task || t.id !== task.id);
-    const after = task ? rest.find((t) => t.id > task.id) : null;
+    const here = task && orderIndex.has(task.id) ? orderIndex.get(task.id) : -1;
+    const after = here >= 0 ? rest.find((t) => orderIndex.get(t.id) > here) : null;
     const pick = after || rest[0] || null;
     setCurrentId(pick ? pick.id : "");
-    onState({ open, section, taskId: pick ? pick.id : "", again: mode === ALL_MODE, mode });
+    onState({ open, section, taskId: pick ? pick.id : "", again: mode === ALL_MODE, mode, order, orderSeed: seed });
   }
 
   // Открыть набор предмета.
@@ -308,7 +333,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     setResult(null);
     setValue("");
     setFromBank("");
-    onState({ open: name, section: "", taskId: back, again: want === ALL_MODE, mode: want });
+    onState({ open: name, section: "", taskId: back, again: want === ALL_MODE, mode: want, order, orderSeed: seed });
   }
 
   function leave() {
@@ -316,12 +341,36 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     setValue("");
     setFromBank("");
     setCurrentId("");
-    onState({ open: "", section: "", taskId: "", again: false, mode: "" });
+    onState({ open: "", section: "", taskId: "", again: false, mode: "", order, orderSeed: seed });
+  }
+
+  // Перейти к работе над разделом: тот же выбор раздела, но сразу в режиме
+  // «перерешать неверные» — иначе с разбора ошибок пришлось бы идти вручную.
+  function fixSection(name) {
+    setSection(name);
+    setMode(WRONG_MODE);
+    setCurrentId("");
+    setResult(null);
+    setValue("");
+    setFromBank("");
+    onState({ open, section: name, taskId: "", again: false, mode: WRONG_MODE, order, orderSeed: seed });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // Сменить порядок заданий. Задание с экрана при этом не меняем: человек,
+  // может быть, как раз его решает — новый порядок вступит в силу на «дальше».
+  // Повторное нажатие на «вперемешку» тасует заново: это единственный способ
+  // получить другой набор, не трогая ничего больше.
+  function pickOrder(want) {
+    const next = want === "shuffle" ? newSeed() : seed;
+    setOrder(want);
+    setSeed(next);
+    onState({ open, section, taskId: currentId, again: mode === ALL_MODE, mode, order: want, orderSeed: next });
   }
 
   function pickSection(name) {
     setSection(name);
-    onState({ open, section: name, taskId: "", again: mode === ALL_MODE, mode });
+    onState({ open, section: name, taskId: "", again: mode === ALL_MODE, mode, order, orderSeed: seed });
     setCurrentId("");
     setResult(null);
     setValue("");
@@ -574,6 +623,21 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
           ))}
         </div>
 
+        <div style={S.chips}>
+          <span style={S.orderLabel}>Порядок</span>
+          {ORDERS.map((o) => (
+            <button
+              key={o.key || "bank"}
+              onClick={() => pickOrder(o.key)}
+              className="ap-row"
+              style={{ ...S.chip, ...(order === o.key ? S.chipOn : null) }}
+              title={o.hint}
+            >
+              {order === "shuffle" && o.key === "shuffle" ? "Перемешать заново" : o.name}
+            </button>
+          ))}
+        </div>
+
         <label style={S.only}>
           <input
             type="checkbox"
@@ -584,7 +648,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
               setCurrentId("");
               setResult(null);
               setValue("");
-              onState({ open, section, taskId: "", again: want === ALL_MODE, mode: want });
+              onState({ open, section, taskId: "", again: want === ALL_MODE, mode: want, order, orderSeed: seed });
             }}
           />
           Только нерешённые
@@ -802,6 +866,45 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
           <div style={S.stat}><span style={S.statValue}>{queue.length}</span><span style={S.statName}>осталось в наборе</span></div>
         </div>
 
+        {stats.done > 0 && (
+          <div style={S.themes}>
+            <div style={S.disputedTitle}>Разбор ошибок по темам</div>
+            {weak.length === 0 ? (
+              <p style={S.themeNote}>
+                Ошибок пока нет — по всем разделам, где ты решал, ответы верные.
+              </p>
+            ) : (
+              <>
+                <p style={S.themeNote}>
+                  Считается по последней попытке: разобрался и ответил верно — раздел из списка уходит.
+                  Нажми на раздел, чтобы перерешать неверные в нём.
+                </p>
+                {weak.map((r) => (
+                  <button
+                    key={r.section}
+                    onClick={() => fixSection(r.section)}
+                    className="ap-row"
+                    style={S.themeRow}
+                  >
+                    <span style={S.themeName}>{r.section}</span>
+                    <span style={S.themeCount}>
+                      {r.wrong} из {r.done} {r.wrong === 1 ? "неверно" : "неверны"}
+                    </span>
+                    <span style={S.themeBar}>
+                      <span style={{ ...S.themeBarFill, width: Math.max(4, r.percent) + "%" }} />
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+            {firm.length > 0 && (
+              <p style={S.themeFirm}>
+                Без ошибок: {firm.map((r) => r.section + " (" + r.done + ")").join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
         {bankAnswers.length > 0 && (
           <div style={S.collected}>
             <div style={S.collectedTop}>
@@ -879,6 +982,7 @@ const S = {
   },
   chipOn: { background: "var(--ink)", color: "var(--bg)", borderColor: "var(--ink)", fontWeight: 600 },
   chipCount: { fontSize: 11.5, opacity: 0.7 },
+  orderLabel: { fontSize: 12.5, color: "var(--mute)", alignSelf: "center", marginRight: 2 },
   only: { display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, color: "var(--ink3)", marginBottom: 14 },
   subject: {
     display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid var(--line)",
@@ -1044,6 +1148,22 @@ const S = {
   stat: { display: "flex", flexDirection: "column", gap: 2, minWidth: 92 },
   statValue: { fontSize: 22, fontFamily: "'PT Serif', Georgia, serif", fontVariantNumeric: "tabular-nums" },
   statName: { fontSize: 12, color: "var(--mute)" },
+
+  themes: { marginTop: 16, borderTop: "1px solid var(--line2)", paddingTop: 12 },
+  themeNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "0 0 10px" },
+  themeRow: {
+    display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", width: "100%",
+    background: "none", border: "none", borderRadius: 8, padding: "6px 8px",
+    textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit",
+  },
+  themeName: { fontSize: 13.5, flex: "0 1 auto" },
+  themeCount: { fontSize: 12.5, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
+  themeBar: {
+    flex: "1 1 80px", minWidth: 60, height: 6, borderRadius: 3,
+    background: "var(--line2)", overflow: "hidden", alignSelf: "center",
+  },
+  themeBarFill: { display: "block", height: "100%", background: "var(--ink3)" },
+  themeFirm: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "10px 0 0" },
 
   disputed: { marginTop: 16, borderTop: "1px solid var(--line2)", paddingTop: 12 },
   disputedTitle: { fontSize: 13, fontWeight: 600, marginBottom: 8 },
