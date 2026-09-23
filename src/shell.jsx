@@ -290,7 +290,7 @@ export function ScreenHead({ title, note, date, badge, children }) {
               а на телефоне колонки нет, и календаря под рукой тоже. */}
           {date && <span style={styles.headDate}>{date}</span>}
         </h1>
-        {note && <div style={styles.note}>{note}</div>}
+        {note && <div className="ap-head-note" style={styles.note}>{note}</div>}
       </div>
       {children ? <div style={styles.headSide}>{children}</div> : null}
     </div>

@@ -26,7 +26,7 @@ import NowCard from "./now-card.jsx";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
-import { BANK_IDS, BANK_SUBJECTS } from "./fipi-index.js";
+import { BANK_SUBJECTS } from "./fipi-index.js";
 import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
@@ -2232,17 +2232,26 @@ export default function StudyPlanner() {
     });
   }
 
-  const trainerSolved = useMemo(() => {
-    const known = new Set(BANK_IDS);
-    const last = new Map();
-    trainerLog.forEach((a) => known.has(a.taskId) && last.set(a.taskId, a.ok));
-    let n = 0;
-    last.forEach((ok) => ok && (n += 1));
-    return n;
-  }, [trainerLog]);
-  const trainerLeft = Math.max(0, BANK_IDS.length - trainerSolved);
 
   const weeklyBudget = weeklyBudgetHours(budget);
+  const trainerToday = (() => {
+    const today = todayStr();
+    if (dayCounts(trainerByDay, today)) return "✓ сегодня";
+    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", BANK_SUBJECTS);
+    return offer && offer.solved > 0 ? offer.solved + " из " + offer.need : "";
+  })();
+  // Какие карточки внизу «Сегодня» пусты. События не пусты, пока есть главное:
+  // под ним стоит вердикт «хватит ли времени», а он нужен и без списка.
+  const eventsEmpty = laterEvents.length === 0 && !mainEvent;
+  const reminderKind = studyStreakOn
+    ? "streak"
+    : studyReminder.tone === "ok"
+      ? "ok"
+      : studyReminder.tone === "warn"
+        ? "warn"
+        : "idle";
+  const homeworkEmpty = upcomingHomework.length === 0;
+  const studyEmpty = !ALL_SUBJECTS.some((s) => stats.perSubject[s.id] && stats.perSubject[s.id].total);
   const navItems = [
     {
       key: "today",
@@ -2259,7 +2268,9 @@ export default function StudyPlanner() {
     {
       key: "trainer",
       label: "Тренажёр",
-      hint: trainerLeft ? trainerLeft + " " + tasksWord(trainerLeft) : "всё решено",
+      // Размер банка («768 заданий») не меняется и ничего не говорит. Полезно
+      // другое: сколько решено сегодня и сколько нужно, чтобы день зачёлся.
+      hint: trainerToday,
     },
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
@@ -2442,6 +2453,9 @@ export default function StudyPlanner() {
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
           .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
+          /* Подзаголовок экрана на телефоне пересказывает название вкладки,
+             которое и так подсвечено внизу, и занимает две строки. */
+          .ap-head-note { display: none; }
         }
       `}</style>
 
@@ -2531,8 +2545,8 @@ export default function StudyPlanner() {
                     {e.description && <span style={styles.todayEventNote}>{e.description}</span>}
                   </div>
                 ))}
-                <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
-                  Все события
+                <button onClick={() => goScreen("events")} style={styles.goLink}>
+                  Все события →
                 </button>
               </section>
             )}
@@ -2563,13 +2577,14 @@ export default function StudyPlanner() {
               }}
             >
               <div style={styles.reminderRow}>
-                <div style={styles.reminderMark} aria-hidden="true">
-                  <ReminderMark
-                    kind={
-                      studyStreakOn ? "streak" : studyReminder.tone === "ok" ? "ok" : studyReminder.tone === "warn" ? "warn" : "idle"
-                    }
-                  />
-                </div>
+                {/* Значок — только когда ему есть что сказать: огонёк серии, галочка,
+                    восклицательный знак. В спокойном состоянии там стояла точка
+                    посреди пустого квадрата — место без смысла. */}
+                {reminderKind !== "idle" && (
+                  <div style={styles.reminderMark} aria-hidden="true">
+                    <ReminderMark kind={reminderKind} />
+                  </div>
+                )}
                 <div style={styles.reminderBody}>
                   <div style={styles.reminderTitle}>{studyReminder.title}</div>
                   <div style={styles.reminderText}>{studyReminder.text}</div>
@@ -2636,8 +2651,8 @@ export default function StudyPlanner() {
                   ))}
                 </div>
                 {dueForReview.length > 3 && (
-                  <button onClick={() => goScreen("study")} style={styles.eventsToggle}>
-                    Ещё {dueForReview.length - 3} — в «Подготовке»
+                  <button onClick={() => goScreen("study")} style={styles.goLink}>
+                    Ещё {dueForReview.length - 3} — в «Подготовке» →
                   </button>
                 )}
               </section>
@@ -2743,7 +2758,11 @@ export default function StudyPlanner() {
             </section>
           </div>
 
+          {/* Карточка, которой нечего показать, — не карточка: три «ничего нет»
+              подряд занимали пол-экрана в обычный день. Пустые сворачиваются
+              в одну строку ниже и возвращаются, как только в них что-то есть. */}
           <div className="ap-grid2" style={styles.grid2}>
+            {!eventsEmpty && (
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Ближайшие события</div>
               {/* Сегодняшнее событие показано отдельной карточкой наверху —
@@ -2759,7 +2778,7 @@ export default function StudyPlanner() {
                     const info = priorityInfo(e.priority);
                     return (
                       <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
-                        <span style={styles.todayMark}>
+                        <span style={styles.eventMarkCol}>
                           <PriorityMark value={e.priority} height={11} />
                         </span>
                         <span style={styles.todayName}>{e.name}</span>
@@ -2787,11 +2806,13 @@ export default function StudyPlanner() {
                     : `При таком темпе может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
                 </div>
               )}
-              <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
-                Все события
+              <button onClick={() => goScreen("events")} style={styles.goLink}>
+                Все события →
               </button>
             </section>
+            )}
 
+            {!homeworkEmpty && (
             <section className="ap-card" style={styles.card}>
               <CardHead
                 id="today-homework"
@@ -2821,11 +2842,13 @@ export default function StudyPlanner() {
                   ))}
                 </div>
               )}
-              <button onClick={() => goScreen("journal")} style={styles.eventsToggle}>
-                Дневник и задания
+              <button onClick={() => goScreen("journal")} style={styles.goLink}>
+                Дневник и задания →
               </button>
             </section>
+            )}
 
+            {!studyEmpty && (
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Подготовка</div>
               <div style={styles.todayList}>
@@ -2847,11 +2870,28 @@ export default function StudyPlanner() {
                   );
                 })}
               </div>
-              <button onClick={() => goScreen("study")} style={styles.eventsToggle}>
-                Открыть подготовку
+              <button onClick={() => goScreen("study")} style={styles.goLink}>
+                Открыть подготовку →
               </button>
             </section>
+            )}
           </div>
+
+          {(eventsEmpty || homeworkEmpty || studyEmpty) && (
+            <div style={styles.emptyStrip}>
+              {eventsEmpty && (
+                <button onClick={() => goScreen("events")} style={styles.goLink}>
+                  Событий нет — добавить →
+                </button>
+              )}
+              {homeworkEmpty && <span style={styles.emptyStripNote}>Ничего не горит по срокам</span>}
+              {studyEmpty && (
+                <button onClick={() => goScreen("study")} style={styles.goLink}>
+                  Своих предметов нет — добавить →
+                </button>
+              )}
+            </div>
+          )}
           </>
         )}
 
@@ -2969,7 +3009,19 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>События</div>
+              <CardHead
+                id="events"
+                title="События"
+                note={
+                  <>
+                    Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события
+                    считается план: <PriorityMark value={3} height={10} /> важнее <PriorityMark value={2} height={10} /> и{" "}
+                    <PriorityMark value={1} height={10} />. Если приоритет одинаковый, берётся ближайшее. Можно выбрать и
+                    вручную — «считать план по нему» у любого события. Экзамены и олимпиады, заведённые в расписании,
+                    появляются здесь сами — это одна и та же запись, и править её можно с любой стороны.
+                  </>
+                }
+              />
               <EventsEditor
                 upcoming={upcomingEvents}
                 past={pastEvents}
@@ -3125,37 +3177,39 @@ export default function StudyPlanner() {
           <section style={styles.plainBlock}>
             {ALL_SUBJECTS.length === 0 && (
               <section className="ap-card" style={styles.card}>
-                <div style={styles.cardTitle}>Здесь живёт подготовка вне лицея</div>
+                <CardHead
+                  id="study-intro"
+                  title="Здесь живёт подготовка вне лицея"
+                  note={
+                      <ul style={styles.emptyList}>
+                        <li>
+                          <b>Уроки.</b> Свой список тем: у каждой длительность и ссылка — с ней название урока становится
+                          кликабельным, и занятие открывается в один тап.
+                        </li>
+                        <li>
+                          <b>Отметка «пройдено».</b> Галочка сама пишет занятие в дневник на его длительность — руками
+                          дублировать не нужно.
+                        </li>
+                        <li>
+                          <b>Заметки к уроку.</b> Короткая подпись и потраченное время; время тоже уходит в дневник и в
+                          график часов.
+                        </li>
+                        <li>
+                          <b>Тетрадь.</b> Блоки и ветки с конспектом, форматированием и файлами — то же, что на экране
+                          «Тетради».
+                        </li>
+                        <li>
+                          <b>Учёт времени.</b> Часы по предмету попадают в «Распределение»: там видно, укладываетесь ли вы в
+                          неделю и хватит ли времени до ближайшего экзамена.
+                        </li>
+                      </ul>
+                  }
+                />
                 <p style={styles.muted}>
-                  Курсы, олимпиадная подготовка, любой предмет, который вы учите сами. Раздел отвечает на два вопроса:
-                  что осталось пройти и сколько времени на это ушло.
+                  Курсы, олимпиады, любой предмет, который учите сами. Начните с одного — цвет выбирается рядом
+                  с названием, его же предмет носит в дневнике и на графиках.
                 </p>
-                <ul style={styles.emptyList}>
-                  <li>
-                    <b>Уроки.</b> Свой список тем: у каждой длительность и ссылка — с ней название урока становится
-                    кликабельным, и занятие открывается в один тап.
-                  </li>
-                  <li>
-                    <b>Отметка «пройдено».</b> Галочка сама пишет занятие в дневник на его длительность — руками
-                    дублировать не нужно.
-                  </li>
-                  <li>
-                    <b>Заметки к уроку.</b> Короткая подпись и потраченное время; время тоже уходит в дневник и в
-                    график часов.
-                  </li>
-                  <li>
-                    <b>Тетрадь.</b> Блоки и ветки с конспектом, форматированием и файлами — то же, что на экране
-                    «Тетради».
-                  </li>
-                  <li>
-                    <b>Учёт времени.</b> Часы по предмету попадают в «Распределение»: там видно, укладываетесь ли вы в
-                    неделю и хватит ли времени до ближайшего экзамена.
-                  </li>
-                </ul>
-                <p style={styles.muted}>
-                  Начните с одного предмета — например «Обществознание» или «Математика для олимпиад». Цвет выбирается
-                  рядом с названием, его же будет носить предмет в дневнике и на графиках.
-                </p>
+                <AddSubjectForm onAdd={addSubject} placeholder="Например, «Математика для олимпиад»" />
               </section>
             )}
             {dueForReview.length > 0 && (
@@ -3282,7 +3336,9 @@ export default function StudyPlanner() {
                 );
               })}
             </div>
-            <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
+            {ALL_SUBJECTS.length > 0 && (
+              <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
+            )}
           </section>
         )}
 
@@ -3463,10 +3519,16 @@ export default function StudyPlanner() {
         {screen === "journal" && (
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-            <p style={styles.muted}>
-              За последние 7 дней записано {weeklyJournalHours} ч. Записи с уроками и заметками к ним добавляются сюда
-              автоматически — можно также добавить запись вручную.
-            </p>
+            <CardHead
+              id="journal-calendar"
+              title={"За 7 дней — " + String(weeklyJournalHours).replace(".", ",") + " ч"}
+              note={
+                "Записи с уроками и заметками к ним добавляются сюда автоматически — можно также добавить запись " +
+                "вручную. Высота заливки дня — доля дневной цели, а цель на каждый день недели задаётся " +
+                "в «Распределении». Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. " +
+                "Красная рамка — день экзамена или олимпиады."
+              }
+            />
 
             <div style={styles.calendarWrap}>
               <div style={styles.calHeader}>
@@ -3554,11 +3616,6 @@ export default function StudyPlanner() {
                 />
                 <span style={styles.calLegendItem}>цель</span>
               </div>
-              <p style={styles.mutedSmall}>
-                Высота заливки — доля дневной цели, а цель на каждый день недели задаётся в «Распределении».
-                Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. Красная рамка — день
-                экзамена или олимпиады.
-              </p>
             </div>
             </section>
             <section className="ap-card" style={styles.card}>
@@ -3663,6 +3720,16 @@ export default function StudyPlanner() {
               </div>
             </div>
 
+            {/* Без заголовка эта форма читалась продолжением «Домашнего задания»
+                выше — две одинаковые строки полей подряд, и какая для чего, не
+                понять. Теперь у неё своё имя и черта сверху, как на «Сегодня». */}
+            <div style={styles.journalEntryHead}>
+              <CardHead
+                id="journal-entry"
+                title="Записать занятие"
+                note="Занятие попадёт в дневник на выбранную дату и в часы занятий."
+              />
+            </div>
             <div style={styles.journalForm}>
               <input type="date" value={jForm.date} onChange={(e) => setJForm({ ...jForm, date: e.target.value })} style={styles.dateInput} />
               <select value={jForm.subjectId} onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })} style={styles.select}>
@@ -3693,6 +3760,7 @@ export default function StudyPlanner() {
             </div>
 
             <div style={styles.journalList}>
+              {journalListed.length > 0 && <div style={styles.journalListHead}>Все записи</div>}
               {journalListed.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
               {journalListed.slice(0, journalShown).map((e) => {
                 const s = anySubjectById.get(e.subjectId);
@@ -4232,15 +4300,7 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
   }
 
   return (
-    <div style={styles.eventsEditor}>
-      <p style={styles.muted}>
-        Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
-        план: <PriorityMark value={3} height={10} /> важнее <PriorityMark value={2} height={10} /> и{" "}
-        <PriorityMark value={1} height={10} />. Если
-        приоритет одинаковый, берётся ближайшее. Можно выбрать и вручную — «считать план по нему» у любого события.
-        Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
-        это одна и та же запись, и править её можно с любой стороны.
-      </p>
+    <div>
 
       {upcoming.map((e) => row(e, false))}
       {past.length > 0 && (
@@ -5084,7 +5144,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
           ))}
         </div>
       )}
-      <div style={styles.reminderRow}>
+      <div style={styles.hwReminderRow}>
         <span style={styles.mutedSmall}>Напоминать:</span>
         <select
           value={reminderMode}
@@ -5122,7 +5182,9 @@ const styles = {
   // превращается в полосу сверху — это делает таблица стилей выше.
   shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative" },
   main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
-  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: 16, marginBottom: 16 },
+  // Между рядами — только отступ самой карточки: зазор сетки поверх него давал
+  // 32 px между рядами при 16 между карточками вне сетки.
+  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: "0 16px" },
   cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 5 },
   cardNote: { fontSize: 13.5, color: "var(--ink3)", marginBottom: 14, lineHeight: 1.5 },
   todayList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 },
@@ -5136,7 +5198,10 @@ const styles = {
     padding: "6px 9px",
   },
   todayTime: { fontSize: 12.5, fontWeight: 600, minWidth: 42 },
-  todayMark: { minWidth: 42, display: "flex", alignItems: "center" },
+  // Колонка значка важности в «Ближайших событиях». Звалась todayMark, как и
+  // подпись «сегодня» в расписании, и та её перебивала: колонка теряла ширину,
+  // и названия событий не выстраивались в столбик.
+  eventMarkCol: { minWidth: 42, display: "flex", alignItems: "center" },
   // «Сейчас»: своя строка сверху, свой урок и то же время у всей параллели.
   reviewList: { display: "flex", flexDirection: "column", gap: 6 },
   reviewRow: {
@@ -5464,6 +5529,18 @@ const styles = {
   },
   eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
   calendarBtn: { background: "none", border: "none", padding: "0 2px", fontSize: 14, lineHeight: 1 },
+  journalEntryHead: { borderTop: "1px solid var(--line2)", paddingTop: 14, marginTop: 18 },
+  journalListHead: { fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--mute)", margin: "4px 0 6px" },
+  // Переход на другой экран — всегда одинаково: «Все события →».
+  goLink: {
+    alignSelf: "flex-start", background: "none", border: "none", padding: 0,
+    fontSize: 13, color: "var(--accent)", fontWeight: 600, cursor: "pointer", textAlign: "left",
+  },
+  emptyStrip: {
+    display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 22px",
+    padding: "4px 2px 16px",
+  },
+  emptyStripNote: { fontSize: 13, color: "var(--mute)" },
   eventsToggle: {
     alignSelf: "flex-start",
     background: "none",
@@ -5474,7 +5551,6 @@ const styles = {
     fontWeight: 600,
     textDecoration: "underline",
   },
-  eventsEditor: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 4 },
   eventEditRow: {
     display: "flex",
     alignItems: "flex-start",
@@ -5999,7 +6075,10 @@ const styles = {
     fontSize: 11.5,
   },
   attachmentLink: { background: "none", border: "none", color: "var(--blue)", textDecoration: "underline", fontSize: 11.5, padding: 0 },
-  reminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
+  // Строка напоминания у домашнего задания. Раньше звалась reminderRow — так же,
+  // как строка напоминания о занятиях на «Сегодня», и в одном объекте
+  // выигрывала она: у той карточки был чужой отступ слева.
+  hwReminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
   reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, background: "var(--panel2)" },
   reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, background: "var(--panel2)" },
   hwBanner: {
