@@ -69,7 +69,26 @@ const text = await page.locator("#root").innerText().catch(() => "");
 // Свёрнутое должно разворачиваться: и пояснение под «?», и подвал колонки.
 // Оба — обычные кнопки, но обе прячут то, что раньше было на виду, и молча
 // сломаться им нельзя.
+// Уроки на «Сегодня» должны выглядеть как в расписании: полоской в цвете
+// предмета, а не строчкой текста. Цвет у каждого предмета свой и постоянный,
+// поэтому и проверяем, что полоса есть и что у разных предметов она разная.
+const stripes = await page.evaluate(() => {
+  const title = [...document.querySelectorAll("div")]
+    .find((d) => /^(Сейчас идут уроки|Следующим уроком)$/.test(d.textContent.trim()));
+  if (!title) return null;
+  return [...title.parentElement.children]
+    .slice(1)
+    .map((row) => getComputedStyle(row).borderLeftColor + " " + getComputedStyle(row).borderLeftWidth);
+});
 const folded = [];
+if (stripes === null) {
+  console.log("· уроков сейчас нет — полосу у них не проверяем");
+} else {
+  const painted = stripes.filter((c) => /^rgba?\(/.test(c) && !/^rgba\(0, 0, 0, 0\)/.test(c) && !/ 0px$/.test(c));
+  if (painted.length !== stripes.length) folded.push("у урока нет полосы сбоку: " + stripes.join(" | "));
+  else if (new Set(stripes).size < 2 && stripes.length > 1) folded.push("полосы всех уроков одного цвета");
+  else console.log("✓ уроки подсвечены полосой предмета — цветов:", new Set(stripes).size);
+}
 const ask = page.getByRole("button", { name: /^Что это/ }).first();
 if (await ask.count()) {
   const was = (await page.locator("#root").innerText()).length;

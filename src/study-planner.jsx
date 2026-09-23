@@ -2606,6 +2606,8 @@ export default function StudyPlanner() {
               entriesFor={dayEntries}
               tasksFor={lessonTasks.forLesson}
               homeworkOn={homeworkOnDate}
+              colorOf={lyceumColorOf}
+              markOf={priorityInfo}
               styles={styles}
             />
 
@@ -5213,7 +5215,10 @@ const styles = {
   nowMineMeta: { color: "var(--ink3)", fontSize: 12.5 },
   nowAll: { borderTop: "1px solid var(--line2)", paddingTop: 10 },
   nowAllTitle: { fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--mute)", marginBottom: 8 },
-  nowAllRow: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 0" },
+  nowAllRow: { display: "flex", flexDirection: "column", gap: 2 },
+  // Та же полоска, что у уроков в расписании: урок узнают по ней, и на
+  // «Сегодня» он должен выглядеть так же, а не строчкой текста.
+  nowMark: { borderLeft: "4px solid", borderRadius: "0 4px 4px 0", padding: "5px 9px" },
   nowAllName: { fontSize: 13.5, fontWeight: 600, color: "var(--ink2)", display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
   nowAllWho: { fontSize: 11, fontWeight: 400, color: "var(--mute)" },
   nowAllItems: { display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12.5, color: "var(--ink3)" },
