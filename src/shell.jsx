@@ -7,6 +7,11 @@ import SkebobNote from "./skebob.jsx";
 // экраны, и между ними переходят отсюда. На телефоне колонка ложится в полосу
 // сверху и прокручивается вбок: место под неё там взять неоткуда.
 export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote, next, main, version, onOpenNotes }) {
+  // Подвал колонки свёрнут в одну строку. Каждый день там нужно одно: на связи
+  // облако или нет. Время последней синхронизации, подпись и номер версии
+  // нужны раз в месяц — они под нажатием.
+  const [footOpen, setFootOpen] = useState(false);
+
   return (
     <aside className="ap-rail" style={styles.rail}>
       <div style={styles.modeSwitch}>
@@ -76,18 +81,29 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
       </nav>
 
       <div className="ap-railbody" style={styles.railFoot}>
-        {syncLine}
-        {syncNote ? (
+        <button
+          onClick={() => setFootOpen(!footOpen)}
+          className="ap-version"
+          style={styles.footToggle}
+          aria-expanded={footOpen}
+          aria-label={footOpen ? "Свернуть подробности" : "Подробнее о синхронизации"}
+          title={footOpen ? "Свернуть" : "Подробнее о синхронизации"}
+        >
+          <span style={{ color: syncNote ? (syncNote.ok ? "var(--green)" : "var(--red)") : "inherit" }}>
+            {syncNote ? syncNote.text : syncLine}
+          </span>
+          <span style={styles.footSign} aria-hidden="true">{footOpen ? "−" : "+"}</span>
+        </button>
+        {footOpen ? (
           <>
-            <br />
-            <span style={{ color: syncNote.ok ? "var(--green)" : "var(--red)" }}>{syncNote.text}</span>
+            <div style={styles.footLine}>{syncLine}</div>
+            <SkebobNote />
+            {/* Номер версии заодно открывает историю изменений: иначе её никто не находит. */}
+            <button onClick={onOpenNotes} className="ap-version" style={styles.version} title="Что изменилось">
+              бета {version}
+            </button>
           </>
         ) : null}
-        <SkebobNote />
-        {/* Номер версии заодно открывает историю изменений: иначе её никто не находит. */}
-        <button onClick={onOpenNotes} className="ap-version" style={styles.version} title="Что изменилось">
-          бета {version}
-        </button>
       </div>
     </aside>
   );
@@ -98,7 +114,7 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
 // достаёт до неё, не дотягиваясь до верха экрана. Разделов восемь, в полосу
 // помещается пять, поэтому редкие спрятаны за «Ещё» — вместе с переключателем
 // темы, которому на телефоне места в шапке нет.
-const PRIMARY_TABS = ["today", "school", "journal", "study"];
+const PRIMARY_TABS = ["today", "trainer", "journal", "school"];
 
 export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account, version, onOpenNotes }) {
   const [more, setMore] = useState(false);
@@ -261,12 +277,15 @@ export function Countdowns({ next, main, tone }) {
 }
 
 // Шапка экрана: где мы и что здесь делают.
-export function ScreenHead({ title, note, date, children }) {
+export function ScreenHead({ title, note, date, badge, children }) {
   return (
     <div style={styles.head}>
       <div style={styles.headText}>
         <h1 style={styles.h1}>
           {title}
+          {/* Пометка вроде ALPHA — рядом с названием раздела, а не абзацем под ним:
+              так она видна всегда и занимает одну строку, а не пять. */}
+          {badge && <span style={styles.headBadge}>{badge}</span>}
           {/* Число и день недели — рядом с заголовком: в колонке слева они есть,
               а на телефоне колонки нет, и календаря под рукой тоже. */}
           {date && <span style={styles.headDate}>{date}</span>}
@@ -323,6 +342,13 @@ const styles = {
     textDecoration: "underline",
     textAlign: "left",
   },
+  footToggle: {
+    display: "flex", alignItems: "center", gap: 8, width: "100%",
+    border: "none", background: "none", padding: 0, textAlign: "left",
+    fontSize: 12.5, color: "var(--railInk2)", cursor: "pointer",
+  },
+  footSign: { marginLeft: "auto", fontSize: 14, lineHeight: 1, opacity: 0.7 },
+  footLine: { marginTop: 8, fontSize: 12.5, color: "var(--railInk2)" },
   railFoot: {
     marginTop: "auto",
     borderTop: "1px solid var(--railActive)",
@@ -440,6 +466,12 @@ const styles = {
   headText: { minWidth: 0 },
   h1: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 30, margin: 0, fontWeight: 400, lineHeight: 1.15 },
   note: { fontSize: 14, color: "var(--ink3)", marginTop: 5, lineHeight: 1.5 },
+  headBadge: {
+    marginLeft: 10, verticalAlign: "middle", display: "inline-block",
+    fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+    padding: "3px 8px", borderRadius: 7, border: "1px solid var(--line)",
+    background: "var(--panel2)", color: "var(--mute)", whiteSpace: "nowrap",
+  },
   headDate: {
     fontFamily: "'PT Serif', Georgia, serif",
     fontSize: 24,

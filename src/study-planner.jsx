@@ -10,6 +10,7 @@ import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed
 import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns } from "./shell.jsx";
+import { CardHead } from "./card-head.jsx";
 import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
@@ -2270,21 +2271,14 @@ export default function StudyPlanner() {
   const SCREEN_TEXT = {
     today: ["Сегодня", "Что сегодня в лицее, сколько времени уже записано и что горит по срокам"],
     events: ["События", "Приоритет решает, до какого события считается план"],
-    budget: [
-      "Распределение времени (КПВ)",
-      "КПВ — и кривая производственных возможностей из экономики, и коэффициент полезного времени: " +
-        "сначала бюджет дня, потом предметы",
-    ],
+    budget: ["Распределение времени (КПВ)", "Сначала бюджет дня, потом предметы"],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
-    trainer: [
-      "Тренажёр по банку ФИПИ",
-      "Обществознание, физика и информатика из открытого банка; альфа-версия: ответы решены нами, и ответ, засчитанный в самом банке, сейчас ценнее всего",
-    ],
+    trainer: ["Тренажёр по банку ФИПИ", "Обществознание, физика и информатика из открытого банка"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
-    search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка сразу — задание ищется и по своему номеру"],
-    settings: ["Синхронизация и данные", "Облако, резервная копия, оформление, установка на устройство и версия"],
+    search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка — в том числе по номеру задания"],
+    settings: ["Синхронизация и данные", "Облако, копия записей, оформление и установка на устройство"],
   };
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
 
@@ -2447,7 +2441,7 @@ export default function StudyPlanner() {
           .ap-main { padding: 16px 14px 96px !important; }
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
-          .ap-grid2, .ap-grid3 { grid-template-columns: minmax(0, 1fr) !important; }
+          .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
         }
       `}</style>
 
@@ -2503,7 +2497,12 @@ export default function StudyPlanner() {
           </div>
         )}
 
-        <ScreenHead title={screenInfo.title} note={screenInfo.note} date={screen === "today" ? todayHeadLabel : null}>
+        <ScreenHead
+          title={screenInfo.title}
+          note={screenInfo.note}
+          badge={screen === "trainer" ? "ALPHA" : null}
+          date={screen === "today" ? todayHeadLabel : null}
+        >
           <div className="ap-only-mobile">
             <Countdowns next={nextCountdown} main={mainCountdown} />
           </div>
@@ -2539,27 +2538,18 @@ export default function StudyPlanner() {
             )}
 
             {weekPlanned !== currentWeek && (
-              <section className="ap-card" style={{ ...styles.card, ...styles.weekCard }}>
-                <div style={styles.reminderRow}>
-                  <div style={styles.reminderMark} aria-hidden="true">
-                    <ReminderMark kind="week" />
-                  </div>
-                  <div style={styles.reminderBody}>
-                    <div style={styles.reminderTitle}>Новая неделя — распределите время</div>
-                    <div style={styles.reminderText}>
-                      Сколько часов в неделю уходит на каждый предмет и сколько времени вы готовы отдавать учёбе
-                      по дням — от этих цифр считается весь план. С прошлой недели они могли устареть.
-                    </div>
-                    <div style={styles.weekActions}>
-                      <button onClick={() => goScreen("budget")} style={styles.weekGo}>
-                        Распределить
-                      </button>
-                      <button onClick={markWeekPlanned} style={styles.weekSkip}>
-                        Оставить как есть
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              <section className="ap-card" style={{ ...styles.weekStrip }}>
+                <span style={styles.weekStripText}>
+                  Новая неделя: цифры распределения могли устареть
+                </span>
+                <span style={styles.weekActions}>
+                  <button onClick={() => goScreen("budget")} style={styles.weekGo}>
+                    Распределить
+                  </button>
+                  <button onClick={markWeekPlanned} style={styles.weekSkip}>
+                    Оставить как есть
+                  </button>
+                </span>
               </section>
             )}
 
@@ -2621,10 +2611,11 @@ export default function StudyPlanner() {
 
             {dueForReview.length > 0 && (
               <section className="ap-card" style={styles.card}>
-                <div style={styles.cardTitle}>Пора повторить</div>
-                <div style={styles.cardNote}>
-                  Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке
-                </div>
+                <CardHead
+                  id="today-review"
+                  title="Пора повторить"
+                  note="Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке"
+                />
                 <div style={styles.reviewList}>
                   {dueForReview.slice(0, 3).map((row) => (
                     <div key={row.topicId} style={styles.reviewRow}>
@@ -2652,10 +2643,12 @@ export default function StudyPlanner() {
 
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Часы занятий</div>
-              <div style={styles.cardNote}>
-                Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята.
-              </div>
+              <CardHead
+                id="hours"
+                title="Часы занятий"
+                empty={!stats.totalAll}
+                note="Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята."
+              />
               <div style={styles.overallTrack}>
                 <div className="ap-fill" style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
               </div>
@@ -2667,8 +2660,12 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Сегодня в лицее</div>
-              <div style={styles.cardNote}>Важность — полосой слева, роль урока — подписью</div>
+              <CardHead
+                id="today-school"
+                title="Сегодня в лицее"
+                empty={todayLessons.length === 0}
+                note="Важность — полосой слева, роль урока — подписью"
+              />
               {todayLessons.length === 0 ? (
                 <p style={styles.muted}>На сегодня уроков в расписании нет.</p>
               ) : (
@@ -2695,8 +2692,7 @@ export default function StudyPlanner() {
               )}
 
               <div style={styles.quickLog}>
-                <div style={styles.cardTitle}>Записать занятие</div>
-                <div style={styles.cardNote}>Запись попадёт в дневник за сегодня</div>
+                <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
 
                 <div style={styles.quickRow}>
                   <select
@@ -2745,7 +2741,7 @@ export default function StudyPlanner() {
             </section>
           </div>
 
-          <div className="ap-grid3" style={styles.grid3}>
+          <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Ближайшие события</div>
               {/* Сегодняшнее событие показано отдельной карточкой наверху —
@@ -2795,8 +2791,12 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Дела и сроки</div>
-              <div style={styles.cardNote}>По сроку, а не по предмету</div>
+              <CardHead
+                id="today-homework"
+                title="Дела и сроки"
+                empty={upcomingHomework.length === 0}
+                note="По сроку, а не по предмету"
+              />
               {upcomingHomework.length === 0 ? (
                 <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
               ) : (
@@ -2826,9 +2826,6 @@ export default function StudyPlanner() {
 
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Подготовка</div>
-              <div style={styles.cardNote}>
-                Пройдено {stats.doneAll} из {stats.totalAll} уроков
-              </div>
               <div style={styles.todayList}>
                 {ALL_SUBJECTS.map((s) => {
                   const st = stats.perSubject[s.id];
@@ -2989,14 +2986,16 @@ export default function StudyPlanner() {
 
         {screen === "budget" && (
           <section className="ap-card" style={styles.card}>
-            <p style={styles.muted}>
-              Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут в день вы
-              реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам и проверка, хватит
-              ли этого ресурса на оставшиеся уроки.
-              {mainEvent
-                ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».`
-                : ""}
-            </p>
+            <CardHead
+              id="budget"
+              title="Бюджет времени"
+              note={
+                "Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут " +
+                "в день вы реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам " +
+                "и проверка, хватит ли этого ресурса на оставшиеся уроки." +
+                (mainEvent ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».` : "")
+              }
+            />
 
             <div style={styles.dailyGoalsBlock}>
               <label style={styles.label}>Сколько минут в день вы можете заниматься</label>
@@ -3104,12 +3103,16 @@ export default function StudyPlanner() {
 
             <div style={styles.ppfSection}>
               <div style={styles.balanceHead}>
-                <div style={styles.cardTitle}>Баланс предметов</div>
-                <div style={styles.cardNote}>
-                  По горизонтали — план на неделю, по вертикали — записанное в дневнике за последние семь дней.
-                  Диагональ — линия баланса: точка на ней значит, что план и факт сошлись. Выше — предмет забирает
-                  больше времени, чем ему отведено, ниже — недобирает. Размер точки — сколько тем по нему пройдено.
-                </div>
+                <CardHead
+                  id="balance"
+                  title="Баланс предметов"
+                  empty={balanceItems.length === 0}
+                  note={
+                    "По горизонтали — план на неделю, по вертикали — записанное в дневнике за последние семь дней. " +
+                    "Диагональ — линия баланса: точка на ней значит, что план и факт сошлись. Выше — предмет забирает " +
+                    "больше времени, чем ему отведено, ниже — недобирает. Размер точки — сколько тем по нему пройдено."
+                  }
+                />
               </div>
               <BalanceChart items={balanceItems} />
             </div>
@@ -3155,11 +3158,14 @@ export default function StudyPlanner() {
             )}
             {dueForReview.length > 0 && (
               <section className="ap-card" style={styles.card}>
-                <div style={styles.cardTitle}>Пора повторить</div>
-                <div style={styles.cardNote}>
-                  Первое повторение через три дня после урока, дальше через неделю, три недели и два месяца.
-                  «Повторил» пишет занятие в дневник — часы идут в общий план.
-                </div>
+                <CardHead
+                  id="study-review"
+                  title="Пора повторить"
+                  note={
+                    "Первое повторение через три дня после урока, дальше через неделю, три недели и два месяца. " +
+                    "«Повторил» пишет занятие в дневник — часы идут в общий план."
+                  }
+                />
                 <div style={styles.reviewList}>
                   {dueForReview.map((row) => (
                     <div key={row.topicId} style={styles.reviewRow}>
@@ -3721,8 +3727,11 @@ export default function StudyPlanner() {
           <>
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Предметы</div>
-              <div style={styles.cardNote}>Тетрадь есть у каждого предмета — и своего, и лицейского</div>
+              <CardHead
+                id="notes-subjects"
+                title="Предметы"
+                note="Тетрадь есть у каждого предмета — и своего, и лицейского"
+              />
               <div style={styles.notebookList}>
                 {notebookOwners.map((o) => {
                   const on = o.key === notebookOwner;
@@ -3747,8 +3756,14 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.notebookHead}>
-                <div style={styles.cardTitle}>Тетрадь</div>
+              <CardHead
+                id="notebook"
+                title="Тетрадь"
+                note={
+                  "Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке " +
+                  "предмета и в разделе лицея — записи везде одни."
+                }
+              >
                 {/* Список предметов слева читается как оглавление, а не как выбор,
                     поэтому тот же выбор стоит и здесь — там, где его ищут. Тетрадь
                     одна и та же: и список, и этот выбор открывают одни и те же
@@ -3780,11 +3795,7 @@ export default function StudyPlanner() {
                     </optgroup>
                   )}
                 </select>
-              </div>
-              <div style={styles.cardNote}>
-                Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке
-                предмета и в разделе лицея — записи везде одни.
-              </div>
+              </CardHead>
               {currentNotebook ? (
                 <Notebook
                   blocks={notebooks[currentNotebook.key] || []}
@@ -3855,12 +3866,13 @@ export default function StudyPlanner() {
         )}
 
         {screen === "settings" && (
-          <div className="ap-grid3" style={styles.grid3}>
+          <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Облако</div>
-              <div style={styles.cardNote}>
-                Один аккаунт на все устройства: правки с телефона и ноутбука сливаются, а не затирают друг друга.
-              </div>
+              <CardHead
+                id="cloud"
+                title="Облако"
+                note="Один аккаунт на все устройства: правки с телефона и ноутбука сливаются, а не затирают друг друга."
+              />
               <CloudPanel />
               <div style={styles.syncRow}>
                 <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
@@ -3879,7 +3891,14 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Резервная копия</div>
+              <CardHead
+                id="backup"
+                title="Резервная копия"
+                note={
+                  "Если автоматическая синхронизация не работает, данные переносятся вручную: скопируйте текст на " +
+                  "одном устройстве и вставьте его в поле импорта на другом."
+                }
+              />
               {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
                   занимает место, поэтому сворачивается в строку. */}
               {cloudOn && !saveErr && !cloudPending && !showBackup ? (
@@ -3891,10 +3910,6 @@ export default function StudyPlanner() {
                 </>
               ) : (
                 <>
-                  <div style={styles.cardNote}>
-                    Если автоматическая синхронизация не работает, данные переносятся вручную: скопируйте текст на
-                    одном устройстве и вставьте его в поле импорта на другом.
-                  </div>
                   <label style={styles.label}>Экспорт (скопируйте этот текст)</label>
                   <textarea readOnly value={buildExportPayload()} style={styles.backupTextarea} onFocus={(e) => e.target.select()} />
                   <div style={styles.backupRow}>
@@ -3926,11 +3941,14 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Оформление</div>
-              <div style={styles.cardNote}>
-                Тема и границы ночи — настройка устройства: телефон вечером может быть в ночной, а ноутбук днём в
-                светлой. В облако это не уходит.
-              </div>
+              <CardHead
+                id="looks"
+                title="Оформление"
+                note={
+                  "Тема и границы ночи — настройка устройства: телефон вечером может быть в ночной, а ноутбук днём " +
+                  "в светлой. В облако это не уходит."
+                }
+              />
               <div style={styles.themeRow}>
                 {[
                   ["light", "Светлая"],
@@ -4036,11 +4054,14 @@ export default function StudyPlanner() {
             )}
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Приложение</div>
-              <div style={styles.cardNote}>
-                С иконки ежедневник открывается без адресной строки и работает без сети — правки уйдут в облако, когда
-                связь появится.
-              </div>
+              <CardHead
+                id="install"
+                title="Приложение"
+                note={
+                  "С иконки ежедневник открывается без адресной строки и работает без сети — правки уйдут в облако, " +
+                  "когда связь появится."
+                }
+              />
               <InstallHint />
               <div style={styles.versionRow}>
                 Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
@@ -5100,7 +5121,6 @@ const styles = {
   shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative" },
   main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
   grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: 16, marginBottom: 16 },
-  grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 },
   cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 5 },
   cardNote: { fontSize: 13.5, color: "var(--ink3)", marginBottom: 14, lineHeight: 1.5 },
   todayList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 },
@@ -5242,8 +5262,15 @@ const styles = {
   streakBox: { textAlign: "center", minWidth: 78 },
   streakNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, lineHeight: 1, color: "var(--green)" },
   streakWord: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
-  weekCard: { borderColor: "var(--accent)" },
-  weekActions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
+  // Полоска, а не карточка: напоминание о новой неделе стоит рядом с крупным
+  // напоминанием о занятиях, и двум плашкам во весь экран подряд там тесно.
+  weekStrip: {
+    display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+    padding: "10px 14px", marginBottom: 16, borderRadius: 12,
+    border: "1px solid var(--accent)", background: "var(--panel)",
+  },
+  weekStripText: { fontSize: 13.5, color: "var(--ink3)", flex: "1 1 220px", minWidth: 0 },
+  weekActions: { display: "flex", gap: 8, flexWrap: "wrap" },
   weekGo: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 9, padding: "8px 15px", fontSize: 13, fontWeight: 600 },
   weekSkip: {
     border: "1px solid var(--line)",

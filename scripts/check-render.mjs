@@ -66,8 +66,36 @@ await page.goto(`http://127.0.0.1:${port}${base}`);
 await page.waitForTimeout(2500);
 const text = await page.locator("#root").innerText().catch(() => "");
 
+// Свёрнутое должно разворачиваться: и пояснение под «?», и подвал колонки.
+// Оба — обычные кнопки, но обе прячут то, что раньше было на виду, и молча
+// сломаться им нельзя.
+const folded = [];
+const ask = page.getByRole("button", { name: /^Что это/ }).first();
+if (await ask.count()) {
+  const was = (await page.locator("#root").innerText()).length;
+  await ask.evaluate((el) => el.click());
+  await page.waitForTimeout(300);
+  const now = (await page.locator("#root").innerText()).length;
+  if (now <= was) folded.push("пояснение под «?» не развернулось");
+} else {
+  folded.push("на странице нет ни одной кнопки «?»");
+}
+const foot = page.getByRole("button", { name: /Подробнее о синхронизации/ }).first();
+if (await foot.count()) {
+  await foot.evaluate((el) => el.click());
+  await page.waitForTimeout(300);
+  if (!/бета /.test(await page.locator("#root").innerText())) folded.push("подвал колонки не развернулся");
+} else {
+  folded.push("подвал колонки не сворачивается");
+}
+
 await browser.close();
 server.close();
+
+if (folded.length) {
+  console.error("✗ свёрнутое не разворачивается:", folded.join(" | "));
+  process.exit(1);
+}
 
 if (errors.length || text.trim().length < 200) {
   console.error("✗ приложение не открылось");
