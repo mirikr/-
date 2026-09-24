@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
 import { stampState, mergeStates, mergeSerialized } from "./sync-state.js";
-import Notebook, { Attachments } from "./notebook.jsx";
+import Notebook, { Attachments, FileGrid } from "./notebook.jsx";
 import NotebookSubjects from "./notebook-subjects.jsx";
 import { orderOwners, togglePin, moveOwner } from "./notebook-order.js";
 import RichText from "./rich-text.jsx";
@@ -197,6 +197,16 @@ const STORAGE_KEY = "planner-state-v5";
 const SCREEN_KEY = "planner-screen";
 // Разовое окно об обновлении: помним последнюю версию, о которой рассказали.
 // Ключ свой на каждом устройстве — апдейт и приходит на каждое отдельно.
+const TASK_FOLDS_KEY = "planner-task-folds";
+function readTaskFolds() {
+  try {
+    const raw = localStorage.getItem(TASK_FOLDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
 const INTRO_KEY = "planner-intro-version";
 // Про что именно рассказываем. Привязка к номеру приложения всплывала бы с
 // каждым обновлением, а рассказ один и тот же.
@@ -1590,6 +1600,29 @@ export default function StudyPlanner() {
   // Всё, что карточке дня нужно знать про задания: чьи они, как добавить и как
   // отметить сделанным. Одним объектом, чтобы не тянуть четыре пропса через
   // каждый день недели.
+  // Какие списки заданий под уроками свёрнуты. Это удобство одного устройства,
+  // как раскрытые подсказки, поэтому живёт в localStorage, а не в записях.
+  // Ключ — урок и дата, к которой задано: на следующей неделе у урока новые
+  // задания, и они снова видны.
+  const [taskFolds, setTaskFolds] = useState(readTaskFolds);
+  function setTaskFold(key, folded) {
+    setTaskFolds((prev) => {
+      const today = todayStr();
+      const next = {};
+      Object.keys(prev).forEach((k) => {
+        if (k.slice(-10) >= today) next[k] = prev[k];
+      });
+      if (folded) next[key] = true;
+      else delete next[key];
+      try {
+        localStorage.setItem(TASK_FOLDS_KEY, JSON.stringify(next));
+      } catch (e) {
+        /* приватное окно — свёрнутость просто не запомнится */
+      }
+      return next;
+    });
+  }
+
   const lessonTasks = useMemo(() => {
     // Задание из «Дневника» знает предмет и дату, но не урок: его заводят на
     // день, а не на карточку урока. Раньше в неделе оно поэтому не показывалось
@@ -1620,9 +1653,11 @@ export default function StudyPlanner() {
       add: (entry, text, minutes) =>
         addHomework(nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
       toggle: (id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done }),
+      folded: (lessonId, due) => !!taskFolds[lessonId + "|" + due],
+      setFolded: (lessonId, due, folded) => setTaskFold(lessonId + "|" + due, folded),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homework, lyceumSchedule]);
+  }, [homework, lyceumSchedule, taskFolds]);
 
   const dayEntries = useCallback(
     (day) =>
@@ -2665,9 +2700,13 @@ export default function StudyPlanner() {
           badge={screen === "trainer" ? "ALPHA" : null}
           date={screen === "today" ? todayHeadLabel : null}
         >
-          <div className="ap-only-mobile">
-            <Countdowns next={nextCountdown} main={mainCountdown} />
-          </div>
+          {/* На телефоне отсчёт до события — только на «Сегодня»: на каждой
+              вкладке он вставал над её названием и сдвигал весь экран вниз. */}
+          {screen === "today" && (
+            <div className="ap-only-mobile">
+              <Countdowns next={nextCountdown} main={mainCountdown} />
+            </div>
+          )}
           {/* Самое частое действие дня — на виду, а не в середине экрана. */}
           {screen === "today" && (
             <button type="button" onClick={focusQuickLog} className="ap-desktop-only" style={styles.headAction}>
@@ -3704,6 +3743,7 @@ export default function StudyPlanner() {
                   day={todayKey}
                   label={WEEKDAY_LABELS[todayKey]}
                   today
+                  wide
                   entries={weekEntries(todayKey)}
                   onAdd={(entry) => addScheduleEntry(todayKey, entry)}
                   onUpdate={updateScheduleEntry}
@@ -4867,46 +4907,93 @@ function AddSubjectForm({ onAdd, placeholder }) {
 
 // Задание под уроком. Длинное — в две строки, по нажатию разворачивается:
 // задание на полэкрана раздвигало день так, что соседние уроки уезжали вниз.
-// Отметка «сделано» — своей галочкой, чтобы разворачивание не ставило её.
+// Отметка «сделано» — своей галочкой, чтобы разворачивание её не ставило.
+// Минуты и «ещё» — строкой под текстом: справа от него в узкой колонке они
+// отнимали полширины, и текст шёл столбиком по слову.
 const TASK_FOLD_CHARS = 90;
 function LessonTaskRow({ task: h, due, onToggle }) {
   const [open, setOpen] = useState(false);
   const text = h.text || "";
   const long = text.length > TASK_FOLD_CHARS || text.split("\n").length > 2;
+  const meta = [h.minutes ? h.minutes + " мин" : "", h.date && h.date !== due ? h.date.slice(8) + "." + h.date.slice(5, 7) : ""]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div style={styles.lessonTaskRow}>
-      <input type="checkbox" checked={!!h.done} onChange={onToggle} aria-label={"Сделано: " + text.slice(0, 40)} />
-      <span
-        style={{
-          ...styles.lessonTaskText,
-          ...(long && !open ? styles.lessonTaskFolded : null),
-          textDecoration: h.done ? "line-through" : "none",
-          cursor: long ? "pointer" : "default",
-        }}
-        onClick={long ? () => setOpen(!open) : undefined}
-      >
-        {text}
-      </span>
-      <span style={styles.lessonTaskMeta}>
-        {h.minutes ? h.minutes + " мин" : ""}
-        {h.date && h.date !== due ? " · " + h.date.slice(8) + "." + h.date.slice(5, 7) : ""}
-      </span>
-      {long && (
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          style={styles.lessonTaskMore}
-          aria-expanded={open}
-          aria-label={open ? "Свернуть задание" : "Развернуть задание"}
+      <input type="checkbox" checked={!!h.done} onChange={onToggle} aria-label={"Сделано: " + text.slice(0, 40)} style={styles.lessonTaskCheck} />
+      <div style={styles.lessonTaskBody}>
+        <span
+          style={{
+            ...styles.lessonTaskText,
+            ...(long && !open ? styles.lessonTaskFolded : null),
+            textDecoration: h.done ? "line-through" : "none",
+            cursor: long ? "pointer" : "default",
+          }}
+          onClick={long ? () => setOpen(!open) : undefined}
         >
-          {open ? "свернуть" : "ещё"}
-        </button>
-      )}
+          {text}
+        </span>
+        {(meta || long) && (
+          <span style={styles.lessonTaskMetaRow}>
+            {meta && <span style={styles.lessonTaskMeta}>{meta}</span>}
+            {long && (
+              <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                style={styles.lessonTaskMore}
+                aria-expanded={open}
+                aria-label={open ? "Свернуть задание" : "Развернуть задание"}
+              >
+                {open ? "свернуть" : "ещё"}
+              </button>
+            )}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
-function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
+// Задания урока целиком можно свернуть в одну строку — и короткие тоже:
+// посмотрел, что задано, и убрал, чтобы день читался списком уроков.
+function LessonTasks({ list, due, folded, onFold, onToggle }) {
+  const left = list.filter((h) => !h.done).length;
+  const label = list.length + " " + tasksWord(list.length) + (left < list.length ? " · осталось " + left : "");
+  if (folded) {
+    return (
+      <button
+        type="button"
+        onClick={() => onFold(false)}
+        style={styles.lessonTasksFolded}
+        aria-expanded={false}
+        aria-label={"Показать задания: " + label}
+      >
+        <span aria-hidden="true">▸</span> {label}
+      </button>
+    );
+  }
+  return (
+    <div style={styles.lessonTasks}>
+      {list.map((h) => (
+        <LessonTaskRow key={h.id} task={h} due={due} onToggle={() => onToggle(h.id)} />
+      ))}
+      <button
+        type="button"
+        onClick={() => onFold(true)}
+        style={styles.lessonTasksFold}
+        aria-expanded={true}
+        aria-label="Свернуть задания урока"
+      >
+        <span aria-hidden="true">▴</span> скрыть задания
+      </button>
+    </div>
+  );
+}
+
+// wide — отдельная карточка сегодняшнего дня во всю ширину: уроки в ней
+// строками. В сетке недели сегодняшний день только подсвечен, а уроки —
+// карточками, как у остальных дней: строка в узкой колонке разваливалась.
+function ScheduleDay({ day, label, entries, today, wide, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
   const [examOpen, setExamOpen] = useState(false);
   // С чем открыть форму экзамена: запрос из уведомления живёт только до того,
   // как форма открылась, а значения держим здесь, пока форму не отправят.
@@ -4963,7 +5050,7 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
       {/* Один день — столбцом: сетка раскладывала уроки по строкам и колонкам, и
           порядок дня по ней читался хуже, чем простым списком сверху вниз.
           Строка при этом однострочная, поэтому столбец выходит короткий. */}
-      <div style={today ? styles.dayEntriesList : undefined}>
+      <div style={wide ? styles.dayEntriesList : undefined}>
         {entries.map((e) => {
           const list = tasks ? tasks.forLesson(e) : [];
           return (
@@ -4975,15 +5062,17 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
                 editRequest={editRequest}
                 onEditDone={onEditDone}
                 onRemove={() => onRemove(e.id)}
-                compact={today}
+                compact={wide}
                 onAddTask={tasks ? () => setTaskFor(taskFor === e.id ? null : e.id) : null}
               />
               {list.length > 0 && (
-                <div style={styles.lessonTasks}>
-                  {list.map((h) => (
-                    <LessonTaskRow key={h.id} task={h} due={due} onToggle={() => tasks.toggle(h.id)} />
-                  ))}
-                </div>
+                <LessonTasks
+                  list={list}
+                  due={due}
+                  folded={tasks.folded(e.id, due)}
+                  onFold={(v) => tasks.setFolded(e.id, due, v)}
+                  onToggle={(id) => tasks.toggle(id)}
+                />
               )}
               {taskFor === e.id && (
                 <div style={styles.lessonTaskForm}>
@@ -5294,12 +5383,25 @@ function ScheduleEntryRow({ entry, onUpdate, onMoveDate, editRequest, onEditDone
             <span style={styles.listRight}>
               <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
               {onAddTask && !isExam && (
-                <button onClick={onAddTask} style={styles.rowEditInline}>
-                  + задание
+                <button
+                  type="button"
+                  onClick={onAddTask}
+                  className="ap-row"
+                  style={styles.rowTaskBtn}
+                  title="Добавить задание к этому уроку"
+                >
+                  <span aria-hidden="true" style={styles.rowTaskPlus}>+</span> задание
                 </button>
               )}
-              <button onClick={() => setEditing(true)} style={styles.rowEditInline}>
-                изменить
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="ap-row"
+                style={styles.rowIconBtn}
+                aria-label={"Изменить: " + title}
+                title="Изменить"
+              >
+                <PencilIcon />
               </button>
               {foldBtn}
             </span>
@@ -5560,16 +5662,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
       </div>
       {(hw.attachments || []).length > 0 && (
         <div style={styles.attachmentsRow}>
-          {hw.attachments.map((a, i) => (
-            <span key={a.path || a.key || i} style={styles.attachmentChip}>
-              <button onClick={() => onOpenAttachment(a)} style={styles.attachmentLink}>
-                {a.name}
-              </button>
-              <button onClick={() => onRemoveAttachment(a)} style={styles.removeBtn}>
-                ×
-              </button>
-            </span>
-          ))}
+          <FileGrid files={hw.attachments} onDownload={onOpenAttachment} onRemove={onRemoveAttachment} />
         </div>
       )}
       <div style={styles.hwReminderRow}>
@@ -6377,14 +6470,25 @@ const styles = {
   // Задания живут под своим уроком: «к какому уроку» — это первое, что
   // спрашивают, а раньше они лежали отдельным списком и связи не было видно.
   lessonTasks: { display: "flex", flexDirection: "column", gap: 3, margin: "3px 0 2px 14px" },
-  lessonTaskRow: { display: "flex", alignItems: "baseline", gap: 7, fontSize: 12.5, flexWrap: "wrap" },
+  lessonTaskRow: { display: "flex", alignItems: "flex-start", gap: 7, fontSize: 12.5 },
+  lessonTaskCheck: { marginTop: 2, flexShrink: 0 },
+  lessonTaskBody: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 },
+  lessonTaskMetaRow: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
+  lessonTasksFold: {
+    alignSelf: "flex-start", border: "none", background: "none", padding: "1px 0", fontSize: 11.5,
+    color: "var(--mute)", cursor: "pointer",
+  },
+  lessonTasksFolded: {
+    display: "block", margin: "3px 0 2px 14px", border: "none", background: "none", padding: "1px 0",
+    fontSize: 12, color: "var(--ink3)", cursor: "pointer", textAlign: "left",
+  },
   // Длинное задание — в две строки, пока его не развернут.
   lessonTaskFolded: { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
   lessonTaskMore: {
     border: "none", background: "none", padding: 0, fontSize: 11.5, color: "var(--accent)",
     fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
   },
-  lessonTaskText: { flex: 1, minWidth: 0, color: "var(--ink2)", overflowWrap: "anywhere" },
+  lessonTaskText: { color: "var(--ink2)", overflowWrap: "break-word" },
   lessonTaskMeta: { fontSize: 11.5, color: "var(--mute)", whiteSpace: "nowrap" },
   lessonTaskForm: { display: "flex", alignItems: "center", gap: 6, margin: "4px 0 6px 14px", flexWrap: "wrap" },
   lessonTaskInput: {
@@ -6448,15 +6552,6 @@ const styles = {
     display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0,
     border: "1px solid var(--line)", borderRadius: 8, background: "transparent",
     color: "var(--ink3)", cursor: "pointer",
-  },
-  rowEditInline: {
-    border: "none",
-    background: "none",
-    padding: 0,
-    fontSize: 11.5,
-    color: "var(--ink3)",
-    textDecoration: "underline",
-    whiteSpace: "nowrap",
   },
   rowEdit: {
     marginLeft: "auto",
@@ -6654,17 +6749,7 @@ const styles = {
   homeworkInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
   homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12, background: "var(--panel2)" },
   attachBtn: { background: "none", border: "none", fontSize: 13, padding: "0 2px" },
-  attachmentsRow: { display: "flex", flexWrap: "wrap", gap: 6, marginLeft: 24, marginBottom: 4 },
-  attachmentChip: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 2,
-    background: "var(--neutralBg)",
-    borderRadius: 10,
-    padding: "2px 4px 2px 8px",
-    fontSize: 11.5,
-  },
-  attachmentLink: { background: "none", border: "none", color: "var(--blue)", textDecoration: "underline", fontSize: 11.5, padding: 0 },
+  attachmentsRow: { marginLeft: 24, marginBottom: 4, minWidth: 0 },
   // Строка напоминания у домашнего задания. Раньше звалась reminderRow — так же,
   // как строка напоминания о занятиях на «Сегодня», и в одном объекте
   // выигрывала она: у той карточки был чужой отступ слева.

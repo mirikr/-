@@ -67,14 +67,14 @@ await refocus();
 await page.keyboard.type(". Налоги");
 await refocus();
 await page.waitForTimeout(600);
-want("файл появился в ветке", (await page.getByRole("button", { name: "схема.txt" }).count()) === 1);
+want("файл появился в ветке", (await page.getByRole("button", { name: "Скачать: схема.txt" }).count()) === 1);
 want("конспект не откатился", /население\. Налоги/.test(await editor.innerText()), await editor.innerText());
 
 // 3. Второй файл сразу за первым — первый не вытесняется.
 await page.locator('input[type="file"]').first().setInputFiles({ name: "таблица.txt", mimeType: "text/plain", buffer: Buffer.from("формы правления") });
 await refocus();
 await page.waitForTimeout(600);
-want("оба файла на месте", (await page.getByRole("button", { name: /^(схема|таблица)\.txt$/ }).count()) === 2);
+want("оба файла на месте", (await page.getByRole("button", { name: /^Скачать: (схема|таблица)\.txt$/ }).count()) === 2);
 
 // 4. После сохранения и перезагрузки всё осталось.
 await page.waitForTimeout(1500);
@@ -200,6 +200,67 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   want("пальцем: предмет переехал", after.split(",").indexOf("Химия") < before.split(",").indexOf("Химия"), before + " → " + after);
   await p.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/order-phone.png" : "/dev/null" }).catch(() => {});
   want("на телефоне без ошибок", errs.length === 0, errs[0] || "");
+  await c.close();
+}
+
+{
+  // 7. Телефон: длинное имя файла не вылезает за экран, кнопки раскрытия —
+  // с палец, отсчёт до события — только на «Сегодня».
+  const iso = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const longName = "Очень-длинное-название-файла-конспекта-по-праву-версия-финальная-2.pdf";
+  const st = {
+    events: [{ id: "e1", name: "Региональный этап", date: iso(3), priority: 3 }],
+    lyceumSchedule: [{ id: "l1", day: "mon", start: "09:00", end: "09:45", subjectName: "Право" }],
+    homework: [{ id: "h1", date: iso(0), subjectName: "Право", text: "Конспект", minutes: 30, done: false, lessonId: "", attachments: [{ name: longName, size: 234567, key: "hwfile-y" }] }],
+    notebooks: { "lyceum:Право": [{ id: "b1", title: "Теория государства", branches: [{ id: "r1", title: "Признаки", html: "текст", files: [{ name: longName, size: 234567, key: "hwfile-x" }] }] }] },
+  };
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const p = await c.newPage();
+  p.setDefaultTimeout(5000);
+  const errs = [];
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.addInitScript((st) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "notes");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, st);
+  await p.goto(URL0);
+  await p.waitForTimeout(1800);
+  const countdownShown = () => p.getByText("до события").evaluateAll((els) => els.filter((e) => e.offsetParent).length);
+  want("телефон: на «Тетрадях» нет отсчёта до события", (await countdownShown()) === 0);
+  const blockBtn = p.getByRole("button", { name: "Раскрыть блок: Теория государства" });
+  const bb = await blockBtn.boundingBox();
+  want("телефон: кнопка раскрытия блока — с палец", bb && bb.width >= 32 && bb.height >= 32, bb ? Math.round(bb.width) + "×" + Math.round(bb.height) : "нет");
+  await blockBtn.tap();
+  await p.waitForTimeout(300);
+  const branchBtn = p.getByRole("button", { name: "Раскрыть ветку: Признаки" });
+  const rb = await branchBtn.boundingBox();
+  want("телефон: кнопка раскрытия ветки — с палец", rb && rb.width >= 32 && rb.height >= 32, rb ? Math.round(rb.width) + "×" + Math.round(rb.height) : "нет");
+  await branchBtn.tap();
+  await p.waitForTimeout(400);
+  const wide = await p.evaluate(() => document.documentElement.scrollWidth);
+  want("телефон: страница не шире экрана", wide <= 390, wide + " px");
+  const name = p.locator("span", { hasText: longName }).first();
+  const short = await name.boundingBox();
+  want("телефон: имя файла в одну строку", short && short.height < 22 && short.x + short.width <= 390, short ? Math.round(short.height) + " px" : "нет");
+  await name.tap();
+  await p.waitForTimeout(200);
+  const full = await name.boundingBox();
+  want("телефон: по нажатию имя разворачивается", full && full.height > short.height + 10 && full.x + full.width <= 390, full ? Math.round(full.height) + " px" : "нет");
+  want("телефон: скачивание — отдельной кнопкой", (await p.getByRole("button", { name: "Скачать: " + longName }).count()) === 1);
+  await p.evaluate(() => localStorage.setItem("planner-screen", "journal"));
+  await p.reload();
+  await p.waitForTimeout(1800);
+  const wideJ = await p.evaluate(() => document.documentElement.scrollWidth);
+  want("телефон: файл у домашнего задания не шире экрана", wideJ <= 390 && (await p.getByRole("button", { name: "Скачать: " + longName }).count()) >= 1, wideJ + " px");
+  await p.evaluate(() => localStorage.setItem("planner-screen", "today"));
+  await p.reload();
+  await p.waitForTimeout(1800);
+  want("телефон: на «Сегодня» отсчёт до события есть", (await countdownShown()) >= 1);
+  want("телефон: ошибок нет", errs.length === 0, errs[0] || "");
   await c.close();
 }
 
