@@ -22,6 +22,7 @@ await new Promise((d) => server.listen(0, "127.0.0.1", d));
 const URL0 = `http://127.0.0.1:${server.address().port}/-/`;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
 let bad = 0;
+const SHOT_DIR = process.env.SHOT_DIR || "";
 const want = (name, ok, note = "") => { if (!ok) bad += 1; console.log((ok ? "✓ " : "✗ ") + name + (note ? " — " + note : "")); };
 
 const STATE = { journal: [{ id: "j1", date: new Date().toISOString().slice(0, 10), subject: "Право", hours: 1, note: "Конституция" }], events: [{ id: "e1", name: "Региональный этап", date: new Date(Date.now() + 20 * 864e5).toISOString().slice(0, 10), priority: 3 }] };
@@ -88,8 +89,12 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   for (const k of keys) {
     await page.evaluate((k) => { localStorage.setItem("planner-screen", k); }, k);
     await page.reload(); await page.waitForTimeout(900);
+    // Экран открылся, если у него есть заголовок и хоть какое-то содержимое.
+    // Считать только объём текста нельзя: пустые «Тетради» на телефоне без
+    // отсчёта до события — меньше 150 знаков, хотя открыты целиком.
     const t = (await page.locator("#root").innerText()).length;
-    if (t > 150) opened += 1;
+    const head = await page.locator("main h1").count();
+    if (head === 1 && t > 100) opened += 1;
   }
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   want(`${theme}/${vp.width}px: экраны открываются`, opened === keys.length, opened + " из " + keys.length);
@@ -393,6 +398,89 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   want("по нажатию разворачивается", open && open.height > box.height + 10, open ? Math.round(open.height) + " px" : "нет");
   want("задания: ошибок нет", errors.length === 0, errors[0] || "");
   await ctx.close();
+}
+
+// 8. Сегодняшний день. В сетке недели он только подсвечен, а уроки в нём —
+// карточками, как в соседних днях (раньше — строками старого вида, которые в
+// узкой колонке разваливались). Развёрнутое длинное задание занимает всю
+// ширину, а не столбик по слову. Задания урока — и короткие — сворачиваются в
+// строку, и это видно в обеих карточках дня и после перезагрузки.
+{
+  const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const now = new Date();
+  const day = DOW[now.getDay()] === "sun" ? null : DOW[now.getDay()];
+  if (day) {
+    const iso = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    const lesson = (id, start, subjectName) => ({ id, day, kind: "lesson", subjectName, level: "base", priority: 2, start, end: start, room: "каб. 401", teacher: "Саркисян О.А.", place: "", url: "", date: "" });
+    const long = "1. Теория по уроку 1 и 2! Учим! Отвечаем на уроке и отрабатываем этот материал заданиями 2 части. 2. Тесты выполняем в домашних условиях, планы учим! 3. Задания к уроку 1 также выполняйте!";
+    const state = {
+      lyceumSchedule: [lesson("t1", "09:25", "Математика"), lesson("t2", "10:20", "Всеобщая география"), lesson("t3", "11:20", "Обществознание")],
+      homework: [
+        { id: "hw-s", date: iso, subjectName: "Всеобщая география", text: "Открыть сайт ООН и выписать все страны с их столицами (можно выучить)", minutes: 60, done: false, attachments: [], lessonId: "t2" },
+        { id: "hw-l", date: iso, subjectName: "Обществознание", text: long, minutes: 60, done: false, attachments: [], lessonId: "t3" },
+      ],
+      openSections: { scheduleWeek: true },
+    };
+    for (const [w, h, tag] of [[1280, 900, "desktop"], [900, 900, "narrow"], [390, 844, "phone"]]) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+      const page = await ctx.newPage();
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.addInitScript((st) => {
+        if (sessionStorage.getItem("seeded")) return;
+        sessionStorage.setItem("seeded", "1");
+        localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+        localStorage.setItem("planner-design-intro", "1.0.0");
+        localStorage.setItem("planner-screen", "school");
+        localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+      }, state);
+      await page.goto(URL0);
+      await page.waitForTimeout(2000);
+      want(`${tag}: у уроков нет старой ссылки «изменить»`, (await page.getByRole("button", { name: "изменить", exact: true }).count()) === 0);
+      want(`${tag}: у каждого урока карандаш — в обеих карточках дня`, (await page.getByRole("button", { name: "Изменить: Математика" }).count()) === 2);
+      // В сетке недели уроки сегодняшнего дня — карточками: время над названием.
+      const stacked = await page.evaluate(() => {
+        const names = [...document.querySelectorAll("div")].filter((d) => d.innerText === "Математика" && d.offsetParent);
+        return names.length;
+      });
+      want(`${tag}: в сетке недели сегодняшний урок — карточкой`, stacked >= 1, "карточек: " + stacked);
+      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/today-${tag}.png`, fullPage: true });
+
+      // Длинное задание во всю ширину: развернули — ширина текста близка к ширине дня.
+      const more = page.getByRole("button", { name: "Развернуть задание" });
+      await more.last().click();
+      await page.waitForTimeout(300);
+      const widths = await page.evaluate(() => {
+        const span = [...document.querySelectorAll("span")].filter((e) => e.offsetParent && e.innerText.startsWith("1. Теория по уроку")).pop();
+        const card = span && span.closest(".ap-card");
+        return span && card ? [span.getBoundingClientRect().width, card.getBoundingClientRect().width] : null;
+      });
+      want(`${tag}: развёрнутое задание — во всю ширину`, widths && widths[0] > widths[1] * 0.6, widths ? widths.map(Math.round).join(" из ") : "нет");
+      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/today-open-${tag}.png`, fullPage: true });
+
+      // Короткое задание сворачивается в строку — в обеих карточках сразу.
+      // Считаем только задания под уроками: тот же текст есть и в «Скоро сдавать».
+      const shortShown = () => page.locator("span", { hasText: "Открыть сайт ООН" }).evaluateAll((els) => els.filter((e) => {
+        const box = e.parentElement && e.parentElement.previousElementSibling;
+        return e.offsetParent && box && box.type === "checkbox";
+      }).length);
+      want(`${tag}: короткое задание видно в обеих карточках`, (await shortShown()) === 2);
+      await page.getByRole("button", { name: "Свернуть задания урока" }).first().click();
+      await page.waitForTimeout(300);
+      want(`${tag}: свернулось — в обеих карточках`, (await shortShown()) === 0 && (await page.getByRole("button", { name: /Показать задания: 1 задание/ }).count()) === 2);
+      await page.reload();
+      await page.waitForTimeout(1800);
+      want(`${tag}: свёрнуто и после перезагрузки`, (await shortShown()) === 0);
+      await page.getByRole("button", { name: /Показать задания: 1 задание/ }).first().click();
+      await page.waitForTimeout(300);
+      want(`${tag}: разворачивается обратно`, (await shortShown()) === 2);
+      want(`${tag}: ошибок нет`, errors.length === 0, errors[0] || "");
+      await ctx.close();
+    }
+  } else {
+    console.log("· сегодня воскресенье — проверка сегодняшнего дня пропущена");
+  }
 }
 
 await browser.close(); server.close();
