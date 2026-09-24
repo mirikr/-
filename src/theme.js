@@ -109,6 +109,17 @@ html, body { background: var(--bg); color: var(--ink); }
   border: 2px solid var(--panel); cursor: pointer;
 }
 .ap-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--corridorLine); }
+/* Ползунок в цвете предмета («Распределение»). Раньше там стоял системный
+   ползунок с accent-color, и дорожку Chrome красил сам — «для контраста»: под
+   светлым цветом предмета тёмной, под тёмным — белой. В ночной теме у своих
+   предметов с тёмными цветами дорожки горели белым. Теперь дорожка у всех
+   одна — цвета линий темы, а пройденная часть и бегунок — цвета предмета. */
+.ap-range-fill::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--fill) var(--pct), var(--line) var(--pct));
+}
+.ap-range-fill::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--fill); }
+.ap-range-fill::-webkit-slider-thumb { background: var(--fill); }
+.ap-range-fill::-moz-range-thumb { background: var(--fill); }
 
 /* Условие задания из банка ФИПИ: у них вёрстка на таблицах, и ломать её нельзя —
    в информатике таблица и есть половина задания, а в обществознании два столбца

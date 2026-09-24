@@ -98,6 +98,28 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 3б. Ползунки «Распределения» — наши, а не системные: системному Chrome красит
+// дорожку сам «для контраста», и у своих предметов с тёмным цветом она в ночной
+// теме горела белым.
+{
+  const { ctx, page, errors } = await fresh({ width: 1280, height: 900 }, {
+    "planner-design-intro": "1.0.0", "planner-theme-mode": "night", "planner-screen": "budget",
+  });
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("planner:planner-state-v5"));
+    const v = JSON.parse(raw.value);
+    v.customSubjects = [{ id: "c1", name: "История", color: "#7A5233", topics: [] }];
+    raw.value = JSON.stringify(v);
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify(raw));
+  });
+  await page.reload(); await page.waitForTimeout(1500);
+  const ranges = await page.evaluate(() => [...document.querySelectorAll('main input[type="range"]')].map((r) => r.className));
+  want("в «Распределении» есть ползунки", ranges.length > 0, "их " + ranges.length);
+  want("все ползунки — свои, не системные", ranges.every((c) => /\bap-range\b/.test(c)), ranges.join(" | "));
+  want("распределение: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 4. Карточки уроков в расписании: кнопки не вылезают за край, а важность —
 // свойство предмета и меняется во всех его уроках сразу, кроме экзаменов.
 {
@@ -205,6 +227,124 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await page.waitForTimeout(1700);
   want("Esc отменяет правку", (await stored()) === "2027-10-01", String(await stored()));
   want("события: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
+// 6. Экзамены в неделе «Лицея». Дальний (до даты больше недели) — полупрозрачно
+// в самом низу своего дня, его можно свернуть; ближний — наверху. Если запись
+// встала не туда, где её заводили или правили, — уведомление, и крестик в нём
+// возвращает к правке.
+{
+  const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const LABEL = { mon: "Пн", tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт", sat: "Сб", sun: "Вс" };
+  const at = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
+  const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  // Будний день через 3 недели и через 3 дня — чтобы не упереться в воскресенье.
+  let farN = 21; while (DOW[at(farN).getDay()] === "sun") farN += 1;
+  let nearN = 3; while (DOW[at(nearN).getDay()] === "sun" || DOW[at(nearN).getDay()] === DOW[at(farN).getDay()]) nearN += 1;
+  const farDay = DOW[at(farN).getDay()];
+  const nearDay = DOW[at(nearN).getDay()];
+  const exam = (id, name, n, kind) => ({ id, day: DOW[at(n).getDay()], kind: "exam", examKind: kind, subjectName: name, level: "base", priority: 3, start: "10:00", end: "13:00", room: "", teacher: "", place: "", url: "", date: ymd(at(n)) });
+  const schedule = [
+    { id: "l1", day: farDay, kind: "lesson", subjectName: "Алгебра", level: "base", priority: 2, start: "08:30", end: "09:10", room: "каб. 402", teacher: "", place: "", url: "", date: "" },
+    exam("far1", "Олимпиада по праву", farN, "olympiad"),
+    exam("near1", "Пробник по обществу", nearN, "exam"),
+  ];
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript((sch) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "school");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify({ lyceumSchedule: sch }), updatedAt: Date.now() - 1000 }));
+  }, schedule);
+  await page.goto(URL0);
+  await page.waitForTimeout(2000);
+  // «Вся неделя» разворачивается и запоминает это — жмём, только если карточек дней не видно.
+  const openWeek = async () => {
+    const visibleDays = await page.evaluate(() => [...document.querySelectorAll(".ap-card")]
+      .filter((c) => c.offsetParent && /^(Пн|Вт|Ср|Пт|Сб)(\s|$)/.test((c.firstElementChild || {}).innerText || "")).length);
+    if (visibleDays === 0) { await page.getByRole("button", { name: /Вся неделя/ }).first().click(); await page.waitForTimeout(600); }
+  };
+  await openWeek();
+  const stored = () => page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).lyceumSchedule);
+
+  // Где стоит запись: в каком дне (по подписи дня) и какая по счёту среди записей дня.
+  const placeOf = (name) => page.evaluate((name) => {
+    const out = [];
+    document.querySelectorAll(".ap-card").forEach((card) => {
+      // У сегодняшнего дня подпись склеивается с «сегодня»: «ЧтСЕГОДНЯ».
+      const head = ((card.firstElementChild ? card.firstElementChild.innerText.trim() : "").match(/^(Пн|Вт|Ср|Чт|Пт|Сб|Вс)/) || [])[1];
+      if (!head || !card.offsetParent) return;
+      // Запись — элемент с цветом полосы сбоку: он задан у каждой записи дня.
+      const rows = [...card.querySelectorAll("[style*='border-left-color']")].filter((r) => r.offsetParent);
+      rows.forEach((r, i) => {
+        if (r.innerText.includes(name)) out.push({ day: head, index: i, count: rows.length, opacity: getComputedStyle(r).opacity });
+      });
+    });
+    return out;
+  }, name);
+
+  const far = await placeOf("Олимпиада по праву");
+  want("дальняя олимпиада видна в неделе", far.length > 0, JSON.stringify(far));
+  const farHere = far.find((p) => p.day === LABEL[farDay]) || far[0] || {};
+  want("и стоит в своём дне", farHere.day === LABEL[farDay], farHere.day + " вместо " + LABEL[farDay]);
+  want("в самом низу дня, под уроками", farHere.index === farHere.count - 1 && farHere.count > 1, JSON.stringify(farHere));
+  want("полупрозрачно", Number(farHere.opacity) < 1, "opacity " + farHere.opacity);
+  const near = (await placeOf("Пробник по обществу")).find((p) => p.day === LABEL[nearDay]) || {};
+  want("ближний экзамен — наверху дня и не прозрачный", near.index === 0 && Number(near.opacity) === 1, JSON.stringify(near));
+
+  // Свернуть дальнюю олимпиаду — и свёрнутость переживает перезагрузку.
+  await page.getByRole("button", { name: /^Свернуть до недели: Олимпиада по праву/ }).first().click();
+  await page.waitForTimeout(1700);
+  want("свёрнутая — одна строка с кнопкой «развернуть»", (await page.getByRole("button", { name: /^Развернуть: Олимпиада по праву/ }).count()) > 0);
+  want("свёрнутость сохранилась в записи", (await stored()).find((e) => e.id === "far1").folded === true);
+  await page.reload(); await page.waitForTimeout(1800); await openWeek();
+  want("после перезагрузки осталась свёрнутой", (await page.getByRole("button", { name: /^Развернуть: Олимпиада по праву/ }).count()) > 0);
+  await page.getByRole("button", { name: /^Развернуть: Олимпиада по праву/ }).first().click();
+  await page.waitForTimeout(600);
+  want("и разворачивается обратно", (await page.getByRole("button", { name: /^Свернуть до недели: Олимпиада по праву/ }).count()) > 0);
+
+  // Добавить олимпиаду в день ближнего экзамена, а дата — у дальнего: запись уезжает.
+  const toastText = () => page.locator(".undo-toast").allInnerTexts();
+  const dayCard = (label) => page.locator(".ap-card:visible").filter({ has: page.locator(`xpath=./*[1][starts-with(normalize-space(.), '${label}')]`) }).first();
+  const card = dayCard(LABEL[nearDay]);
+  await card.getByRole("button", { name: "+ Экзамен" }).click();
+  await page.waitForTimeout(400);
+  await card.getByPlaceholder("Например: региональный этап по праву").fill("Пробный тест по истории");
+  await card.locator('input[type="date"]').first().fill(ymd(at(farN)));
+  await card.getByRole("button", { name: /Добавить$/ }).first().click();
+  await page.waitForTimeout(700);
+  const t1 = (await toastText()).join(" | ");
+  want("о переезде добавленного экзамена — уведомление", /Экзамен «Пробный тест по истории» добавлен на/.test(t1), t1.slice(0, 160));
+  want("в уведомлении сказано, что внизу и наверх встанет за неделю", /внизу дня, наверх встанет за неделю/.test(t1));
+  await page.getByRole("button", { name: "Вернуться к правке" }).first().click();
+  await page.waitForTimeout(800);
+  want("крестик убирает запись", !(await stored()).some((e) => e.subjectName === "Пробный тест по истории"));
+  const refill = await card.getByPlaceholder("Например: региональный этап по праву").inputValue().catch(() => "");
+  want("и снова открывает форму с тем, что было введено", refill === "Пробный тест по истории", refill);
+
+  // Правка даты ближнего экзамена: переезжает на день дальнего.
+  await page.getByRole("button", { name: /^Изменить: Пробник по обществу/ }).first().click();
+  await page.waitForTimeout(400);
+  const dateField = page.locator('input[type="date"]').filter({ hasNot: page.locator("xpath=self::*[not(@value)]") });
+  const editDate = page.locator(`input[type="date"][value="${ymd(at(nearN))}"]`).first();
+  await editDate.fill(ymd(at(farN)));
+  await page.locator("h1").first().click();
+  await page.waitForTimeout(900);
+  const t2 = (await toastText()).join(" | ");
+  want("о переезде при правке даты — уведомление", /Экзамен «Пробник по обществу» перенесён на/.test(t2), t2.slice(0, 160));
+  want("дата в записи сменилась", (await stored()).find((e) => e.id === "near1").date === ymd(at(farN)));
+  await page.getByRole("button", { name: "Вернуться к правке" }).last().click();
+  await page.waitForTimeout(1700);
+  want("крестик возвращает прежнюю дату", (await stored()).find((e) => e.id === "near1").date === ymd(at(nearN)),
+    (await stored()).find((e) => e.id === "near1").date);
+  want("и открывает правку этого экзамена", (await page.locator(`input[type="date"][value="${ymd(at(nearN))}"]`).count()) > 0);
+  want("экзамены: ошибок нет", errors.length === 0, errors[0] || "");
   await ctx.close();
 }
 

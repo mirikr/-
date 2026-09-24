@@ -261,6 +261,7 @@ function examKindLabel(value) {
 // За сколько дней до даты запись возвращается в недельную сетку. Ровно неделя
 // впереди — ещё рано: сетка про «эту неделю», а не про следующую.
 const EXAM_SCHEDULE_DAYS = 7;
+const EXAM_TOAST = { hint: "Нажмите крестик — вернётесь к правке.", cancelTitle: "Вернуться к правке", confirmTitle: "Хорошо" };
 
 const SCHEDULE_EVENT_PREFIX = "sch-ev:";
 
@@ -297,22 +298,47 @@ function examVisibleInSchedule(entry) {
   return left >= 0 && left < EXAM_SCHEDULE_DAYS;
 }
 
-// Запись, до которой больше недели, тут же исчезает из сетки — без объяснения
-// это выглядит как потерянная работа.
-function examAddedNote(entry) {
+// Где экзамен стоит в неделе расписания. «near» — до даты меньше недели: запись
+// наверху своего дня, как урок. «far» — дальше: полупрозрачно внизу дня, её
+// можно свернуть. «past» — прошла, в неделе не видна. «nodate» — дата не задана.
+function examPlace(entry) {
+  if (!entry.date) return "nodate";
+  const left = daysUntilDate(entry.date);
+  if (left < 0) return "past";
+  return left < EXAM_SCHEDULE_DAYS ? "near" : "far";
+}
+
+// «на четверг», «на среду»: день недели в винительном падеже.
+const WEEKDAY_ON = { mon: "понедельник", tue: "вторник", wed: "среду", thu: "четверг", fri: "пятницу", sat: "субботу", sun: "воскресенье" };
+
+// Экзамен встаёт на день недели по своей дате — не туда, где его заводили или
+// правили. Без объяснения это выглядит как потерянная запись, поэтому о
+// переезде говорит уведомление.
+function examMovedNote(entry, added) {
   const olympiad = entry.examKind === "olympiad";
   const what = olympiad ? "Олимпиада" : "Экзамен";
-  const added = olympiad ? "добавлена" : "добавлен";
-  if (!entry.date) {
-    return `${what} ${added}. Впишите дату — запись сама встанет на нужный день недели.`;
+  const verb = added ? (olympiad ? "добавлена" : "добавлен") : olympiad ? "перенесена" : "перенесён";
+  const name = entry.subjectName && entry.subjectName.trim() ? ` «${entry.subjectName.trim()}»` : "";
+  if (!entry.date) return `${what}${name} ${verb} без даты — впишите дату, и запись встанет на свой день недели`;
+  const day = weekdayKeyFromDate(entry.date);
+  const when = `${WEEKDAY_ON[day] || ""}, ${formatEventDate(entry.date)}`;
+  const place = examPlace(entry);
+  if (place === "past") return `${what}${name} ${verb} на ${when}: эта дата уже прошла, в расписании запись не видна`;
+  if (place === "far") {
+    return `${what}${name} ${verb} на ${when}: пока полупрозрачно внизу дня, наверх встанет за неделю до даты`;
   }
-  const when = `${formatEventDate(entry.date)} (${WEEKDAY_LABELS[weekdayKeyFromDate(entry.date)]})`;
-  const left = daysUntilDate(entry.date);
-  if (left < 0) return `${what} ${added}: ${when} — эта дата уже прошла.`;
-  if (left >= EXAM_SCHEDULE_DAYS) {
-    return `${what} ${added}: ${when}. В расписании появится за неделю до даты, а отсчёт до неё уже идёт в событиях наверху.`;
-  }
-  return `${what} ${added}: ${when}.`;
+  return `${what}${name} ${verb} на ${when}`;
+}
+
+// Порядок в дне расписания: ближние экзамены наверху, уроки по времени, дальние
+// экзамены — в самом низу, по дате.
+function byWeekOrder(a, b) {
+  const rank = (e) => (e.kind !== "exam" ? 1 : examPlace(e) === "far" ? 2 : 0);
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return String(a.date).localeCompare(String(b.date));
+  return String(a.start).localeCompare(String(b.start));
 }
 
 function eventIcsItem(event) {
@@ -1080,9 +1106,11 @@ export default function StudyPlanner() {
     });
   }
 
-  const showUndo = useCallback((message, restore, finalize) => {
+  // opts — для уведомлений не об удалении: своя подсказка под текстом и подписи
+  // кнопок. Крестик всегда «вернуть как было», галочка — «хорошо».
+  const showUndo = useCallback((message, restore, finalize, opts) => {
     const id = "undo-" + Date.now() + "-" + Math.round(Math.random() * 10000);
-    setUndoQueue((prev) => [...prev, { id, message, restore, finalize }]);
+    setUndoQueue((prev) => [...prev, { id, message, restore, finalize, opts: opts || null }]);
     undoTimers.current[id] = setTimeout(() => {
       setUndoQueue((prev) => {
         const item = prev.find((u) => u.id === id);
@@ -1555,6 +1583,17 @@ export default function StudyPlanner() {
         .sort(byExamFirst),
     [lyceumSchedule]
   );
+  // Неделя в «Лицее» показывает и дальние экзамены — полупрозрачно, внизу дня.
+  // «Сегодня» и «сейчас идут» по-прежнему берут dayEntries: экзамен через месяц
+  // по четвергам — не сегодняшний.
+  const weekEntries = useCallback(
+    (day) => lyceumSchedule.filter((e) => e.day === day && (e.kind !== "exam" || examPlace(e) !== "past")).sort(byWeekOrder),
+    [lyceumSchedule]
+  );
+  // После крестика в уведомлении о переносе: какую форму добавления открыть
+  // снова (с тем, что было введено) и какую запись вернуть к правке.
+  const [examReopen, setExamReopen] = useState(null);
+  const [examEdit, setExamEdit] = useState(null);
 
   const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
@@ -1762,7 +1801,7 @@ export default function StudyPlanner() {
     const was = new Map(mine.map((e) => [key(e), e]));
     const next = fresh.map((e) => {
       const old = was.get(key(e));
-      return old ? { ...e, priority: old.priority, level: old.level } : e;
+      return old ? { ...e, priority: old.priority, level: old.level, ...(old.folded ? { folded: true } : null) } : e;
     });
     // Задание привязано к уроку по идентификатору: если урок пересобрался под
     // новым, привязку надо перенести, иначе задание повиснет в пустоте.
@@ -1817,6 +1856,40 @@ export default function StudyPlanner() {
         date: entry.date || "",
       },
     ]);
+    if (isExam) {
+      const placed = { ...entry, day: finalDay, date: entry.date || "" };
+      // Встал ровно туда, где добавляли, и наверх дня — рассказывать не о чем.
+      if (finalDay !== day || examPlace(placed) !== "near") {
+        showUndo(
+          examMovedNote(placed, true),
+          () => {
+            setLyceumSchedule((prev) => prev.filter((e) => e.id !== id));
+            setExamReopen({ day, values: entry, at: Date.now() });
+          },
+          null,
+          EXAM_TOAST
+        );
+      }
+    }
+  }
+
+  // Новая дата экзамена из его карточки в расписании. Экзамен сам переезжает на
+  // день недели по дате — и уезжает из-под глаз, поэтому о переезде говорит
+  // уведомление, а крестик в нём возвращает прежнюю дату и открывает правку.
+  function moveExamDate(entry, date) {
+    const before = { date: entry.date || "", day: entry.day };
+    updateScheduleEntry(entry.id, { date });
+    const moved = { ...entry, date, day: weekdayKeyFromDate(date) || entry.day };
+    if (moved.day === entry.day && examPlace(moved) === examPlace(entry)) return;
+    showUndo(
+      examMovedNote(moved, false),
+      () => {
+        updateScheduleEntry(entry.id, before);
+        setExamEdit({ id: entry.id, at: Date.now() });
+      },
+      null,
+      EXAM_TOAST
+    );
   }
 
   function updateScheduleEntry(id, patch) {
@@ -3191,7 +3264,14 @@ export default function StudyPlanner() {
                         max="20"
                         value={budget.alloc[s.id]}
                         onChange={(e) => setAlloc(s.id, e.target.value)}
-                        style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
+                        className="ap-range ap-range-fill"
+                        aria-label={"Часов в неделю: " + s.name}
+                        style={{
+                          "--fill": s.color,
+                          "--pct": Math.min(100, (Number(budget.alloc[s.id]) || 0) / 20 * 100) + "%",
+                          flex: 1,
+                          minWidth: 0,
+                        }}
                       />
                       <input
                         type="number"
@@ -3575,11 +3655,16 @@ export default function StudyPlanner() {
                   day={todayKey}
                   label={WEEKDAY_LABELS[todayKey]}
                   today
-                  entries={dayEntries(todayKey)}
+                  entries={weekEntries(todayKey)}
                   onAdd={(entry) => addScheduleEntry(todayKey, entry)}
                   onUpdate={updateScheduleEntry}
                   onRemove={removeScheduleEntry}
                   tasks={lessonTasks}
+                  onMoveDate={moveExamDate}
+                  reopen={examReopen && examReopen.day === todayKey ? examReopen : null}
+                  onReopenDone={() => setExamReopen(null)}
+                  onEditDone={() => setExamEdit(null)}
+                  editRequest={examEdit}
                 />
               </div>
             ) : (
@@ -3602,11 +3687,16 @@ export default function StudyPlanner() {
                     day={day}
                     label={WEEKDAY_LABELS[day]}
                     today={day === todayKey}
-                    entries={dayEntries(day)}
+                    entries={weekEntries(day)}
                     onAdd={(entry) => addScheduleEntry(day, entry)}
                     onUpdate={updateScheduleEntry}
                     onRemove={removeScheduleEntry}
                     tasks={lessonTasks}
+                    onMoveDate={moveExamDate}
+                    reopen={examReopen && examReopen.day === day ? examReopen : null}
+                    onReopenDone={() => setExamReopen(null)}
+                    onEditDone={() => setExamEdit(null)}
+                    editRequest={examEdit}
                   />
                 ))}
               </div>
@@ -4278,12 +4368,22 @@ export default function StudyPlanner() {
               </div>
               <div style={styles.undoRow}>
                 <span style={styles.undoText}>
-                  {item.message}. Если это по ошибке — нажмите крестик, всё вернётся.
+                  {item.message}. {(item.opts && item.opts.hint) || "Если это по ошибке — нажмите крестик, всё вернётся."}
                 </span>
-                <button onClick={() => cancelUndo(item.id)} style={styles.undoCancel} title="Вернуть">
+                <button
+                  onClick={() => cancelUndo(item.id)}
+                  style={styles.undoCancel}
+                  title={(item.opts && item.opts.cancelTitle) || "Вернуть"}
+                  aria-label={(item.opts && item.opts.cancelTitle) || "Вернуть"}
+                >
                   ✕
                 </button>
-                <button onClick={() => confirmUndo(item.id)} style={styles.undoConfirm} title="Да, удалить">
+                <button
+                  onClick={() => confirmUndo(item.id)}
+                  style={styles.undoConfirm}
+                  title={(item.opts && item.opts.confirmTitle) || "Да, удалить"}
+                  aria-label={(item.opts && item.opts.confirmTitle) || "Да, удалить"}
+                >
                   ✓
                 </button>
               </div>
@@ -4729,9 +4829,11 @@ function AddSubjectForm({ onAdd, placeholder }) {
   );
 }
 
-function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks }) {
+function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
   const [examOpen, setExamOpen] = useState(false);
-  const [examNote, setExamNote] = useState("");
+  // С чем открыть форму экзамена: запрос из уведомления живёт только до того,
+  // как форма открылась, а значения держим здесь, пока форму не отправят.
+  const [formSeed, setFormSeed] = useState(null);
   // Форма урока — шесть полей; развёрнутая в каждом дне, она делала неделю
   // стеной из полей, поэтому раскрывается по кнопке.
   const [addOpen, setAddOpen] = useState(false);
@@ -4741,11 +4843,15 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
   const [taskMinutes, setTaskMinutes] = useState("30");
   const due = tasks ? tasks.dueDate(day) : "";
 
+  // Крестик в уведомлении о переносе только что добавленного экзамена: форма
+  // этого дня открывается снова, с тем, что было введено.
   useEffect(() => {
-    if (!examNote) return;
-    const timer = setTimeout(() => setExamNote(""), 12000);
-    return () => clearTimeout(timer);
-  }, [examNote]);
+    if (!reopen) return;
+    setFormSeed(reopen);
+    setExamOpen(true);
+    if (onReopenDone) onReopenDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reopen]);
 
   return (
     <div className="ap-card" style={{ ...styles.scheduleDayBlock, ...(today ? styles.scheduleDayToday : null) }}>
@@ -4766,15 +4872,14 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
 
       <Collapsible open={examOpen}>
         <AddExamForm
+          key={formSeed ? formSeed.at : "new"}
+          initial={formSeed ? formSeed.values : null}
           onAdd={(entry) => {
             onAdd({ ...entry, kind: "exam" });
             setExamOpen(false);
-            setExamNote(examAddedNote(entry));
+            setFormSeed(null);
           }}
         />
-      </Collapsible>
-      <Collapsible open={!!examNote}>
-        <div style={styles.examNote}>{examNote}</div>
       </Collapsible>
 
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
@@ -4789,6 +4894,9 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
               <ScheduleEntryRow
                 entry={e}
                 onUpdate={onUpdate}
+                onMoveDate={onMoveDate}
+                editRequest={editRequest}
+                onEditDone={onEditDone}
                 onRemove={() => onRemove(e.id)}
                 compact={today}
                 onAddTask={tasks ? () => setTaskFor(taskFor === e.id ? null : e.id) : null}
@@ -4950,14 +5058,16 @@ function ExamKindPicker({ value, onChange }) {
 
 // Экзамен живёт в том же расписании, но описывается иначе: важно не «кабинет и
 // преподаватель», а место проведения и ссылка на регистрацию или задания.
-function AddExamForm({ onAdd }) {
-  const [subjectName, setSubjectName] = useState("");
-  const [examKind, setExamKind] = useState("exam");
-  const [date, setDate] = useState("");
-  const [start, setStart] = useState("10:00");
-  const [end, setEnd] = useState("13:00");
-  const [place, setPlace] = useState("");
-  const [url, setUrl] = useState("");
+function AddExamForm({ onAdd, initial }) {
+  // initial — то, что ввели перед крестиком в уведомлении о переносе.
+  const from = initial || {};
+  const [subjectName, setSubjectName] = useState(from.subjectName || "");
+  const [examKind, setExamKind] = useState(from.examKind === "olympiad" ? "olympiad" : "exam");
+  const [date, setDate] = useState(from.date || "");
+  const [start, setStart] = useState(from.start || "10:00");
+  const [end, setEnd] = useState(from.end || "13:00");
+  const [place, setPlace] = useState(from.place || "");
+  const [url, setUrl] = useState(from.url || "");
 
   function submit() {
     if (!subjectName.trim()) return;
@@ -4982,8 +5092,8 @@ function AddExamForm({ onAdd }) {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.scheduleSelect} title="Дата" />
       </div>
       <div style={styles.mutedSmall}>
-        День недели берётся из даты, так что ошибиться днём нельзя. В расписании запись появится за неделю до даты,
-        отсчёт до неё — сразу в событиях наверху.
+        День недели берётся из даты, так что ошибиться днём нельзя. Пока до даты больше недели, запись стоит
+        полупрозрачно внизу дня — её можно свернуть; за неделю она встаёт наверх. Отсчёт — сразу в событиях.
       </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
@@ -5021,12 +5131,36 @@ function PencilIcon() {
   );
 }
 
-function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
+// Стрелка для «свернуть / развернуть» дальнего экзамена.
+function FoldIcon({ open }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={open ? "M6 15l6-6 6 6" : "M9 6l6 6-6 6"} />
+    </svg>
+  );
+}
+
+function ScheduleEntryRow({ entry, onUpdate, onMoveDate, editRequest, onEditDone, onRemove, compact, onAddTask }) {
   const isExam = entry.kind === "exam";
   // Урок читают куда чаще, чем правят, поэтому обычный вид — три короткие
   // строки, а поля появляются по «изменить». Раньше каждый урок был формой из
   // шести полей, и день из восьми уроков не помещался на экран.
   const [editing, setEditing] = useState(false);
+  const rowRef = useRef(null);
+  // Экзамен, до которого больше недели, стоит полупрозрачно внизу дня, и его
+  // можно свернуть в строку. За неделю до даты он встаёт наверх как обычно —
+  // свёрнутость тогда уже ни на что не влияет.
+  const far = isExam && examPlace(entry) === "far";
+  const folded = far && !!entry.folded;
+
+  // Крестик в уведомлении о переносе: дата вернулась, открываем правку здесь.
+  useEffect(() => {
+    if (!editRequest || editRequest.id !== entry.id) return;
+    setEditing(true);
+    if (rowRef.current) rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (onEditDone) onEditDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest, entry.id]);
 
   const box = {
     ...styles.scheduleEntry,
@@ -5034,7 +5168,41 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
     background: priorityInfo(entry.priority).tint,
     ...(isExam ? styles.scheduleExam : null),
     ...(compact ? styles.scheduleEntryCompact : null),
+    ...(far && !editing ? styles.scheduleFar : null),
   };
+
+  if (folded && !editing) {
+    const title = entry.subjectName || (entry.examKind === "olympiad" ? "Олимпиада" : "Экзамен");
+    return (
+      <button
+        type="button"
+        ref={rowRef}
+        onClick={() => onUpdate(entry.id, { folded: false })}
+        className="ap-row"
+        style={{ ...box, ...styles.scheduleFolded }}
+        aria-label={"Развернуть: " + title}
+        title="Развернуть"
+      >
+        <FoldIcon open={false} />
+        <span style={styles.foldedName}>{title}</span>
+        <span style={styles.foldedDate}>{formatEventDate(entry.date)}</span>
+      </button>
+    );
+  }
+
+  // Кнопка «свернуть» — только у дальнего экзамена.
+  const foldBtn = far ? (
+    <button
+      type="button"
+      onClick={() => onUpdate(entry.id, { folded: true })}
+      className="ap-row"
+      style={styles.rowIconBtn}
+      aria-label={"Свернуть до недели: " + (entry.subjectName || "экзамен")}
+      title="Свернуть — развернётся сам за неделю до даты"
+    >
+      <FoldIcon open />
+    </button>
+  ) : null;
 
   if (!editing) {
     const facts = isExam
@@ -5045,7 +5213,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
 
     if (compact) {
       return (
-        <div style={box}>
+        <div ref={rowRef} style={box}>
           <div style={styles.listRow}>
             <span style={styles.rowTime}>{entry.start}</span>
             <span style={styles.rowName}>{title}</span>
@@ -5065,6 +5233,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
               <button onClick={() => setEditing(true)} style={styles.rowEditInline}>
                 изменить
               </button>
+              {foldBtn}
             </span>
           </div>
         </div>
@@ -5075,7 +5244,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
     // одну строку не помещались: «изменить» уезжало за край карточки. Действия
     // переехали наверх, к времени, а внизу осталась одна важность.
     return (
-      <div style={box}>
+      <div ref={rowRef} style={box}>
         <div style={styles.rowHead}>
           <span style={styles.rowTime}>{entry.start}</span>
           <span style={styles.rowActions}>
@@ -5100,6 +5269,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
             >
               <PencilIcon />
             </button>
+            {foldBtn}
           </span>
         </div>
         <div style={styles.rowName}>{title}</div>
@@ -5117,13 +5287,13 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
   }
 
   return (
-    <div style={box}>
+    <div ref={rowRef} style={box}>
       {isExam && (
         <div style={styles.examRow}>
           <ExamKindPicker value={entry.examKind} onChange={(v) => onUpdate(entry.id, { examKind: v })} />
           <DateField
             value={entry.date || ""}
-            onCommit={(date) => onUpdate(entry.id, { date })}
+            onCommit={(date) => (onMoveDate ? onMoveDate(entry, date) : onUpdate(entry.id, { date }))}
             style={styles.examDateInput}
             title="Дата — по ней же считается день недели"
           />
@@ -6196,6 +6366,14 @@ const styles = {
   rowName: { fontSize: 13.5, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" },
   rowFacts: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.45, overflowWrap: "anywhere" },
   rowBottom: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 },
+  // Дальний экзамен: до даты больше недели — полупрозрачно, внизу дня.
+  scheduleFar: { opacity: 0.55 },
+  scheduleFolded: {
+    flexDirection: "row", alignItems: "center", gap: 6, width: "100%", textAlign: "left",
+    padding: "5px 8px", cursor: "pointer", font: "inherit", color: "var(--ink3)",
+  },
+  foldedName: { fontSize: 12, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "1 1 auto" },
+  foldedDate: { fontSize: 11, color: "var(--mute)", whiteSpace: "nowrap" },
   // Шапка карточки урока: время слева, действия справа.
   rowHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, minHeight: 26 },
   rowActions: { display: "flex", alignItems: "center", gap: 4, flexShrink: 0 },
@@ -6269,7 +6447,6 @@ const styles = {
     borderLeftColor: "var(--redStrong)",
   },
   examRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 },
-  examNote: { fontSize: 11.5, color: "var(--green)", lineHeight: 1.5, marginTop: 6 },
   examKindPicker: { display: "flex", gap: 4 },
   examKindOn: {
     border: "1px solid var(--redStrong)",
