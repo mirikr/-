@@ -10,15 +10,7 @@ import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed
 import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
-import {
-  Rail as ClassicRail,
-  ScreenHead as ClassicScreenHead,
-  TabBar as ClassicTabBar,
-  Countdowns as ClassicCountdowns,
-} from "./shell-classic.jsx";
-import { useDesign, DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design.js";
-import { CLASSIC_STYLES } from "./styles-classic.js";
-import DesignIntroDialog from "./design-intro.jsx";
+import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design-intro.jsx";
 import { CardHead } from "./card-head.jsx";
 import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
@@ -42,7 +34,6 @@ import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
 import { search as searchAll } from "./search.js";
 import SchedulePreset from "./lyceum-preset.jsx";
-import ExamPreset from "./lyceum-exams-panel.jsx";
 import { KT_PRESET_ID, DEFAULT_KT, buildExams } from "./lyceum-exams-10.js";
 import { VOSH_PRESET_ID, DEFAULT_VOSH, buildOlympiads } from "./lyceum-olympiads.js";
 import { LYCEUM_REVISION, PRESET_ID, buildSchedule } from "./lyceum-schedule-10.js";
@@ -270,6 +261,7 @@ function examKindLabel(value) {
 // За сколько дней до даты запись возвращается в недельную сетку. Ровно неделя
 // впереди — ещё рано: сетка про «эту неделю», а не про следующую.
 const EXAM_SCHEDULE_DAYS = 7;
+const EXAM_TOAST = { hint: "Нажмите крестик — вернётесь к правке.", cancelTitle: "Вернуться к правке", confirmTitle: "Хорошо" };
 
 const SCHEDULE_EVENT_PREFIX = "sch-ev:";
 
@@ -306,22 +298,47 @@ function examVisibleInSchedule(entry) {
   return left >= 0 && left < EXAM_SCHEDULE_DAYS;
 }
 
-// Запись, до которой больше недели, тут же исчезает из сетки — без объяснения
-// это выглядит как потерянная работа.
-function examAddedNote(entry) {
+// Где экзамен стоит в неделе расписания. «near» — до даты меньше недели: запись
+// наверху своего дня, как урок. «far» — дальше: полупрозрачно внизу дня, её
+// можно свернуть. «past» — прошла, в неделе не видна. «nodate» — дата не задана.
+function examPlace(entry) {
+  if (!entry.date) return "nodate";
+  const left = daysUntilDate(entry.date);
+  if (left < 0) return "past";
+  return left < EXAM_SCHEDULE_DAYS ? "near" : "far";
+}
+
+// «на четверг», «на среду»: день недели в винительном падеже.
+const WEEKDAY_ON = { mon: "понедельник", tue: "вторник", wed: "среду", thu: "четверг", fri: "пятницу", sat: "субботу", sun: "воскресенье" };
+
+// Экзамен встаёт на день недели по своей дате — не туда, где его заводили или
+// правили. Без объяснения это выглядит как потерянная запись, поэтому о
+// переезде говорит уведомление.
+function examMovedNote(entry, added) {
   const olympiad = entry.examKind === "olympiad";
   const what = olympiad ? "Олимпиада" : "Экзамен";
-  const added = olympiad ? "добавлена" : "добавлен";
-  if (!entry.date) {
-    return `${what} ${added}. Впишите дату — запись сама встанет на нужный день недели.`;
+  const verb = added ? (olympiad ? "добавлена" : "добавлен") : olympiad ? "перенесена" : "перенесён";
+  const name = entry.subjectName && entry.subjectName.trim() ? ` «${entry.subjectName.trim()}»` : "";
+  if (!entry.date) return `${what}${name} ${verb} без даты — впишите дату, и запись встанет на свой день недели`;
+  const day = weekdayKeyFromDate(entry.date);
+  const when = `${WEEKDAY_ON[day] || ""}, ${formatEventDate(entry.date)}`;
+  const place = examPlace(entry);
+  if (place === "past") return `${what}${name} ${verb} на ${when}: эта дата уже прошла, в расписании запись не видна`;
+  if (place === "far") {
+    return `${what}${name} ${verb} на ${when}: пока полупрозрачно внизу дня, наверх встанет за неделю до даты`;
   }
-  const when = `${formatEventDate(entry.date)} (${WEEKDAY_LABELS[weekdayKeyFromDate(entry.date)]})`;
-  const left = daysUntilDate(entry.date);
-  if (left < 0) return `${what} ${added}: ${when} — эта дата уже прошла.`;
-  if (left >= EXAM_SCHEDULE_DAYS) {
-    return `${what} ${added}: ${when}. В расписании появится за неделю до даты, а отсчёт до неё уже идёт в событиях наверху.`;
-  }
-  return `${what} ${added}: ${when}.`;
+  return `${what}${name} ${verb} на ${when}`;
+}
+
+// Порядок в дне расписания: ближние экзамены наверху, уроки по времени, дальние
+// экзамены — в самом низу, по дате.
+function byWeekOrder(a, b) {
+  const rank = (e) => (e.kind !== "exam" ? 1 : examPlace(e) === "far" ? 2 : 0);
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return String(a.date).localeCompare(String(b.date));
+  return String(a.start).localeCompare(String(b.start));
 }
 
 function eventIcsItem(event) {
@@ -680,10 +697,6 @@ export default function StudyPlanner() {
   const [showBackup, setShowBackup] = useState(false);
   // Токен подписки хранится вместе с остальными данными: он один на все устройства.
   const { mode, setMode, theme, nightWindow, setNightWindow } = useThemeMode();
-  // Новый или прежний дизайн. Стили подменяются до отрисовки всего дерева,
-  // поэтому переключение не требует перезагрузки и не трогает записи.
-  const { design, classic, setDesign } = useDesign();
-  applyDesignStyles(classic);
   const [designIntroOpen, setDesignIntroOpen] = useState(false);
   // Какой экран открыт — настройка устройства, как и тема: на телефоне человек
   // сидит в расписании, на ноутбуке в конспектах.
@@ -784,17 +797,12 @@ export default function StudyPlanner() {
     if (seen !== DESIGN_INTRO_VERSION) setDesignIntroOpen(true);
   }, [loaded]);
 
-  function closeDesignIntro(nextDesign) {
+  function closeDesignIntro() {
     setDesignIntroOpen(false);
     try {
       localStorage.setItem(DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION);
     } catch (e) {
       /* приватный режим — окно покажется ещё раз, не страшно */
-    }
-    if (nextDesign === "classic") {
-      setDesign("classic");
-      // Сразу туда, где переключатель: так видно, как вернуть новый.
-      goScreen("prefs");
     }
   }
 
@@ -1098,9 +1106,11 @@ export default function StudyPlanner() {
     });
   }
 
-  const showUndo = useCallback((message, restore, finalize) => {
+  // opts — для уведомлений не об удалении: своя подсказка под текстом и подписи
+  // кнопок. Крестик всегда «вернуть как было», галочка — «хорошо».
+  const showUndo = useCallback((message, restore, finalize, opts) => {
     const id = "undo-" + Date.now() + "-" + Math.round(Math.random() * 10000);
-    setUndoQueue((prev) => [...prev, { id, message, restore, finalize }]);
+    setUndoQueue((prev) => [...prev, { id, message, restore, finalize, opts: opts || null }]);
     undoTimers.current[id] = setTimeout(() => {
       setUndoQueue((prev) => {
         const item = prev.find((u) => u.id === id);
@@ -1573,6 +1583,17 @@ export default function StudyPlanner() {
         .sort(byExamFirst),
     [lyceumSchedule]
   );
+  // Неделя в «Лицее» показывает и дальние экзамены — полупрозрачно, внизу дня.
+  // «Сегодня» и «сейчас идут» по-прежнему берут dayEntries: экзамен через месяц
+  // по четвергам — не сегодняшний.
+  const weekEntries = useCallback(
+    (day) => lyceumSchedule.filter((e) => e.day === day && (e.kind !== "exam" || examPlace(e) !== "past")).sort(byWeekOrder),
+    [lyceumSchedule]
+  );
+  // После крестика в уведомлении о переносе: какую форму добавления открыть
+  // снова (с тем, что было введено) и какую запись вернуть к правке.
+  const [examReopen, setExamReopen] = useState(null);
+  const [examEdit, setExamEdit] = useState(null);
 
   const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
@@ -1738,13 +1759,6 @@ export default function StudyPlanner() {
     setLyceumSchedule((prev) => prev.filter((e) => e.preset !== PRESET_ID));
   }
 
-  const presetExams = useMemo(() => lyceumSchedule.filter((e) => e.preset === KT_PRESET_ID).length, [lyceumSchedule]);
-
-  function applyExams(entries) {
-    setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== KT_PRESET_ID), ...entries]);
-    if (entries.some((e) => e.day === "sun")) setShowSunday(true);
-  }
-
   const presetOlympiads = useMemo(
     () => lyceumSchedule.filter((e) => e.preset === VOSH_PRESET_ID).length,
     [lyceumSchedule]
@@ -1787,7 +1801,7 @@ export default function StudyPlanner() {
     const was = new Map(mine.map((e) => [key(e), e]));
     const next = fresh.map((e) => {
       const old = was.get(key(e));
-      return old ? { ...e, priority: old.priority, level: old.level } : e;
+      return old ? { ...e, priority: old.priority, level: old.level, ...(old.folded ? { folded: true } : null) } : e;
     });
     // Задание привязано к уроку по идентификатору: если урок пересобрался под
     // новым, привязку надо перенести, иначе задание повиснет в пустоте.
@@ -1814,10 +1828,6 @@ export default function StudyPlanner() {
       });
     }
   }, [loaded, lyceumRevision, lyceumSchedule, presetChoices, examPicks, voshPicks, showUndo]);
-
-  function clearExams() {
-    setLyceumSchedule((prev) => prev.filter((e) => e.preset !== KT_PRESET_ID));
-  }
 
   function addScheduleEntry(day, entry) {
     if (!entry.subjectName || !entry.subjectName.trim()) return;
@@ -1846,21 +1856,59 @@ export default function StudyPlanner() {
         date: entry.date || "",
       },
     ]);
+    if (isExam) {
+      const placed = { ...entry, day: finalDay, date: entry.date || "" };
+      // Встал ровно туда, где добавляли, и наверх дня — рассказывать не о чем.
+      if (finalDay !== day || examPlace(placed) !== "near") {
+        showUndo(
+          examMovedNote(placed, true),
+          () => {
+            setLyceumSchedule((prev) => prev.filter((e) => e.id !== id));
+            setExamReopen({ day, values: entry, at: Date.now() });
+          },
+          null,
+          EXAM_TOAST
+        );
+      }
+    }
+  }
+
+  // Новая дата экзамена из его карточки в расписании. Экзамен сам переезжает на
+  // день недели по дате — и уезжает из-под глаз, поэтому о переезде говорит
+  // уведомление, а крестик в нём возвращает прежнюю дату и открывает правку.
+  function moveExamDate(entry, date) {
+    const before = { date: entry.date || "", day: entry.day };
+    updateScheduleEntry(entry.id, { date });
+    const moved = { ...entry, date, day: weekdayKeyFromDate(date) || entry.day };
+    if (moved.day === entry.day && examPlace(moved) === examPlace(entry)) return;
+    showUndo(
+      examMovedNote(moved, false),
+      () => {
+        updateScheduleEntry(entry.id, before);
+        setExamEdit({ id: entry.id, at: Date.now() });
+      },
+      null,
+      EXAM_TOAST
+    );
   }
 
   function updateScheduleEntry(id, patch) {
     setLyceumSchedule((prev) => {
-      // Роль — свойство предмета, а не одного урока: алгебра профильная и в
-      // среду, и в пятницу. Проставлять её в каждой карточке отдельно значило
-      // бы шесть раз повторить одно и то же, а забытый урок потом врал бы в
-      // подсчётах.
+      // Роль и важность — свойства предмета, а не одного урока: алгебра
+      // профильная и важная и в среду, и в пятницу, и на обеих парах подряд.
+      // Проставлять их в каждой карточке отдельно значило бы шесть раз
+      // повторить одно и то же, а забытый урок потом врал бы в подсчётах и
+      // светился бы на «Сегодня» не тем цветом. Экзамены живут сами по себе.
       const source = prev.find((e) => e.id === id);
+      const shared = {};
+      if (patch.level !== undefined) shared.level = patch.level;
+      if (patch.priority !== undefined) shared.priority = patch.priority;
       const spread =
-        patch.level !== undefined && source && source.kind !== "exam" ? String(source.subjectName || "").trim() : null;
+        Object.keys(shared).length && source && source.kind !== "exam" ? String(source.subjectName || "").trim() : null;
       return prev.map((e) => {
         if (e.id !== id) {
           if (spread && e.kind !== "exam" && String(e.subjectName || "").trim() === spread) {
-            return { ...e, level: patch.level };
+            return { ...e, ...shared };
           }
           return e;
         }
@@ -2348,18 +2396,6 @@ export default function StudyPlanner() {
     const weekday = now.toLocaleDateString("ru-RU", { weekday: "long" });
     return `${capitalizeFirst(weekday)}, ${day}`;
   })();
-  const todayHeadLabelClassic = (() => {
-    const now = new Date();
-    const day = now.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
-    const weekday = now.toLocaleDateString("ru-RU", { weekday: "long" });
-    return `${day}, ${weekday}`;
-  })();
-
-  // Оболочка под выбранный дизайн: у прежнего — свои колонка, вкладки и шапка.
-  const RailView = classic ? ClassicRail : Rail;
-  const TabBarView = classic ? ClassicTabBar : TabBar;
-  const ScreenHeadView = classic ? ClassicScreenHead : ScreenHead;
-  const CountdownsView = classic ? ClassicCountdowns : Countdowns;
 
   // Плитки над «Сегодня»: сколько записано к дневной цели, идёт ли серия и
   // сколько набралось за неделю к недельному плану. Всё это уже считалось для
@@ -2442,7 +2478,7 @@ export default function StudyPlanner() {
     : { ok: false, text: "только на этом устройстве" };
 
   return (
-    <div data-theme={theme} data-design={design} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
+    <div data-theme={theme} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
       <Background theme={theme} enabled={backgroundOn} showcase={showcase} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Golos+Text:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -2475,7 +2511,7 @@ export default function StudyPlanner() {
         .ap-screen > .ap-card:nth-child(2), .ap-screen > * > .ap-card:nth-child(2) { animation-delay: .04s; }
         .ap-screen > .ap-card:nth-child(3), .ap-screen > * > .ap-card:nth-child(3) { animation-delay: .08s; }
         .ap-screen > .ap-card:nth-child(4), .ap-screen > * > .ap-card:nth-child(4) { animation-delay: .12s; }
-        ${classic ? CLASSIC_CSS : NEW_CSS}
+        ${NEW_CSS}
         .ap-pill { background: transparent; color: var(--railInk2); transition: background .22s ease, color .22s ease; }
         .ap-pill:hover { background: var(--railActive); color: var(--railInk); }
         .ap-pill.is-on { background: var(--accent); color: var(--accentInk); }
@@ -2510,7 +2546,7 @@ export default function StudyPlanner() {
           .ap-shell { flex-direction: column; }
           .ap-rail { display: none !important; }
           .ap-tabbar, .ap-only-mobile { display: block; }
-          ${classic ? CLASSIC_MOBILE_CSS : NEW_MOBILE_CSS}
+          ${NEW_MOBILE_CSS}
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
           .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
@@ -2520,7 +2556,7 @@ export default function StudyPlanner() {
         }
       `}</style>
 
-      <RailView
+      <Rail
         items={navItems}
         screen={screen}
         onGo={goScreen}
@@ -2536,7 +2572,7 @@ export default function StudyPlanner() {
         onOpenNotes={() => setNotesOpen(true)}
       />
 
-      <TabBarView
+      <TabBar
         items={navItems}
         screen={screen}
         onGo={goScreen}
@@ -2572,32 +2608,31 @@ export default function StudyPlanner() {
           </div>
         )}
 
-        <ScreenHeadView
+        <ScreenHead
           title={screenInfo.title}
           // На «Сегодня» подзаголовок пересказывал карточки под ним — дата над
           // названием говорит о том же короче.
-          // В прежнем дизайне всё как было: подзаголовок есть, дата — «23 сентября, среда».
-          note={screen === "today" && !classic ? null : screenInfo.note}
+          note={screen === "today" ? null : screenInfo.note}
           badge={screen === "trainer" ? "ALPHA" : null}
-          date={screen === "today" ? (classic ? todayHeadLabelClassic : todayHeadLabel) : null}
+          date={screen === "today" ? todayHeadLabel : null}
         >
           <div className="ap-only-mobile">
-            <CountdownsView next={nextCountdown} main={mainCountdown} />
+            <Countdowns next={nextCountdown} main={mainCountdown} />
           </div>
           {/* Самое частое действие дня — на виду, а не в середине экрана. */}
-          {screen === "today" && !classic && (
+          {screen === "today" && (
             <button type="button" onClick={focusQuickLog} className="ap-desktop-only" style={styles.headAction}>
               <Icon name="plus" size={17} strokeWidth={2} />
               Записать занятие
             </button>
           )}
-        </ScreenHeadView>
+        </ScreenHead>
 
         {/* key={screen} заставляет React пересобрать содержимое при переходе — иначе
             анимация входа проигрывалась бы один раз за всё время работы. */}
         <div key={screen} className="ap-screen">
 
-        {screen === "today" && !classic && (
+        {screen === "today" && (
           <>
             {todayEvents.length > 0 && (
               <section
@@ -3035,372 +3070,6 @@ export default function StudyPlanner() {
         )}
 
         {/* Прежний дизайн: «Сегодня» ровно как в 0.14.0. */}
-        {screen === "today" && classic && (
-          <>
-            {todayEvents.length > 0 && (
-              <section
-                className="ap-card"
-                style={{
-                  ...styles.card,
-                  borderColor: priorityInfo(todayEvents[0].priority).strong,
-                  background: priorityInfo(todayEvents[0].priority).tint,
-                }}
-              >
-                <div style={styles.todayEventHead}>Сегодня</div>
-                {todayEvents.map((e) => (
-                  <div key={e.id} style={styles.todayEventRow}>
-                    <PriorityMark value={e.priority} height={13} />
-                    <span style={styles.todayEventName}>{e.name}</span>
-                    {e.description && <span style={styles.todayEventNote}>{e.description}</span>}
-                  </div>
-                ))}
-                <button onClick={() => goScreen("events")} style={styles.goLink}>
-                  Все события →
-                </button>
-              </section>
-            )}
-
-            {weekPlanned !== currentWeek && (
-              <section className="ap-card" style={{ ...styles.weekStrip }}>
-                <span style={styles.weekStripText}>
-                  Новая неделя: цифры распределения могли устареть
-                </span>
-                <span style={styles.weekActions}>
-                  <button onClick={() => goScreen("budget")} style={styles.weekGo}>
-                    Распределить
-                  </button>
-                  <button onClick={markWeekPlanned} style={styles.weekSkip}>
-                    Оставить как есть
-                  </button>
-                </span>
-              </section>
-            )}
-
-            {/* Напоминание крупным планом: строчкой внизу карточки его не замечали. */}
-            <section
-              className="ap-card"
-              style={{
-                ...styles.card,
-                ...(studyReminder.tone === "warn" ? styles.reminderWarn : null),
-                ...(studyReminder.tone === "ok" ? styles.reminderOk : null),
-              }}
-            >
-              <div style={styles.reminderRow}>
-                {/* Значок — только когда ему есть что сказать: огонёк серии, галочка,
-                    восклицательный знак. В спокойном состоянии там стояла точка
-                    посреди пустого квадрата — место без смысла. */}
-                {reminderKind !== "idle" && (
-                  <div style={styles.reminderMark} aria-hidden="true">
-                    <ReminderMark kind={reminderKind} />
-                  </div>
-                )}
-                <div style={styles.reminderBody}>
-                  <div style={styles.reminderTitle}>{studyReminder.title}</div>
-                  <div style={styles.reminderText}>{studyReminder.text}</div>
-                  {trainerOffer && (
-                    <button onClick={() => goScreen("trainer")} className="ap-row" style={styles.offerBtn}>
-                      <span style={styles.offerText}>
-                        {trainerOffer.solved > 0
-                          ? "Решено " + trainerOffer.solved + " из " + trainerOffer.need + " — осталось " +
-                            trainerOffer.left + " " + tasksWord(trainerOffer.left) + " по предмету «" + trainerOffer.subject + "»"
-                          : "Реши " + trainerOffer.need + " " + tasksWord(trainerOffer.need) +
-                            " по предмету «" + trainerOffer.subject + "» — день зачтётся и серия не оборвётся" +
-                            (trainerOffer.cheaper
-                              ? ". По предмету «" + trainerOffer.cheaper.subjects.join("» или «") + "» хватит " +
-                                trainerOffer.cheaper.need
-                              : "")}
-                      </span>
-                      <span style={styles.offerGo}>В тренажёр →</span>
-                    </button>
-                  )}
-                </div>
-                {/* Серия показывается, только пока она идёт: после пропуска «4 дня подряд»
-                    рядом с «занятий не было два дня» звучало издевательски. */}
-                {studyStreakOn && (
-                  <div style={styles.streakBox}>
-                    <div style={styles.streakNum}>{studyPulse.streak}</div>
-                    <div style={styles.streakWord}>{daysWord(studyPulse.streak)} подряд</div>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Что идёт прямо сейчас — и у тебя, и у всей параллели. */}
-            <NowCard
-              entriesFor={dayEntries}
-              tasksFor={lessonTasks.forLesson}
-              homeworkOn={homeworkOnDate}
-              colorOf={lyceumColorOf}
-              markOf={priorityInfo}
-              styles={styles}
-            />
-
-            {dueForReview.length > 0 && (
-              <section className="ap-card" style={styles.card}>
-                <CardHead
-                  id="today-review"
-                  title="Пора повторить"
-                  note="Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке"
-                />
-                <div style={styles.reviewList}>
-                  {dueForReview.slice(0, 3).map((row) => (
-                    <div key={row.topicId} style={styles.reviewRow}>
-                      <span style={{ ...styles.dot, background: row.color }} />
-                      <span style={styles.reviewText}>
-                        <span style={styles.reviewName}>{row.name}</span>
-                        <span style={styles.reviewNote}>
-                          {row.subjectName} · {agoWord(row.days)}
-                          {row.reviews > 0 ? " · повторений: " + row.reviews : ""}
-                        </span>
-                      </span>
-                      <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
-                        Повторил
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                {dueForReview.length > 3 && (
-                  <button onClick={() => goScreen("study")} style={styles.goLink}>
-                    Ещё {dueForReview.length - 3} — в «Подготовке» →
-                  </button>
-                )}
-              </section>
-            )}
-
-          <div className="ap-grid2" style={styles.grid2}>
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="hours"
-                title="Часы занятий"
-                empty={!stats.totalAll}
-                note="Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята."
-              />
-              <div style={styles.overallTrack}>
-                <div className="ap-fill" style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
-              </div>
-              <div style={styles.overallText}>
-                Пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
-              </div>
-              {/* График не сворачивается: ради него карточка и существует. */}
-              <HoursChart journal={journalWithTrainer} homework={homework} subjects={subjectsWithTrainer} goalForDate={goalForDate} />
-            </section>
-
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="today-school"
-                title="Сегодня в лицее"
-                empty={todayLessons.length === 0}
-                note="Важность — полосой слева, роль урока — подписью"
-              />
-              {todayLessons.length === 0 ? (
-                <p style={styles.muted}>На сегодня уроков в расписании нет.</p>
-              ) : (
-                <div style={styles.todayList}>
-                  {todayLessons.map((e) => (
-                    <div
-                      key={e.id}
-                      style={{
-                        ...styles.todayRow,
-                        borderLeftColor: priorityInfo(e.priority).strong,
-                        background: priorityInfo(e.priority).tint,
-                      }}
-                    >
-                      <span style={styles.todayTime}>{e.start}</span>
-                      <span style={styles.todayName}>{e.subjectName}</span>
-                      <span style={styles.todayMeta}>
-                        {e.kind === "exam"
-                          ? examKindLabel(e.examKind) + (e.place ? " · " + e.place : "")
-                          : levelInfo(e.level).label + (e.room ? " · " + e.room : "") + (e.teacher ? " · " + e.teacher : "")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={styles.quickLog}>
-                <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
-
-                <div style={styles.quickRow}>
-                  <select
-                    value={jForm.subjectId}
-                    onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })}
-                    style={styles.select}
-                  >
-                    {ALL_SUBJECTS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={jForm.hours}
-                    onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
-                    style={styles.smallNumInput}
-                    title="Часы"
-                  />
-                </div>
-                <div style={styles.quickRow}>
-                  <AutoGrow
-                    placeholder="Что прошли?"
-                    value={jForm.note}
-                    onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
-                    onEnter={() => {
-                      addJournalEntry(todayStr());
-                    }}
-                    style={styles.noteInput}
-                  />
-                  <button
-                    onClick={() => {
-                      addJournalEntry(todayStr());
-                    }}
-                    style={styles.addBtnSmall}
-                  >
-                    + Записать
-                  </button>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          {/* Карточка, которой нечего показать, — не карточка: три «ничего нет»
-              подряд занимали пол-экрана в обычный день. Пустые сворачиваются
-              в одну строку ниже и возвращаются, как только в них что-то есть. */}
-          <div className="ap-grid2" style={styles.grid2}>
-            {!eventsEmpty && (
-            <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Ближайшие события</div>
-              {/* Сегодняшнее событие показано отдельной карточкой наверху —
-                  здесь оно было бы вторым упоминанием об одном и том же. */}
-              {laterEvents.length === 0 ? (
-                <p style={styles.muted}>
-                  {todayEvents.length ? "Дальше пока ничего не назначено." : "Событий пока нет — добавьте экзамен или олимпиаду в разделе «События»."}
-                </p>
-              ) : (
-                <div style={styles.todayList}>
-                  {laterEvents.slice(0, 4).map((e) => {
-                    const left = daysUntilDate(e.date);
-                    const info = priorityInfo(e.priority);
-                    return (
-                      <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
-                        <span style={styles.eventMarkCol}>
-                          <PriorityMark value={e.priority} height={11} />
-                        </span>
-                        <span style={styles.todayName}>{e.name}</span>
-                        <span style={styles.todayMeta}>
-                          {left} {daysWord(left)}
-                          {mainEvent && mainEvent.id === e.id ? " · план" : ""}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {/* Тот же вердикт, что и в «Распределении»: ради этого ответа и считаются часы. */}
-              {mainEvent && (
-                <div
-                  style={{
-                    ...styles.verdictLine,
-                    color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
-                  }}
-                >
-                  {capacity.feasible === null
-                    ? "Часы на неделю не заданы — темп считать не от чего."
-                    : capacity.feasible
-                    ? `При таком темпе времени хватит: нужно ${capacity.neededHours} ч, до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`
-                    : `При таком темпе может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
-                </div>
-              )}
-              <button onClick={() => goScreen("events")} style={styles.goLink}>
-                Все события →
-              </button>
-            </section>
-            )}
-
-            {!homeworkEmpty && (
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="today-homework"
-                title="Дела и сроки"
-                empty={upcomingHomework.length === 0}
-                note="По сроку, а не по предмету"
-              />
-              {upcomingHomework.length === 0 ? (
-                <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
-              ) : (
-                <div style={styles.todayList}>
-                  {upcomingHomework.map((h) => (
-                    <label key={h.id} style={styles.taskRow}>
-                      <input
-                        type="checkbox"
-                        checked={!!h.done}
-                        onChange={() => updateHomework(h.id, { done: !h.done })}
-                      />
-                      <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>
-                        {h.text || "без описания"}
-                      </span>
-                      <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
-                        {relativeDayLabel(h.daysUntil)}
-                        {h.subjectName ? " · " + h.subjectName : ""}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => goScreen("journal")} style={styles.goLink}>
-                Дневник и задания →
-              </button>
-            </section>
-            )}
-
-            {!studyEmpty && (
-            <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Подготовка</div>
-              <div style={styles.todayList}>
-                {ALL_SUBJECTS.map((s) => {
-                  const st = stats.perSubject[s.id];
-                  if (!st || !st.total) return null;
-                  return (
-                    <div key={s.id}>
-                      <div style={styles.progressRow}>
-                        <span>{s.name}</span>
-                        <span style={styles.mutedSmall}>
-                          {st.done}/{st.total}
-                        </span>
-                      </div>
-                      <div style={styles.miniTrack}>
-                        <div className="ap-fill" style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <button onClick={() => goScreen("study")} style={styles.goLink}>
-                Открыть подготовку →
-              </button>
-            </section>
-            )}
-          </div>
-
-          {(eventsEmpty || homeworkEmpty || studyEmpty) && (
-            <div style={styles.emptyStrip}>
-              {eventsEmpty && (
-                <button onClick={() => goScreen("events")} style={styles.goLink}>
-                  Событий нет — добавить →
-                </button>
-              )}
-              {homeworkEmpty && <span style={styles.emptyStripNote}>Ничего не горит по срокам</span>}
-              {studyEmpty && (
-                <button onClick={() => goScreen("study")} style={styles.goLink}>
-                  Своих предметов нет — добавить →
-                </button>
-              )}
-            </div>
-          )}
-          </>
-        )}
 
         {screen === "events" && (
           <>
@@ -3595,7 +3264,14 @@ export default function StudyPlanner() {
                         max="20"
                         value={budget.alloc[s.id]}
                         onChange={(e) => setAlloc(s.id, e.target.value)}
-                        style={{ accentColor: s.color, flex: 1, minWidth: 0 }}
+                        className="ap-range ap-range-fill"
+                        aria-label={"Часов в неделю: " + s.name}
+                        style={{
+                          "--fill": s.color,
+                          "--pct": Math.min(100, (Number(budget.alloc[s.id]) || 0) / 20 * 100) + "%",
+                          flex: 1,
+                          minWidth: 0,
+                        }}
                       />
                       <input
                         type="number"
@@ -3935,15 +3611,11 @@ export default function StudyPlanner() {
               locked={presetLocked}
               onSignIn={() => goScreen("settings")}
             />
-            <ExamPreset
-              picked={examPicks}
-              onPicked={setExamPicks}
-              onApply={applyExams}
-              onClear={clearExams}
-              appliedCount={presetExams}
-              locked={presetLocked}
-              onSignIn={() => goScreen("settings")}
-            />
+            {/* Блок «Контрольные тесты КТ1» убран: тесты прошли 17–23 сентября.
+                Уже добавленные КТ1 остаются в записях как прошедшие экзамены — из
+                недели они скрыты сами, а в «Событиях» их убирает очистка
+                прошедших. Пересборка готовых данных ниже по-прежнему их узнаёт
+                (KT_PRESET_ID), чтобы не потерять важность, выставленную руками. */}
             <OlympiadPreset
               picked={voshPicks}
               onPicked={setVoshPicks}
@@ -3971,7 +3643,7 @@ export default function StudyPlanner() {
                 </span>
               ))}
               <br />
-              Роль урока — свойство предмета: меняете в одной карточке — меняется во всех его уроках.
+              Важность и роль — свойства предмета: меняете в одной карточке — меняются во всех его уроках.
             </div>
 
             {/* Чаще всего от расписания нужен один день — сегодняшний. Он и
@@ -3983,11 +3655,16 @@ export default function StudyPlanner() {
                   day={todayKey}
                   label={WEEKDAY_LABELS[todayKey]}
                   today
-                  entries={dayEntries(todayKey)}
+                  entries={weekEntries(todayKey)}
                   onAdd={(entry) => addScheduleEntry(todayKey, entry)}
                   onUpdate={updateScheduleEntry}
                   onRemove={removeScheduleEntry}
                   tasks={lessonTasks}
+                  onMoveDate={moveExamDate}
+                  reopen={examReopen && examReopen.day === todayKey ? examReopen : null}
+                  onReopenDone={() => setExamReopen(null)}
+                  onEditDone={() => setExamEdit(null)}
+                  editRequest={examEdit}
                 />
               </div>
             ) : (
@@ -4010,11 +3687,16 @@ export default function StudyPlanner() {
                     day={day}
                     label={WEEKDAY_LABELS[day]}
                     today={day === todayKey}
-                    entries={dayEntries(day)}
+                    entries={weekEntries(day)}
                     onAdd={(entry) => addScheduleEntry(day, entry)}
                     onUpdate={updateScheduleEntry}
                     onRemove={removeScheduleEntry}
                     tasks={lessonTasks}
+                    onMoveDate={moveExamDate}
+                    reopen={examReopen && examReopen.day === day ? examReopen : null}
+                    onReopenDone={() => setExamReopen(null)}
+                    onEditDone={() => setExamEdit(null)}
+                    editRequest={examEdit}
                   />
                 ))}
               </div>
@@ -4521,42 +4203,6 @@ export default function StudyPlanner() {
 
         {screen === "prefs" && (
           <div className="ap-grid2" style={styles.grid2}>
-            {/* Первым — выбор дизайна: сюда приходят из окна «Новый дизайн»,
-                когда хотят вернуть прежний, и искать его ниже не должны. */}
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="design"
-                title="Дизайн"
-                note="Как выглядит приложение на этом устройстве. Записи от выбора не зависят: меняется только вид."
-              />
-              <div style={styles.themeRow}>
-                {[
-                  ["new", "Новый"],
-                  ["classic", "Прежний"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => setDesign(value)}
-                    aria-pressed={design === value}
-                    style={{
-                      ...styles.themeBtn,
-                      background: design === value ? "var(--accent)" : "var(--panel2)",
-                      color: design === value ? "var(--accentInk)" : "var(--ink2)",
-                      borderColor: design === value ? "var(--accent)" : "var(--line)",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div style={styles.mutedSmall}>
-                {classic
-                  ? "Прежний дизайн — как до версии 1.0.0. Новый можно включить в любой момент."
-                  : "Новый дизайн версии 1.0.0. Прежний остаётся здесь, пока к новому не привыкнете."}
-              </div>
-            </section>
-
-
             <section className="ap-card" style={styles.card}>
               <CardHead
                 id="looks"
@@ -4706,10 +4352,9 @@ export default function StudyPlanner() {
       {/* После окна о расписании, если оно тоже открыто: два окна разом друг друга перекрывали бы. */}
       <DesignIntroDialog
         open={designIntroOpen && !introOpen && !notesOpen}
-        onKeep={() => closeDesignIntro("new")}
-        onClassic={() => closeDesignIntro("classic")}
+        onKeep={closeDesignIntro}
         onNotes={() => {
-          closeDesignIntro("new");
+          closeDesignIntro();
           setNotesOpen(true);
         }}
       />
@@ -4723,12 +4368,22 @@ export default function StudyPlanner() {
               </div>
               <div style={styles.undoRow}>
                 <span style={styles.undoText}>
-                  {item.message}. Если это по ошибке — нажмите крестик, всё вернётся.
+                  {item.message}. {(item.opts && item.opts.hint) || "Если это по ошибке — нажмите крестик, всё вернётся."}
                 </span>
-                <button onClick={() => cancelUndo(item.id)} style={styles.undoCancel} title="Вернуть">
+                <button
+                  onClick={() => cancelUndo(item.id)}
+                  style={styles.undoCancel}
+                  title={(item.opts && item.opts.cancelTitle) || "Вернуть"}
+                  aria-label={(item.opts && item.opts.cancelTitle) || "Вернуть"}
+                >
                   ✕
                 </button>
-                <button onClick={() => confirmUndo(item.id)} style={styles.undoConfirm} title="Да, удалить">
+                <button
+                  onClick={() => confirmUndo(item.id)}
+                  style={styles.undoConfirm}
+                  title={(item.opts && item.opts.confirmTitle) || "Да, удалить"}
+                  aria-label={(item.opts && item.opts.confirmTitle) || "Да, удалить"}
+                >
                   ✓
                 </button>
               </div>
@@ -4794,6 +4449,57 @@ function PriorityPicker({ value, onChange }) {
   );
 }
 
+// Поле даты для уже заведённого события или экзамена. Сохраняет, только когда
+// из поля уходят (или жмут Enter), а не на каждое изменение: пока дату набирают
+// с клавиатуры, браузер отдаёт промежуточные значения — год 0002, 0020, 0202 —
+// и событие тут же уезжало в «Прошедшие», а экзамен — на другой день недели,
+// вместе с полем, в котором человек ещё печатал. Неполная или явно ошибочная
+// дата (раньше 2000 года) не сохраняется: поле возвращается к прежней. Esc —
+// отменить правку.
+function DateField({ value, onCommit, style, title }) {
+  const [draft, setDraft] = useState(value || "");
+  const editing = useRef(false);
+  // Esc уводит курсор из поля, и уход из поля не должен сохранить то, что
+  // только что отменили.
+  const cancelled = useRef(false);
+  useEffect(() => {
+    if (!editing.current) setDraft(value || "");
+  }, [value]);
+
+  function commit() {
+    editing.current = false;
+    if (cancelled.current) {
+      cancelled.current = false;
+      setDraft(value || "");
+      return;
+    }
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(draft) && Number(draft.slice(0, 4)) >= 2000;
+    if (ok && draft !== value) onCommit(draft);
+    else setDraft(value || "");
+  }
+
+  return (
+    <input
+      type="date"
+      value={draft}
+      onFocus={() => {
+        editing.current = true;
+      }}
+      onChange={(ev) => setDraft(ev.target.value)}
+      onBlur={commit}
+      onKeyDown={(ev) => {
+        if (ev.key === "Enter") ev.currentTarget.blur();
+        if (ev.key === "Escape") {
+          cancelled.current = true;
+          ev.currentTarget.blur();
+        }
+      }}
+      style={style}
+      title={title}
+    />
+  );
+}
+
 function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, onAdd, onUpdate, onRemove, onClearPast }) {
   const [name, setName] = useState("");
   const [date, setDate] = useState(todayStr());
@@ -4826,7 +4532,7 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
           {!isPast && <span style={styles.eventDaysWord}>{daysWord(left)}</span>}
         </span>
         <AutoGrow value={e.name} onChange={(ev) => onUpdate(e.id, { name: ev.target.value })} style={styles.eventNameInput} />
-        <input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} style={styles.eventDateInput} />
+        <DateField value={e.date} onCommit={(date) => onUpdate(e.id, { date })} style={styles.eventDateInput} />
         <PriorityPicker value={e.priority} onChange={(v) => onUpdate(e.id, { priority: v })} />
         {/* Одна и та же запись: правка здесь меняет её и в расписании. */}
         {e.fromSchedule && <span style={styles.fromScheduleBadge}>{examKindLabel(e.examKind)} из расписания</span>}
@@ -5123,9 +4829,11 @@ function AddSubjectForm({ onAdd, placeholder }) {
   );
 }
 
-function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks }) {
+function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
   const [examOpen, setExamOpen] = useState(false);
-  const [examNote, setExamNote] = useState("");
+  // С чем открыть форму экзамена: запрос из уведомления живёт только до того,
+  // как форма открылась, а значения держим здесь, пока форму не отправят.
+  const [formSeed, setFormSeed] = useState(null);
   // Форма урока — шесть полей; развёрнутая в каждом дне, она делала неделю
   // стеной из полей, поэтому раскрывается по кнопке.
   const [addOpen, setAddOpen] = useState(false);
@@ -5135,11 +4843,15 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
   const [taskMinutes, setTaskMinutes] = useState("30");
   const due = tasks ? tasks.dueDate(day) : "";
 
+  // Крестик в уведомлении о переносе только что добавленного экзамена: форма
+  // этого дня открывается снова, с тем, что было введено.
   useEffect(() => {
-    if (!examNote) return;
-    const timer = setTimeout(() => setExamNote(""), 12000);
-    return () => clearTimeout(timer);
-  }, [examNote]);
+    if (!reopen) return;
+    setFormSeed(reopen);
+    setExamOpen(true);
+    if (onReopenDone) onReopenDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reopen]);
 
   return (
     <div className="ap-card" style={{ ...styles.scheduleDayBlock, ...(today ? styles.scheduleDayToday : null) }}>
@@ -5160,15 +4872,14 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
 
       <Collapsible open={examOpen}>
         <AddExamForm
+          key={formSeed ? formSeed.at : "new"}
+          initial={formSeed ? formSeed.values : null}
           onAdd={(entry) => {
             onAdd({ ...entry, kind: "exam" });
             setExamOpen(false);
-            setExamNote(examAddedNote(entry));
+            setFormSeed(null);
           }}
         />
-      </Collapsible>
-      <Collapsible open={!!examNote}>
-        <div style={styles.examNote}>{examNote}</div>
       </Collapsible>
 
       {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
@@ -5183,6 +4894,9 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
               <ScheduleEntryRow
                 entry={e}
                 onUpdate={onUpdate}
+                onMoveDate={onMoveDate}
+                editRequest={editRequest}
+                onEditDone={onEditDone}
                 onRemove={() => onRemove(e.id)}
                 compact={today}
                 onAddTask={tasks ? () => setTaskFor(taskFor === e.id ? null : e.id) : null}
@@ -5344,14 +5058,16 @@ function ExamKindPicker({ value, onChange }) {
 
 // Экзамен живёт в том же расписании, но описывается иначе: важно не «кабинет и
 // преподаватель», а место проведения и ссылка на регистрацию или задания.
-function AddExamForm({ onAdd }) {
-  const [subjectName, setSubjectName] = useState("");
-  const [examKind, setExamKind] = useState("exam");
-  const [date, setDate] = useState("");
-  const [start, setStart] = useState("10:00");
-  const [end, setEnd] = useState("13:00");
-  const [place, setPlace] = useState("");
-  const [url, setUrl] = useState("");
+function AddExamForm({ onAdd, initial }) {
+  // initial — то, что ввели перед крестиком в уведомлении о переносе.
+  const from = initial || {};
+  const [subjectName, setSubjectName] = useState(from.subjectName || "");
+  const [examKind, setExamKind] = useState(from.examKind === "olympiad" ? "olympiad" : "exam");
+  const [date, setDate] = useState(from.date || "");
+  const [start, setStart] = useState(from.start || "10:00");
+  const [end, setEnd] = useState(from.end || "13:00");
+  const [place, setPlace] = useState(from.place || "");
+  const [url, setUrl] = useState(from.url || "");
 
   function submit() {
     if (!subjectName.trim()) return;
@@ -5376,8 +5092,8 @@ function AddExamForm({ onAdd }) {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.scheduleSelect} title="Дата" />
       </div>
       <div style={styles.mutedSmall}>
-        День недели берётся из даты, так что ошибиться днём нельзя. В расписании запись появится за неделю до даты,
-        отсчёт до неё — сразу в событиях наверху.
+        День недели берётся из даты, так что ошибиться днём нельзя. Пока до даты больше недели, запись стоит
+        полупрозрачно внизу дня — её можно свернуть; за неделю она встаёт наверх. Отсчёт — сразу в событиях.
       </div>
       <div style={styles.scheduleTimeRow}>
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={styles.scheduleTimeInput} />
@@ -5405,12 +5121,46 @@ function AddExamForm({ onAdd }) {
   );
 }
 
-function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
+// Карандаш для кнопки «изменить»: в узкой карточке слово не помещалось.
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z" />
+      <path d="M13.5 6.5l4 4" />
+    </svg>
+  );
+}
+
+// Стрелка для «свернуть / развернуть» дальнего экзамена.
+function FoldIcon({ open }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={open ? "M6 15l6-6 6 6" : "M9 6l6 6-6 6"} />
+    </svg>
+  );
+}
+
+function ScheduleEntryRow({ entry, onUpdate, onMoveDate, editRequest, onEditDone, onRemove, compact, onAddTask }) {
   const isExam = entry.kind === "exam";
   // Урок читают куда чаще, чем правят, поэтому обычный вид — три короткие
   // строки, а поля появляются по «изменить». Раньше каждый урок был формой из
   // шести полей, и день из восьми уроков не помещался на экран.
   const [editing, setEditing] = useState(false);
+  const rowRef = useRef(null);
+  // Экзамен, до которого больше недели, стоит полупрозрачно внизу дня, и его
+  // можно свернуть в строку. За неделю до даты он встаёт наверх как обычно —
+  // свёрнутость тогда уже ни на что не влияет.
+  const far = isExam && examPlace(entry) === "far";
+  const folded = far && !!entry.folded;
+
+  // Крестик в уведомлении о переносе: дата вернулась, открываем правку здесь.
+  useEffect(() => {
+    if (!editRequest || editRequest.id !== entry.id) return;
+    setEditing(true);
+    if (rowRef.current) rowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (onEditDone) onEditDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest, entry.id]);
 
   const box = {
     ...styles.scheduleEntry,
@@ -5418,7 +5168,41 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
     background: priorityInfo(entry.priority).tint,
     ...(isExam ? styles.scheduleExam : null),
     ...(compact ? styles.scheduleEntryCompact : null),
+    ...(far && !editing ? styles.scheduleFar : null),
   };
+
+  if (folded && !editing) {
+    const title = entry.subjectName || (entry.examKind === "olympiad" ? "Олимпиада" : "Экзамен");
+    return (
+      <button
+        type="button"
+        ref={rowRef}
+        onClick={() => onUpdate(entry.id, { folded: false })}
+        className="ap-row"
+        style={{ ...box, ...styles.scheduleFolded }}
+        aria-label={"Развернуть: " + title}
+        title="Развернуть"
+      >
+        <FoldIcon open={false} />
+        <span style={styles.foldedName}>{title}</span>
+        <span style={styles.foldedDate}>{formatEventDate(entry.date)}</span>
+      </button>
+    );
+  }
+
+  // Кнопка «свернуть» — только у дальнего экзамена.
+  const foldBtn = far ? (
+    <button
+      type="button"
+      onClick={() => onUpdate(entry.id, { folded: true })}
+      className="ap-row"
+      style={styles.rowIconBtn}
+      aria-label={"Свернуть до недели: " + (entry.subjectName || "экзамен")}
+      title="Свернуть — развернётся сам за неделю до даты"
+    >
+      <FoldIcon open />
+    </button>
+  ) : null;
 
   if (!editing) {
     const facts = isExam
@@ -5429,7 +5213,7 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
 
     if (compact) {
       return (
-        <div style={box}>
+        <div ref={rowRef} style={box}>
           <div style={styles.listRow}>
             <span style={styles.rowTime}>{entry.start}</span>
             <span style={styles.rowName}>{title}</span>
@@ -5449,18 +5233,46 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
               <button onClick={() => setEditing(true)} style={styles.rowEditInline}>
                 изменить
               </button>
+              {foldBtn}
             </span>
           </div>
         </div>
       );
     }
 
+    // В узкой колонке недели три кнопки важности, «+ задание» и «изменить» в
+    // одну строку не помещались: «изменить» уезжало за край карточки. Действия
+    // переехали наверх, к времени, а внизу осталась одна важность.
     return (
-      <div style={box}>
-        <div style={styles.rowTop}>
+      <div ref={rowRef} style={box}>
+        <div style={styles.rowHead}>
           <span style={styles.rowTime}>{entry.start}</span>
-          <span style={styles.rowName}>{title}</span>
+          <span style={styles.rowActions}>
+            {onAddTask && !isExam && (
+              <button
+                type="button"
+                onClick={onAddTask}
+                className="ap-row"
+                style={styles.rowTaskBtn}
+                title="Добавить задание к этому уроку"
+              >
+                <span aria-hidden="true" style={styles.rowTaskPlus}>+</span> задание
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="ap-row"
+              style={styles.rowIconBtn}
+              aria-label={"Изменить: " + title}
+              title="Изменить"
+            >
+              <PencilIcon />
+            </button>
+            {foldBtn}
+          </span>
         </div>
+        <div style={styles.rowName}>{title}</div>
         <div style={styles.rowFacts}>{details}</div>
         {isExam && entry.url && (
           <a className="lesson-link" href={entry.url} target="_blank" rel="noreferrer" style={styles.examLink}>
@@ -5469,28 +5281,19 @@ function ScheduleEntryRow({ entry, onUpdate, onRemove, compact, onAddTask }) {
         )}
         <div style={styles.rowBottom}>
           <PriorityPicker value={entry.priority || 1} onChange={(v) => onUpdate(entry.id, { priority: v })} />
-          {onAddTask && !isExam && (
-            <button onClick={onAddTask} style={styles.rowEditInline}>
-              + задание
-            </button>
-          )}
-          <button onClick={() => setEditing(true)} style={styles.rowEdit}>
-            изменить
-          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={box}>
+    <div ref={rowRef} style={box}>
       {isExam && (
         <div style={styles.examRow}>
           <ExamKindPicker value={entry.examKind} onChange={(v) => onUpdate(entry.id, { examKind: v })} />
-          <input
-            type="date"
+          <DateField
             value={entry.date || ""}
-            onChange={(e) => onUpdate(entry.id, { date: e.target.value })}
+            onCommit={(date) => (onMoveDate ? onMoveDate(entry, date) : onUpdate(entry.id, { date }))}
             style={styles.examDateInput}
             title="Дата — по ней же считается день недели"
           />
@@ -5734,8 +5537,8 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
   );
 }
 
-// Правила таблицы стилей, которые у двух дизайнов разные: навигация, вкладки,
-// поля ввода и плитки дня на телефоне. Прежний набор — ровно как в 0.14.0.
+// Правила таблицы стилей, которые не выразить инлайновым стилем: навигация,
+// вкладки, поля ввода и плитки дня на телефоне.
 const NEW_CSS = `
         .ap-card:hover { box-shadow: var(--shadow); }
         /* Состояния навигации описаны здесь целиком: инлайновый стиль перебивал :hover,
@@ -5818,33 +5621,6 @@ const NEW_MOBILE_CSS = `
           .ap-tiles > .ap-card > :nth-child(2) > :nth-child(2),
           .ap-tiles > .ap-card > :last-child { display: none; }
           .ap-main section.ap-card { padding: 18px 16px !important; }
-`;
-const CLASSIC_CSS = `
-        .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
-        .ap-nav {
-          padding: 10px 12px;
-          border: none;
-          border-left: 3px solid transparent;
-          border-radius: 8px;
-          background: transparent;
-          color: var(--railInk2);
-          transition: background .22s ease, color .22s ease, border-color .22s ease, padding-left .22s ease;
-        }
-        .ap-nav:hover { background: var(--railActive); color: var(--railInk); padding-left: 16px; }
-        .ap-nav.is-on { background: var(--railActive); color: var(--railInk); border-left-color: var(--accent); font-weight: 600; }
-        .ap-tab {
-          border: none;
-          background: transparent;
-          color: var(--railInk2);
-          padding: 10px 4px 12px;
-          transition: background .22s ease, color .22s ease;
-        }
-        .ap-tab:hover { background: var(--railActive); color: var(--railInk); }
-        .ap-tab.is-on { background: var(--railActive); color: var(--railInk); font-weight: 600; }
-        .ap-tab-mark { background: transparent; transition: background .22s ease; }
-        .ap-tab.is-on .ap-tab-mark, .ap-tab:hover .ap-tab-mark { background: var(--accent); }`;
-const CLASSIC_MOBILE_CSS = `
-          .ap-main { padding: 16px 14px 96px !important; }
 `;
 
 const styles = {
@@ -6590,6 +6366,28 @@ const styles = {
   rowName: { fontSize: 13.5, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" },
   rowFacts: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.45, overflowWrap: "anywhere" },
   rowBottom: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 },
+  // Дальний экзамен: до даты больше недели — полупрозрачно, внизу дня.
+  scheduleFar: { opacity: 0.55 },
+  scheduleFolded: {
+    flexDirection: "row", alignItems: "center", gap: 6, width: "100%", textAlign: "left",
+    padding: "5px 8px", cursor: "pointer", font: "inherit", color: "var(--ink3)",
+  },
+  foldedName: { fontSize: 12, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "1 1 auto" },
+  foldedDate: { fontSize: 11, color: "var(--mute)", whiteSpace: "nowrap" },
+  // Шапка карточки урока: время слева, действия справа.
+  rowHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, minHeight: 26 },
+  rowActions: { display: "flex", alignItems: "center", gap: 4, flexShrink: 0 },
+  rowTaskBtn: {
+    display: "inline-flex", alignItems: "center", gap: 3, height: 26, padding: "0 8px",
+    border: "1px solid var(--line)", borderRadius: 8, background: "transparent",
+    fontSize: 11.5, color: "var(--ink3)", whiteSpace: "nowrap", cursor: "pointer",
+  },
+  rowTaskPlus: { fontSize: 14, lineHeight: 1, marginTop: -1 },
+  rowIconBtn: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, padding: 0,
+    border: "1px solid var(--line)", borderRadius: 8, background: "transparent",
+    color: "var(--ink3)", cursor: "pointer",
+  },
   rowEditInline: {
     border: "none",
     background: "none",
@@ -6649,7 +6447,6 @@ const styles = {
     borderLeftColor: "var(--redStrong)",
   },
   examRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 2 },
-  examNote: { fontSize: 11.5, color: "var(--green)", lineHeight: 1.5, marginTop: 6 },
   examKindPicker: { display: "flex", gap: 4 },
   examKindOn: {
     border: "1px solid var(--redStrong)",
@@ -6899,11 +6696,3 @@ const styles = {
   backupRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 4, flexWrap: "wrap" },
 };
 
-// Снимок нового набора стилей. Прежний дизайн накладывает поверх него свои
-// значения из styles-classic.js; при возврате к новому всё ставится обратно.
-// Объект один на всё приложение, поэтому подмена видна и мелким компонентам
-// в этом файле, которые берут стили из него напрямую.
-const NEW_STYLES = { ...styles };
-function applyDesignStyles(classic) {
-  Object.assign(styles, NEW_STYLES, classic ? CLASSIC_STYLES : null);
-}

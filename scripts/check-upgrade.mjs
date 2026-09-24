@@ -69,7 +69,11 @@ const OLD_STATE = {
     // Урок из готового расписания прошлого выпуска: приложение должно пересобрать
     // его само, не тронув две записи выше — они добавлены руками.
     { id: "sch-lyceum10-tue-3-1", day: "tue", kind: "lesson", subjectName: "Русский язык", level: "base", priority: 1, start: "10:20", end: "11:00", room: "каб. 401", teacher: "Петращук В.В.", place: "", url: "", date: "", preset: "lyceum10" },
+    // Контрольный тест КТ1, добавленный из готового графика. Сам блок КТ1 из
+    // «Лицея» убран — тесты прошли, — но добавленное остаётся в записях.
+    { id: "sch-kt1-rus", day: "thu", kind: "exam", examKind: "exam", subjectName: "Русский язык · КТ1", level: "base", priority: 3, start: "16:00", end: "18:00", room: "", teacher: "", place: "КЭО", url: "", date: "2026-09-17", preset: "kt1" },
   ],
+  examPicks: ["rus"],
   presetChoices: { school: "law", groups: { rus: "timoshkova", eng: "ivanova", math: "base" }, specs: [] },
   notebooks: {
     "subj:law": [{ id: "b1", name: "ТГП", branches: [{ id: "br1", name: "Источники права", html: "<p>Конспект</p>", notes: [], files: [] }] }],
@@ -122,6 +126,7 @@ if (!after) {
   want("свой урок на месте", !!after.lyceumSchedule?.some((e) => e.id === "s1"), true);
   want("своя олимпиада на месте", !!after.lyceumSchedule?.some((e) => e.id === "s2"), true);
   want("готовое расписание пересобралось", after.lyceumSchedule?.length > 3, true);
+  want("добавленный КТ1 остался в записях", !!after.lyceumSchedule?.some((e) => /КТ1/.test(e.subjectName)), true);
   want("новый урок подтянулся сам", !!after.lyceumSchedule?.some((e) => /Основы ИИ/.test(e.subjectName)), true);
   want("блоки тетради", after.notebooks?.["subj:law"]?.length, 1);
   want("конспект внутри ветки", after.notebooks?.["subj:law"]?.[0]?.branches?.[0]?.html, "<p>Конспект</p>");
@@ -139,6 +144,14 @@ if (!after) {
 
 const text = await page.locator("#root").innerText();
 want("приложение нарисовалось", text.length > 400, true);
+
+// Блока «Контрольные тесты КТ1» в «Лицее» больше нет.
+await page.evaluate(() => localStorage.setItem("planner-screen", "school"));
+await page.reload();
+await page.waitForTimeout(1800);
+const school = await page.locator("#root").innerText();
+want("«Лицей» открывается", /Расписание/.test(school), true);
+want("блока КТ1 в «Лицее» нет", /Контрольные тесты КТ1/.test(school), false);
 if (errors.length) problems.push("ошибки на странице: " + errors.join("; "));
 console.log(errors.length ? "✗ ошибок на странице: " + errors.length : "✓ ошибок на странице нет");
 

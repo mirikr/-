@@ -1,9 +1,14 @@
 import React, { useEffect } from "react";
 
+// Окно «Новый дизайн» показываем один раз на устройстве: отметка лежит в
+// localStorage и в облако не едет.
+export const DESIGN_INTRO_KEY = "planner-design-intro";
+export const DESIGN_INTRO_VERSION = "1.0.0";
+
 // Разовое окно о новом дизайне. Приложение открывается уже в новом виде —
-// окно объясняет, что случилось, и сразу даёт вернуть прежний: привычный
-// интерфейс, поменявшийся без предупреждения, выглядит как поломка.
-export default function DesignIntroDialog({ open, onKeep, onClassic, onNotes }) {
+// окно объясняет, что случилось: привычный интерфейс, поменявшийся без
+// предупреждения, выглядит как поломка.
+export default function DesignIntroDialog({ open, onKeep, onNotes }) {
   useEffect(() => {
     if (!open) return;
     function onKey(e) {
@@ -36,13 +41,9 @@ export default function DesignIntroDialog({ open, onKeep, onClassic, onNotes }) 
             записано, серия и неделя к плану, а запись занятия теперь отдельной карточкой.
           </p>
           <p style={styles.p}>Все записи на месте: поменялся только вид.</p>
-          <p style={styles.note}>Вернуть прежний дизайн можно в любой момент: «Настройки» → «Дизайн».</p>
           <div style={styles.actions}>
             <button onClick={onKeep} style={styles.go} autoFocus>
               Отлично
-            </button>
-            <button onClick={onClassic} style={styles.later}>
-              Вернуть прежний
             </button>
             <button onClick={onNotes} className="ap-version" style={styles.link}>
               Что изменилось
@@ -93,28 +94,6 @@ const styles = {
   eyebrow: { fontSize: 12.5, color: "var(--accent)", fontWeight: 600, marginBottom: 4 },
   title: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 23, lineHeight: 1.2, marginBottom: 10 },
   p: { fontSize: 14, lineHeight: 1.6, color: "var(--ink2)", margin: "0 0 10px" },
-  note: { fontSize: 13, lineHeight: 1.55, color: "var(--ink3)", margin: "0 0 16px" },
-  actions: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
-  go: {
-    border: "none",
-    color: "var(--btnInk)",
-    background: "var(--btnBg)",
-    borderRadius: 10,
-    minHeight: 40,
-    padding: "0 18px",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  later: {
-    border: "1px solid var(--line)",
-    background: "var(--panel2)",
-    color: "var(--ink2)",
-    borderRadius: 10,
-    minHeight: 40,
-    padding: "0 16px",
-    fontSize: 14,
-    fontWeight: 600,
-  },
   link: {
     border: "none",
     background: "none",

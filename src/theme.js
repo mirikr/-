@@ -39,35 +39,6 @@ html, body { background: var(--bg); color: var(--ink); }
   --focus:#D9B45A;
   color-scheme:dark;
 }
-/* Прежний дизайн (0.14.0) — его палитра, включается переключателем в
-   «Настройках». Селектор с двумя атрибутами сильнее одиночного [data-theme],
-   поэтому перекрывает новый набор, где бы ни стоял выше. */
-[data-design="classic"][data-theme]{
-  --bg:#EFEBE1;--panel:#FBF9F3;--panel2:#FFFDF8;--line:#DCD5C4;--line2:#E4DECD;
-  --ink:#2B2822;--ink2:#5A5347;--ink3:#6B6656;--mute:#8A8370;
-  --rail:#2B2822;--railInk:#EDE7D8;--railInk2:#CFC7B4;--railActive:#403C31;
-  --accent:#8C7326;--accentInk:#FBF9F3;--gold:#C9A227;--green:#3F6E52;--red:#8B4A4A;
-  --redStrong:#B23A3A;--blue:#2F4E70;--purple:#5C4A80;
-  --warmBg:#FBF0D2;--warmLine:#E0C97C;--warmInk:#7A5A12;
-  --redBg:#F9E2DF;--redLine:#D9A6A0;--neutralBg:#F1EEE4;
-  --barDim:#C9C1AC;--btnBg:#2B2822;--btnInk:#FBF9F3;
-  --corridor:rgba(140,115,38,.09);--corridorLine:#B8A879;
-  --shadow:0 10px 26px rgba(43,40,34,.1);
-  --sans:Inter, system-ui, sans-serif;
-}
-[data-design="classic"][data-theme="night"]{
-  --bg:#171612;--panel:#1E1C16;--panel2:#211F19;--line:#34312A;--line2:#2A2821;
-  --ink:#EDE7D8;--ink2:#D9D2C0;--ink3:#A49B85;--mute:#A49B85;
-  --rail:#12110E;--railInk:#EDE7D8;--railInk2:#BDB4A0;--railActive:#211F19;
-  --accent:#E8C468;--accentInk:#171612;--gold:#E8C468;--green:#7FB08C;--red:#C96A60;
-  --redStrong:#C96A60;--blue:#9FC2E0;--purple:#A992D0;
-  --warmBg:#2A2417;--warmLine:#5A4A20;--warmInk:#E8C468;
-  --redBg:#2A1D1B;--redLine:#5A322C;--neutralBg:#211F19;
-  --barDim:#8A5049;--btnBg:#E8C468;--btnInk:#171612;
-  --corridor:rgba(232,196,104,.08);--corridorLine:rgba(232,196,104,.5);
-  --shadow:0 10px 26px rgba(0,0,0,.4);
-}
-html[data-design="classic"] body, [data-design="classic"].ap-shell { font-family: Inter, system-ui, sans-serif; }
 /* Ползунок масштаба под графиком часов. Системный вид у него слишком яркий
    и в ночной теме светится белым, поэтому дорожка и бегунок свои. */
 /* При живом фоне карточки становятся стеклом: переопределяем сами токены, а
@@ -138,6 +109,17 @@ html[data-design="classic"] body, [data-design="classic"].ap-shell { font-family
   border: 2px solid var(--panel); cursor: pointer;
 }
 .ap-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--corridorLine); }
+/* Ползунок в цвете предмета («Распределение»). Раньше там стоял системный
+   ползунок с accent-color, и дорожку Chrome красил сам — «для контраста»: под
+   светлым цветом предмета тёмной, под тёмным — белой. В ночной теме у своих
+   предметов с тёмными цветами дорожки горели белым. Теперь дорожка у всех
+   одна — цвета линий темы, а пройденная часть и бегунок — цвета предмета. */
+.ap-range-fill::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--fill) var(--pct), var(--line) var(--pct));
+}
+.ap-range-fill::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--fill); }
+.ap-range-fill::-webkit-slider-thumb { background: var(--fill); }
+.ap-range-fill::-moz-range-thumb { background: var(--fill); }
 
 /* Условие задания из банка ФИПИ: у них вёрстка на таблицах, и ломать её нельзя —
    в информатике таблица и есть половина задания, а в обществознании два столбца

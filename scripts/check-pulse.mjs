@@ -125,11 +125,9 @@ const open = async (state) => {
 // --- запись с «Сегодня» — всегда за сегодня --------------------------------
 // Форма на «Сегодня» и форма в «Дневнике» делят одно состояние. Если в дневнике
 // открыт другой день, запись с «Сегодня» уходила туда, а не в сегодня.
-for (const design of ["new", "classic"]) {
+{
+  const where = "Сегодня";
   const { browser, page, errors } = await open({});
-  await page.evaluate((d) => localStorage.setItem("planner-design", d), design);
-  await page.reload();
-  await page.waitForTimeout(1500);
   const localDay = (shift) => page.evaluate((n) => {
     const d = new Date(); d.setDate(d.getDate() + n);
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -146,14 +144,12 @@ for (const design of ["new", "classic"]) {
   // Возвращаемся на «Сегодня» и пишем занятие оттуда.
   await page.locator("button:visible", { hasText: "Сегодня" }).first().click();
   await page.waitForTimeout(700);
-  const note = "проверка даты " + design;
+  const note = "проверка даты " + where;
   const field = page.locator('textarea:visible, input[type="text"]:visible')
     .filter({ has: page.locator("xpath=self::*[contains(@placeholder, 'прошли') or contains(@placeholder, 'Например: конституционные')]") })
     .first();
   await field.fill(note);
-  const submit = design === "new"
-    ? page.locator("#quick-log button", { hasText: /^Записать$/ })
-    : page.locator("button:visible", { hasText: "+ Записать" }).first();
+  const submit = page.locator("#quick-log button", { hasText: /^Записать$/ });
   await submit.click();
   await page.waitForTimeout(1600);
 
@@ -162,10 +158,10 @@ for (const design of ["new", "classic"]) {
     const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
     return (value.journal || []).find((e) => e.note === n) || null;
   }, note);
-  want(`${design}: запись с «Сегодня» сохранилась`, !!entry);
-  want(`${design}: запись с «Сегодня» — за сегодня, а не за день из дневника`,
+  want(`${where}: запись с «Сегодня» сохранилась`, !!entry);
+  want(`${where}: запись с «Сегодня» — за сегодня, а не за день из дневника`,
     entry && entry.date === todayLocal, entry ? entry.date + " вместо " + todayLocal : "записи нет");
-  want(`${design}: ошибок нет`, errors.length === 0, errors[0] || "");
+  want(`${where}: ошибок нет`, errors.length === 0, errors[0] || "");
   await browser.close();
 }
 
