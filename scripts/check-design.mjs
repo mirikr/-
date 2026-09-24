@@ -348,6 +348,53 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 7. Задания под уроками в неделе «Лицея». Задание из «Дневника» знает предмет
+// и дату, но не урок, — раньше в неделе его не было вовсе. Длинное задание
+// свёрнуто в две строки и разворачивается по нажатию.
+{
+  const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  let n = 2; while (DOW[new Date(Date.now() + n * 864e5).getDay()] === "sun") n += 1;
+  const d = new Date(Date.now() + n * 864e5);
+  const date = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const day = DOW[d.getDay()];
+  const lesson = (id, start) => ({ id, day, kind: "lesson", subjectName: "Обществознание", level: "prof", priority: 2, start, end: start, room: "каб. 401", teacher: "Калиниченко А.О.", place: "", url: "", date: "" });
+  const long = "1. Теория по уроку 1 и 2! Учим! Отвечаем на уроке и отрабатываем этот материал заданиями 2 части. 2. Тесты выполняем в домашних условиях, планы учим! 3. Задания к уроку 1 также выполняйте!";
+  const state = {
+    lyceumSchedule: [lesson("s1", "12:20"), lesson("s2", "13:20")],
+    // Заведено в «Дневнике»: предмет и дата есть, урока нет.
+    homework: [{ id: "hw-j1", date, subjectName: "Обществознание", text: long, minutes: 60, done: false, attachments: [], lessonId: "" }],
+  };
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript((st) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "school");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, state);
+  await page.goto(URL0);
+  await page.waitForTimeout(2000);
+  const visibleDays = await page.evaluate(() => [...document.querySelectorAll(".ap-card")]
+    .filter((c) => c.offsetParent && /^(Пн|Вт|Ср|Пт|Сб)(\s|$)/.test((c.firstElementChild || {}).innerText || "")).length);
+  if (visibleDays === 0) { await page.getByRole("button", { name: /Вся неделя/ }).first().click(); await page.waitForTimeout(600); }
+  const shown = page.locator("span", { hasText: "Теория по уроку 1 и 2" });
+  const count = await shown.evaluateAll((els) => els.filter((e) => e.offsetParent).length);
+  want("задание из «Дневника» видно под уроком", count >= 1, "видно раз: " + count);
+  want("на паре подряд — один раз, а не дважды", count === 1, "раз: " + count);
+  const box = await shown.first().boundingBox();
+  want("длинное задание свёрнуто в две строки", box && box.height < 40, box ? Math.round(box.height) + " px" : "нет");
+  await page.getByRole("button", { name: "Развернуть задание" }).first().click();
+  await page.waitForTimeout(300);
+  const open = await shown.first().boundingBox();
+  want("по нажатию разворачивается", open && open.height > box.height + 10, open ? Math.round(open.height) + " px" : "нет");
+  want("задания: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 await browser.close(); server.close();
 console.log(bad ? `\nпровалов: ${bad}` : "\nновый дизайн работает, старого переключателя нет, записи целы");
 process.exit(bad ? 1 : 0);

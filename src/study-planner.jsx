@@ -1565,16 +1565,39 @@ export default function StudyPlanner() {
   // Всё, что карточке дня нужно знать про задания: чьи они, как добавить и как
   // отметить сделанным. Одним объектом, чтобы не тянуть четыре пропса через
   // каждый день недели.
-  const lessonTasks = useMemo(
-    () => ({
+  const lessonTasks = useMemo(() => {
+    // Задание из «Дневника» знает предмет и дату, но не урок: его заводят на
+    // день, а не на карточку урока. Раньше в неделе оно поэтому не показывалось
+    // вовсе. Теперь оно встаёт под первый урок этого предмета в день своего
+    // срока — на паре подряд одно, а не дважды. Задания с прошедшим сроком
+    // сюда не тянем: неделя смотрит вперёд.
+    const ids = new Set(lyceumSchedule.map((e) => e.id));
+    const today = todayStr();
+    const loose = new Map();
+    homework.forEach((h) => {
+      if (h.lessonId && ids.has(h.lessonId)) return;
+      if (!h.subjectName || !h.date || h.date < today) return;
+      const day = weekdayKeyFromDate(h.date);
+      const lesson = lyceumSchedule
+        .filter((e) => e.kind !== "exam" && e.day === day && e.subjectName === h.subjectName)
+        .sort((a, b) => String(a.start).localeCompare(String(b.start)))[0];
+      if (!lesson) return;
+      if (!loose.has(lesson.id)) loose.set(lesson.id, []);
+      loose.get(lesson.id).push(h);
+    });
+    return {
       dueDate: (dayKey) => nextDateForDay(dayKey),
-      forLesson: (lessonId) => homework.filter((h) => h.lessonId === lessonId),
+      // Принимает урок целиком (или его id — для привязанных заданий этого хватает).
+      forLesson: (lesson) => {
+        const id = typeof lesson === "string" ? lesson : lesson && lesson.id;
+        return homework.filter((h) => h.lessonId === id).concat(loose.get(id) || []);
+      },
       add: (entry, text, minutes) =>
         addHomework(nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
       toggle: (id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done }),
-    }),
-    [homework]
-  );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homework, lyceumSchedule]);
 
   const dayEntries = useCallback(
     (day) =>
@@ -4829,6 +4852,47 @@ function AddSubjectForm({ onAdd, placeholder }) {
   );
 }
 
+// Задание под уроком. Длинное — в две строки, по нажатию разворачивается:
+// задание на полэкрана раздвигало день так, что соседние уроки уезжали вниз.
+// Отметка «сделано» — своей галочкой, чтобы разворачивание не ставило её.
+const TASK_FOLD_CHARS = 90;
+function LessonTaskRow({ task: h, due, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const text = h.text || "";
+  const long = text.length > TASK_FOLD_CHARS || text.split("\n").length > 2;
+  return (
+    <div style={styles.lessonTaskRow}>
+      <input type="checkbox" checked={!!h.done} onChange={onToggle} aria-label={"Сделано: " + text.slice(0, 40)} />
+      <span
+        style={{
+          ...styles.lessonTaskText,
+          ...(long && !open ? styles.lessonTaskFolded : null),
+          textDecoration: h.done ? "line-through" : "none",
+          cursor: long ? "pointer" : "default",
+        }}
+        onClick={long ? () => setOpen(!open) : undefined}
+      >
+        {text}
+      </span>
+      <span style={styles.lessonTaskMeta}>
+        {h.minutes ? h.minutes + " мин" : ""}
+        {h.date && h.date !== due ? " · " + h.date.slice(8) + "." + h.date.slice(5, 7) : ""}
+      </span>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          style={styles.lessonTaskMore}
+          aria-expanded={open}
+          aria-label={open ? "Свернуть задание" : "Развернуть задание"}
+        >
+          {open ? "свернуть" : "ещё"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
   const [examOpen, setExamOpen] = useState(false);
   // С чем открыть форму экзамена: запрос из уведомления живёт только до того,
@@ -4888,7 +4952,7 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
           Строка при этом однострочная, поэтому столбец выходит короткий. */}
       <div style={today ? styles.dayEntriesList : undefined}>
         {entries.map((e) => {
-          const list = tasks ? tasks.forLesson(e.id) : [];
+          const list = tasks ? tasks.forLesson(e) : [];
           return (
             <div key={e.id}>
               <ScheduleEntryRow
@@ -4904,16 +4968,7 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
               {list.length > 0 && (
                 <div style={styles.lessonTasks}>
                   {list.map((h) => (
-                    <label key={h.id} style={styles.lessonTaskRow}>
-                      <input type="checkbox" checked={!!h.done} onChange={() => tasks.toggle(h.id)} />
-                      <span style={{ ...styles.lessonTaskText, textDecoration: h.done ? "line-through" : "none" }}>
-                        {h.text}
-                      </span>
-                      <span style={styles.lessonTaskMeta}>
-                        {h.minutes ? h.minutes + " мин" : ""}
-                        {h.date && h.date !== due ? " · " + h.date.slice(8) + "." + h.date.slice(5, 7) : ""}
-                      </span>
-                    </label>
+                    <LessonTaskRow key={h.id} task={h} due={due} onToggle={() => tasks.toggle(h.id)} />
                   ))}
                 </div>
               )}
@@ -6322,7 +6377,13 @@ const styles = {
   // Задания живут под своим уроком: «к какому уроку» — это первое, что
   // спрашивают, а раньше они лежали отдельным списком и связи не было видно.
   lessonTasks: { display: "flex", flexDirection: "column", gap: 3, margin: "3px 0 2px 14px" },
-  lessonTaskRow: { display: "flex", alignItems: "baseline", gap: 7, fontSize: 12.5, cursor: "pointer" },
+  lessonTaskRow: { display: "flex", alignItems: "baseline", gap: 7, fontSize: 12.5, flexWrap: "wrap" },
+  // Длинное задание — в две строки, пока его не развернут.
+  lessonTaskFolded: { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
+  lessonTaskMore: {
+    border: "none", background: "none", padding: 0, fontSize: 11.5, color: "var(--accent)",
+    fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+  },
   lessonTaskText: { flex: 1, minWidth: 0, color: "var(--ink2)", overflowWrap: "anywhere" },
   lessonTaskMeta: { fontSize: 11.5, color: "var(--mute)", whiteSpace: "nowrap" },
   lessonTaskForm: { display: "flex", alignItems: "center", gap: 6, margin: "4px 0 6px 14px", flexWrap: "wrap" },
