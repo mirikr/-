@@ -2864,16 +2864,14 @@ export default function StudyPlanner() {
                   value={jForm.note}
                   onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
                   onEnter={() => {
-                    setJForm({ ...jForm, date: todayStr() });
-                    addJournalEntry();
+                    addJournalEntry(todayStr());
                   }}
                   style={styles.quickControl}
                 />
               </label>
               <button
                 onClick={() => {
-                  setJForm({ ...jForm, date: todayStr() });
-                  addJournalEntry();
+                  addJournalEntry(todayStr());
                 }}
                 style={styles.quickSubmit}
               >
@@ -3250,15 +3248,13 @@ export default function StudyPlanner() {
                     value={jForm.note}
                     onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
                     onEnter={() => {
-                      setJForm({ ...jForm, date: todayStr() });
-                      addJournalEntry();
+                      addJournalEntry(todayStr());
                     }}
                     style={styles.noteInput}
                   />
                   <button
                     onClick={() => {
-                      setJForm({ ...jForm, date: todayStr() });
-                      addJournalEntry();
+                      addJournalEntry(todayStr());
                     }}
                     style={styles.addBtnSmall}
                   >

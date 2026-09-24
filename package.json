@@ -13,7 +13,8 @@
     "check:upgrade": "node scripts/check-upgrade.mjs",
     "check:crash": "node scripts/check-crash.mjs",
     "check:trainer": "node scripts/check-trainer.mjs",
-    "check:pulse": "node scripts/check-pulse.mjs"
+    "check:pulse": "node scripts/check-pulse.mjs",
+    "check:design": "node scripts/check-design.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

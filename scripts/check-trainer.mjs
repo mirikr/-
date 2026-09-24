@@ -50,7 +50,7 @@ page.on("pageerror", (e) => errors.push(e.message));
 // помечаем его как уже показанное.
 await page.addInitScript(() => {
   try {
-    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule"); localStorage.setItem("planner-design-intro", "1.0.0");
     localStorage.setItem("planner-screen", "trainer");
   } catch (e) { /* приватный режим — не беда */ }
 });

@@ -99,11 +99,12 @@ if (await ask.count()) {
 } else {
   folded.push("на странице нет ни одной кнопки «?»");
 }
-const foot = page.getByRole("button", { name: /Подробнее о синхронизации/ }).first();
+// В новом дизайне кнопка подвала — «подробнее +», в прежнем — «Подробнее о синхронизации».
+const foot = page.getByRole("button", { name: /Подробнее о синхронизации|^подробнее/i }).first();
 if (await foot.count()) {
   await foot.evaluate((el) => el.click());
   await page.waitForTimeout(300);
-  if (!/бета /.test(await page.locator("#root").innerText())) folded.push("подвал колонки не развернулся");
+  if (!/(бета|версия) \d/.test(await page.locator("#root").innerText())) folded.push("подвал колонки не развернулся");
 } else {
   folded.push("подвал колонки не сворачивается");
 }
