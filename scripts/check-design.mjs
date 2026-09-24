@@ -89,8 +89,12 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   for (const k of keys) {
     await page.evaluate((k) => { localStorage.setItem("planner-screen", k); }, k);
     await page.reload(); await page.waitForTimeout(900);
+    // Экран открылся, если у него есть заголовок и хоть какое-то содержимое.
+    // Считать только объём текста нельзя: пустые «Тетради» на телефоне без
+    // отсчёта до события — меньше 150 знаков, хотя открыты целиком.
     const t = (await page.locator("#root").innerText()).length;
-    if (t > 150) opened += 1;
+    const head = await page.locator("main h1").count();
+    if (head === 1 && t > 100) opened += 1;
   }
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   want(`${theme}/${vp.width}px: экраны открываются`, opened === keys.length, opened + " из " + keys.length);
