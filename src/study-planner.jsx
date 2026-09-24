@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
-import { stampState, mergeSerialized } from "./sync-state.js";
+import { stampState, mergeStates, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments } from "./notebook.jsx";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
@@ -692,6 +692,8 @@ export default function StudyPlanner() {
   // Последнее сохранённое состояние с метками времени: с ним сравнивается текущее,
   // чтобы пометить как изменённые только те элементы, которые вправду поменялись.
   const syncSnapshot = useRef(null);
+  // Всё, что сейчас на экране, — в том числе правки, которые ещё ждут сохранения.
+  const liveState = useRef(null);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudOn, setCloudOn] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
@@ -732,7 +734,15 @@ export default function StudyPlanner() {
         const res = await storageGet(STORAGE_KEY, mergeSerialized);
         if (res && res.value) {
           found = true;
-          const parsed = JSON.parse(res.value);
+          let parsed = JSON.parse(res.value);
+          // Сохранение идёт с задержкой, а перечитывание срабатывает при каждом
+          // возвращении в окно — в том числе после выбора файла в системном диалоге.
+          // Раньше прочитанное просто ставилось поверх экрана, и только что
+          // созданная ветка или прикреплённый файл пропадали. Несохранённое
+          // сливается с прочитанным так же, как правки с двух устройств.
+          if (pendingSince.current !== null && liveState.current && syncSnapshot.current) {
+            parsed = mergeStates(stampState(syncSnapshot.current, liveState.current), parsed);
+          }
           syncSnapshot.current = parsed;
           if (parsed.data) setData(parsed.data);
           if (parsed.journal) setJournal(parsed.journal);
@@ -859,6 +869,31 @@ export default function StudyPlanner() {
     };
   }, [tryLoad]);
 
+  liveState.current = {
+    data,
+    journal,
+    budget,
+    events,
+    notebooks,
+    customSubjects,
+    hiddenSubjects,
+    subjectColors,
+    showSunday,
+    calendarToken,
+    lyceumSchedule,
+    presetChoices,
+    examPicks,
+    voshPicks,
+    lyceumRevision,
+    mainEventId,
+    weekPlanned,
+    openSections,
+    homework,
+    trainerLog,
+    trainerState,
+    bankMarks,
+  };
+
   useEffect(() => {
     if (!loaded) return;
     if (firstLoad.current) {
@@ -875,30 +910,7 @@ export default function StudyPlanner() {
     saveTimer.current = setTimeout(() => {
       pendingSince.current = null;
       (async () => {
-        const stamped = stampState(syncSnapshot.current, {
-          data,
-          journal,
-          budget,
-          events,
-          notebooks,
-          customSubjects,
-          hiddenSubjects,
-          subjectColors,
-          showSunday,
-          calendarToken,
-          lyceumSchedule,
-          presetChoices,
-          examPicks,
-          voshPicks,
-          lyceumRevision,
-          mainEventId,
-          weekPlanned,
-          openSections,
-          homework,
-          trainerLog,
-          trainerState,
-          bankMarks,
-        });
+        const stamped = stampState(syncSnapshot.current, liveState.current);
         syncSnapshot.current = stamped;
         const payload = JSON.stringify(stamped);
         let saved = null;
@@ -1200,7 +1212,9 @@ export default function StudyPlanner() {
   function updateNote(subjectId, topicId, custom, noteId, patch) {
     updateTopic(subjectId, topicId, custom, (t) => ({
       ...t,
-      notes: (t.notes || []).map((n) => (n.id === noteId ? { ...n, ...patch } : n)),
+      notes: (t.notes || []).map((n) =>
+        n.id === noteId ? { ...n, ...(typeof patch === "function" ? patch(n) : patch) } : n
+      ),
     }));
   }
 
@@ -1547,8 +1561,13 @@ export default function StudyPlanner() {
     setCalendarMsg("Подписка отключена. В телефоне календарь придётся удалить вручную.");
   }
 
+  // Принимает и готовый список, и функцию от текущего: файл загружается несколько
+  // секунд, и за это время тетрадь могла измениться — дописывать надо к свежей.
   function setNotebook(ownerKey, blocks) {
-    setNotebooks((prev) => ({ ...prev, [ownerKey]: blocks }));
+    setNotebooks((prev) => ({
+      ...prev,
+      [ownerKey]: typeof blocks === "function" ? blocks(prev[ownerKey] || []) : blocks,
+    }));
   }
 
   // Пока воскресенье скрыто, его уроки не участвуют в дневнике и домашних заданиях,
@@ -4744,7 +4763,12 @@ function TopicItem({
                     />
                     <Attachments
                       files={n.files || []}
-                      onChange={(files) => onUpdateNote(n.id, { files })}
+                      onChange={(files) =>
+                        onUpdateNote(
+                          n.id,
+                          typeof files === "function" ? (note) => ({ files: files(note.files || []) }) : { files }
+                        )
+                      }
                       prefix={"note-" + n.id}
                     />
                   </div>
