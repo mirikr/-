@@ -2827,57 +2827,41 @@ export default function StudyPlanner() {
               )}
             </section>
 
-            <section id="quick-log" className="ap-card" style={styles.card}>
-              <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
-              <div style={styles.quickGrid}>
-                <label style={styles.quickField}>
-                  <span style={styles.quickLabel}>Предмет</span>
-                  <select
-                    value={jForm.subjectId}
-                    onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })}
-                    style={styles.quickControl}
-                  >
-                    {ALL_SUBJECTS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ ...styles.quickField, flex: "0 0 96px" }}>
-                  <span style={styles.quickLabel}>Часы</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    inputMode="decimal"
-                    value={jForm.hours}
-                    onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
-                    style={styles.quickControl}
-                  />
-                </label>
-              </div>
-              <label style={{ ...styles.quickField, marginTop: 12 }}>
-                <span style={styles.quickLabel}>Что прошли</span>
-                <AutoGrow
-                  placeholder="Например: конституционные права, § 4"
-                  value={jForm.note}
-                  onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
-                  onEnter={() => {
-                    addJournalEntry(todayStr());
-                  }}
-                  style={styles.quickControl}
-                />
-              </label>
-              <button
-                onClick={() => {
-                  addJournalEntry(todayStr());
-                }}
-                style={styles.quickSubmit}
-              >
-                Записать
+            {!homeworkEmpty && (
+            <section className="ap-card" style={styles.card}>
+              <CardHead
+                id="today-homework"
+                title="Дела и сроки"
+                empty={upcomingHomework.length === 0}
+                note="По сроку, а не по предмету"
+              />
+              {upcomingHomework.length === 0 ? (
+                <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
+              ) : (
+                <div style={styles.todayList}>
+                  {upcomingHomework.map((h) => (
+                    <label key={h.id} style={styles.taskRow}>
+                      <input
+                        type="checkbox"
+                        checked={!!h.done}
+                        onChange={() => updateHomework(h.id, { done: !h.done })}
+                      />
+                      <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>
+                        {h.text || "без описания"}
+                      </span>
+                      <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
+                        {relativeDayLabel(h.daysUntil)}
+                        {h.subjectName ? " · " + h.subjectName : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => goScreen("journal")} style={styles.goLink}>
+                Дневник и задания →
               </button>
             </section>
+            )}
           </div>
 
           <section className="ap-card" style={styles.card}>
@@ -2951,41 +2935,57 @@ export default function StudyPlanner() {
             </section>
             )}
 
-            {!homeworkEmpty && (
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="today-homework"
-                title="Дела и сроки"
-                empty={upcomingHomework.length === 0}
-                note="По сроку, а не по предмету"
-              />
-              {upcomingHomework.length === 0 ? (
-                <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
-              ) : (
-                <div style={styles.todayList}>
-                  {upcomingHomework.map((h) => (
-                    <label key={h.id} style={styles.taskRow}>
-                      <input
-                        type="checkbox"
-                        checked={!!h.done}
-                        onChange={() => updateHomework(h.id, { done: !h.done })}
-                      />
-                      <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>
-                        {h.text || "без описания"}
-                      </span>
-                      <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
-                        {relativeDayLabel(h.daysUntil)}
-                        {h.subjectName ? " · " + h.subjectName : ""}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => goScreen("journal")} style={styles.goLink}>
-                Дневник и задания →
+            <section id="quick-log" className="ap-card" style={styles.card}>
+              <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
+              <div style={styles.quickGrid}>
+                <label style={styles.quickField}>
+                  <span style={styles.quickLabel}>Предмет</span>
+                  <select
+                    value={jForm.subjectId}
+                    onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })}
+                    style={styles.quickControl}
+                  >
+                    {ALL_SUBJECTS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ ...styles.quickField, flex: "0 0 96px" }}>
+                  <span style={styles.quickLabel}>Часы</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    inputMode="decimal"
+                    value={jForm.hours}
+                    onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
+                    style={styles.quickControl}
+                  />
+                </label>
+              </div>
+              <label style={{ ...styles.quickField, marginTop: 12 }}>
+                <span style={styles.quickLabel}>Что прошли</span>
+                <AutoGrow
+                  placeholder="Например: конституционные права, § 4"
+                  value={jForm.note}
+                  onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
+                  onEnter={() => {
+                    addJournalEntry(todayStr());
+                  }}
+                  style={styles.quickControl}
+                />
+              </label>
+              <button
+                onClick={() => {
+                  addJournalEntry(todayStr());
+                }}
+                style={styles.quickSubmit}
+              >
+                Записать
               </button>
             </section>
-            )}
 
             {!studyEmpty && (
             <section className="ap-card" style={styles.card}>

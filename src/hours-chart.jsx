@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 // График потраченных часов. Один ряд данных — часы за период, поэтому легенда не нужна:
 // подпись сверху называет ряд. У каждого столбца своя отметка цели (для дней цель разная
@@ -148,6 +148,18 @@ function buildBuckets(journal, scale, goalForDate) {
 export default function HoursChart({ journal, homework, subjects, goalForDate }) {
   const [scale, setScale] = useState("days");
   const [active, setActive] = useState(null);
+  // Ширина карточки: по ней рисунок становится шире, но не выше. Раньше
+  // пропорции были жёсткими, и на всю ширину экрана график вырастал до
+  // шестисот пикселей в высоту вместе с подписями.
+  const wrapRef = useRef(null);
+  const [boxW, setBoxW] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const watch = new ResizeObserver((entries) => setBoxW(entries[0].contentRect.width));
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
 
   const buckets = useMemo(() => buildBuckets(journal, scale, goalForDate), [journal, scale, goalForDate]);
 
@@ -196,7 +208,11 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   const maxIndex = buckets.reduce((best, b, i) => (b.hours > buckets[best].hours ? i : best), 0);
 
   // Система координат подписей и штрихов — одна на всех: сетка, отметки, столбцы.
-  const W = 320;
+  // Ширина в своих единицах растёт вместе с карточкой, высота остаётся 190: так
+  // на широком экране график вытягивается вбок, а на экран в высоту не лезет.
+  // Делитель — во сколько раз рисунок крупнее своих единиц: подписи размером 8
+  // выходят около 11 px, как мелкий текст вокруг.
+  const W = Math.max(320, Math.round((boxW || 0) / 1.35));
   const H = 190;
   const left = 30;
   const right = 8;
@@ -245,7 +261,7 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
   }, [buckets, maxValue, step, plotH]);
 
   return (
-    <div style={styles.wrap}>
+    <div ref={wrapRef} style={styles.wrap}>
       <div style={styles.head}>
         <div style={styles.title}>{scale === "days" ? "Последние 30 дней" : scale === "months" ? "Последние 12 месяцев" : "По годам"}</div>
       </div>
