@@ -22,7 +22,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Golos+Text:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -33,7 +33,7 @@
       /* Стартовый цвет до загрузки темы; дальше его перекрывает палитра из theme.js. */
       html, body { margin: 0; background: #EFEBE1; color: #2B2822; }
       html[data-theme="night"], html[data-theme="night"] body { background: #171612; color: #EDE7D8; }
-      body { font-family: Inter, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+      body { font-family: 'Golos Text', system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
       /* Home-screen PWA on iPhone: keep content clear of the notch and the home indicator. */
       #root { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
     </style>
@@ -65,6 +65,12 @@
               : h >= night.from && h < night.to;
           var theme = mode === "auto" ? (isNight ? "night" : "light") : mode;
           document.documentElement.setAttribute("data-theme", theme);
+          // Дизайн — так же до первой отрисовки: у прежнего свой фон и шрифт,
+          // и без этого страница на миг вспыхивала бы новым. Логика — в src/design.js.
+          document.documentElement.setAttribute(
+            "data-design",
+            localStorage.getItem("planner-design") === "classic" ? "classic" : "new"
+          );
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute("content", theme === "night" ? "#171612" : "#EFEBE1");
         } catch (e) {

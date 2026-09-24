@@ -9,7 +9,17 @@ import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import CalendarHowTo from "./calendar-howto.jsx";
-import { Rail, ScreenHead, TabBar, Countdowns } from "./shell.jsx";
+import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
+import {
+  Rail as ClassicRail,
+  ScreenHead as ClassicScreenHead,
+  TabBar as ClassicTabBar,
+  Countdowns as ClassicCountdowns,
+} from "./shell-classic.jsx";
+import { useDesign, DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design.js";
+import { CLASSIC_STYLES } from "./styles-classic.js";
+import DesignIntroDialog from "./design-intro.jsx";
+import { CardHead } from "./card-head.jsx";
 import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
@@ -25,7 +35,7 @@ import NowCard from "./now-card.jsx";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
-import { BANK_IDS, BANK_SUBJECTS } from "./fipi-index.js";
+import { BANK_SUBJECTS } from "./fipi-index.js";
 import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
@@ -670,6 +680,11 @@ export default function StudyPlanner() {
   const [showBackup, setShowBackup] = useState(false);
   // Токен подписки хранится вместе с остальными данными: он один на все устройства.
   const { mode, setMode, theme, nightWindow, setNightWindow } = useThemeMode();
+  // Новый или прежний дизайн. Стили подменяются до отрисовки всего дерева,
+  // поэтому переключение не требует перезагрузки и не трогает записи.
+  const { design, classic, setDesign } = useDesign();
+  applyDesignStyles(classic);
+  const [designIntroOpen, setDesignIntroOpen] = useState(false);
   // Какой экран открыт — настройка устройства, как и тема: на телефоне человек
   // сидит в расписании, на ноутбуке в конспектах.
   const [screen, setScreen] = useState(() => {
@@ -754,6 +769,34 @@ export default function StudyPlanner() {
   useEffect(() => {
     tryLoad();
   }, [tryLoad]);
+
+  // Окно «Новый дизайн» — один раз на устройстве. Отметка ставится, когда окно
+  // закрыли, а не когда показали: перезагрузили страницу, не дочитав, — оно
+  // появится снова.
+  useEffect(() => {
+    if (!loaded) return;
+    let seen = null;
+    try {
+      seen = localStorage.getItem(DESIGN_INTRO_KEY);
+    } catch (e) {
+      seen = null;
+    }
+    if (seen !== DESIGN_INTRO_VERSION) setDesignIntroOpen(true);
+  }, [loaded]);
+
+  function closeDesignIntro(nextDesign) {
+    setDesignIntroOpen(false);
+    try {
+      localStorage.setItem(DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION);
+    } catch (e) {
+      /* приватный режим — окно покажется ещё раз, не страшно */
+    }
+    if (nextDesign === "classic") {
+      setDesign("classic");
+      // Сразу туда, где переключатель: так видно, как вернуть новый.
+      goScreen("prefs");
+    }
+  }
 
   useEffect(() => {
     if (!loaded) return;
@@ -2231,17 +2274,26 @@ export default function StudyPlanner() {
     });
   }
 
-  const trainerSolved = useMemo(() => {
-    const known = new Set(BANK_IDS);
-    const last = new Map();
-    trainerLog.forEach((a) => known.has(a.taskId) && last.set(a.taskId, a.ok));
-    let n = 0;
-    last.forEach((ok) => ok && (n += 1));
-    return n;
-  }, [trainerLog]);
-  const trainerLeft = Math.max(0, BANK_IDS.length - trainerSolved);
 
   const weeklyBudget = weeklyBudgetHours(budget);
+  const trainerToday = (() => {
+    const today = todayStr();
+    if (dayCounts(trainerByDay, today)) return "✓ сегодня";
+    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", BANK_SUBJECTS);
+    return offer && offer.solved > 0 ? offer.solved + " из " + offer.need : "";
+  })();
+  // Какие карточки внизу «Сегодня» пусты. События не пусты, пока есть главное:
+  // под ним стоит вердикт «хватит ли времени», а он нужен и без списка.
+  const eventsEmpty = laterEvents.length === 0 && !mainEvent;
+  const reminderKind = studyStreakOn
+    ? "streak"
+    : studyReminder.tone === "ok"
+      ? "ok"
+      : studyReminder.tone === "warn"
+        ? "warn"
+        : "idle";
+  const homeworkEmpty = upcomingHomework.length === 0;
+  const studyEmpty = !ALL_SUBJECTS.some((s) => stats.perSubject[s.id] && stats.perSubject[s.id].total);
   const navItems = [
     {
       key: "today",
@@ -2258,45 +2310,83 @@ export default function StudyPlanner() {
     {
       key: "trainer",
       label: "Тренажёр",
-      hint: trainerLeft ? trainerLeft + " " + tasksWord(trainerLeft) : "всё решено",
+      // Размер банка («768 заданий») не меняется и ничего не говорит. Полезно
+      // другое: сколько решено сегодня и сколько нужно, чтобы день зачёлся.
+      hint: trainerToday,
     },
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
     { key: "notes", label: "Тетради", hint: "" },
     { key: "search", label: "Поиск", hint: "" },
     { key: "settings", label: "Синхронизация", short: "Облако", hint: saveErr ? "!" : "" },
+    // Настройки отделены от облака: тема и установка на устройство — это не
+    // синхронизация, и искать их под этим словом было неочевидно.
+    { key: "prefs", label: "Настройки", hint: "" },
   ];
 
   const SCREEN_TEXT = {
     today: ["Сегодня", "Что сегодня в лицее, сколько времени уже записано и что горит по срокам"],
     events: ["События", "Приоритет решает, до какого события считается план"],
-    budget: [
-      "Распределение времени (КПВ)",
-      "КПВ — и кривая производственных возможностей из экономики, и коэффициент полезного времени: " +
-        "сначала бюджет дня, потом предметы",
-    ],
+    budget: ["Распределение времени (КПВ)", "Сначала бюджет дня, потом предметы"],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
-    trainer: [
-      "Тренажёр по банку ФИПИ",
-      "Обществознание, физика и информатика из открытого банка; альфа-версия: ответы решены нами, и ответ, засчитанный в самом банке, сейчас ценнее всего",
-    ],
+    trainer: ["Тренажёр по банку ФИПИ", "Обществознание, физика и информатика из открытого банка"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
-    search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка сразу — задание ищется и по своему номеру"],
-    settings: ["Синхронизация и данные", "Облако, резервная копия, оформление, установка на устройство и версия"],
+    search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка — в том числе по номеру задания"],
+    settings: ["Синхронизация", "Облако и резервная копия записей"],
+    prefs: ["Настройки", "Оформление, установка на устройство и версия приложения"],
   };
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
 
   const todayLabel = new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-  // В заголовке экрана порядок обратный: сначала число, потом день недели —
-  // «13 сентября, воскресенье» читается быстрее, чем наоборот.
+  // Над заголовком экрана — строка «Среда, 23 сентября»: день недели первым,
+  // потому что по нему решают, какие сегодня уроки.
   const todayHeadLabel = (() => {
+    const now = new Date();
+    const day = now.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    const weekday = now.toLocaleDateString("ru-RU", { weekday: "long" });
+    return `${capitalizeFirst(weekday)}, ${day}`;
+  })();
+  const todayHeadLabelClassic = (() => {
     const now = new Date();
     const day = now.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
     const weekday = now.toLocaleDateString("ru-RU", { weekday: "long" });
     return `${day}, ${weekday}`;
   })();
+
+  // Оболочка под выбранный дизайн: у прежнего — свои колонка, вкладки и шапка.
+  const RailView = classic ? ClassicRail : Rail;
+  const TabBarView = classic ? ClassicTabBar : TabBar;
+  const ScreenHeadView = classic ? ClassicScreenHead : ScreenHead;
+  const CountdownsView = classic ? ClassicCountdowns : Countdowns;
+
+  // Плитки над «Сегодня»: сколько записано к дневной цели, идёт ли серия и
+  // сколько набралось за неделю к недельному плану. Всё это уже считалось для
+  // напоминания и колонки — здесь только собрано в одно место.
+  const todayGoalHours = goalForDate(new Date());
+  const streakAtRisk = studyPulse.daysSince === 1 && studyPulse.streak > 0;
+  const streakShown = studyPulse.daysSince === 0 || streakAtRisk ? studyPulse.streak : 0;
+  const last7 = (() => {
+    const days = [];
+    const counted = new Set(journalWithTrainer.filter((e) => (Number(e.hours) || 0) > 0).map((e) => e.date));
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(counted.has(ymd(d)) || counted.has(d.toISOString().slice(0, 10)));
+    }
+    return days;
+  })();
+
+  // Кнопка «Записать занятие» в шапке ведёт к форме и сразу ставит курсор в
+  // поле: на телефоне форма ниже первого экрана, и искать её прокруткой долго.
+  function focusQuickLog() {
+    const el = document.getElementById("quick-log");
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const field = el.querySelector("select, input, textarea");
+    if (field) field.focus({ preventScroll: true });
+  }
   const pad2 = (n) => String(n).padStart(2, "0") + ":00";
   const modeLabel =
     mode === "auto"
@@ -2352,10 +2442,10 @@ export default function StudyPlanner() {
     : { ok: false, text: "только на этом устройстве" };
 
   return (
-    <div data-theme={theme} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
+    <div data-theme={theme} data-design={design} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
       <Background theme={theme} enabled={backgroundOn} showcase={showcase} />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Golos+Text:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
         ${THEME_CSS}
         * { box-sizing: border-box; }
         .topic-row:hover { background: var(--neutralBg); }
@@ -2385,31 +2475,7 @@ export default function StudyPlanner() {
         .ap-screen > .ap-card:nth-child(2), .ap-screen > * > .ap-card:nth-child(2) { animation-delay: .04s; }
         .ap-screen > .ap-card:nth-child(3), .ap-screen > * > .ap-card:nth-child(3) { animation-delay: .08s; }
         .ap-screen > .ap-card:nth-child(4), .ap-screen > * > .ap-card:nth-child(4) { animation-delay: .12s; }
-        .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
-        /* Состояния навигации описаны здесь целиком: инлайновый стиль перебивал :hover,
-           и подсветка под курсором не появлялась. */
-        .ap-nav {
-          padding: 10px 12px;
-          border: none;
-          border-left: 3px solid transparent;
-          border-radius: 8px;
-          background: transparent;
-          color: var(--railInk2);
-          transition: background .22s ease, color .22s ease, border-color .22s ease, padding-left .22s ease;
-        }
-        .ap-nav:hover { background: var(--railActive); color: var(--railInk); padding-left: 16px; }
-        .ap-nav.is-on { background: var(--railActive); color: var(--railInk); border-left-color: var(--accent); font-weight: 600; }
-        .ap-tab {
-          border: none;
-          background: transparent;
-          color: var(--railInk2);
-          padding: 10px 4px 12px;
-          transition: background .22s ease, color .22s ease;
-        }
-        .ap-tab:hover { background: var(--railActive); color: var(--railInk); }
-        .ap-tab.is-on { background: var(--railActive); color: var(--railInk); font-weight: 600; }
-        .ap-tab-mark { background: transparent; transition: background .22s ease; }
-        .ap-tab.is-on .ap-tab-mark, .ap-tab:hover .ap-tab-mark { background: var(--accent); }
+        ${classic ? CLASSIC_CSS : NEW_CSS}
         .ap-pill { background: transparent; color: var(--railInk2); transition: background .22s ease, color .22s ease; }
         .ap-pill:hover { background: var(--railActive); color: var(--railInk); }
         .ap-pill.is-on { background: var(--accent); color: var(--accentInk); }
@@ -2444,14 +2510,17 @@ export default function StudyPlanner() {
           .ap-shell { flex-direction: column; }
           .ap-rail { display: none !important; }
           .ap-tabbar, .ap-only-mobile { display: block; }
-          .ap-main { padding: 16px 14px 96px !important; }
+          ${classic ? CLASSIC_MOBILE_CSS : NEW_MOBILE_CSS}
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
-          .ap-grid2, .ap-grid3 { grid-template-columns: minmax(0, 1fr) !important; }
+          .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
+          /* Подзаголовок экрана на телефоне пересказывает название вкладки,
+             которое и так подсвечено внизу, и занимает две строки. */
+          .ap-head-note { display: none; }
         }
       `}</style>
 
-      <Rail
+      <RailView
         items={navItems}
         screen={screen}
         onGo={goScreen}
@@ -2467,7 +2536,7 @@ export default function StudyPlanner() {
         onOpenNotes={() => setNotesOpen(true)}
       />
 
-      <TabBar
+      <TabBarView
         items={navItems}
         screen={screen}
         onGo={goScreen}
@@ -2503,17 +2572,32 @@ export default function StudyPlanner() {
           </div>
         )}
 
-        <ScreenHead title={screenInfo.title} note={screenInfo.note} date={screen === "today" ? todayHeadLabel : null}>
+        <ScreenHeadView
+          title={screenInfo.title}
+          // На «Сегодня» подзаголовок пересказывал карточки под ним — дата над
+          // названием говорит о том же короче.
+          // В прежнем дизайне всё как было: подзаголовок есть, дата — «23 сентября, среда».
+          note={screen === "today" && !classic ? null : screenInfo.note}
+          badge={screen === "trainer" ? "ALPHA" : null}
+          date={screen === "today" ? (classic ? todayHeadLabelClassic : todayHeadLabel) : null}
+        >
           <div className="ap-only-mobile">
-            <Countdowns next={nextCountdown} main={mainCountdown} />
+            <CountdownsView next={nextCountdown} main={mainCountdown} />
           </div>
-        </ScreenHead>
+          {/* Самое частое действие дня — на виду, а не в середине экрана. */}
+          {screen === "today" && !classic && (
+            <button type="button" onClick={focusQuickLog} className="ap-desktop-only" style={styles.headAction}>
+              <Icon name="plus" size={17} strokeWidth={2} />
+              Записать занятие
+            </button>
+          )}
+        </ScreenHeadView>
 
         {/* key={screen} заставляет React пересобрать содержимое при переходе — иначе
             анимация входа проигрывалась бы один раз за всё время работы. */}
         <div key={screen} className="ap-screen">
 
-        {screen === "today" && (
+        {screen === "today" && !classic && (
           <>
             {todayEvents.length > 0 && (
               <section
@@ -2532,34 +2616,463 @@ export default function StudyPlanner() {
                     {e.description && <span style={styles.todayEventNote}>{e.description}</span>}
                   </div>
                 ))}
-                <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
-                  Все события
+                <button onClick={() => goScreen("events")} style={styles.goLink}>
+                  Все события →
                 </button>
               </section>
             )}
 
             {weekPlanned !== currentWeek && (
-              <section className="ap-card" style={{ ...styles.card, ...styles.weekCard }}>
-                <div style={styles.reminderRow}>
-                  <div style={styles.reminderMark} aria-hidden="true">
-                    <ReminderMark kind="week" />
-                  </div>
-                  <div style={styles.reminderBody}>
-                    <div style={styles.reminderTitle}>Новая неделя — распределите время</div>
-                    <div style={styles.reminderText}>
-                      Сколько часов в неделю уходит на каждый предмет и сколько времени вы готовы отдавать учёбе
-                      по дням — от этих цифр считается весь план. С прошлой недели они могли устареть.
-                    </div>
-                    <div style={styles.weekActions}>
-                      <button onClick={() => goScreen("budget")} style={styles.weekGo}>
-                        Распределить
-                      </button>
-                      <button onClick={markWeekPlanned} style={styles.weekSkip}>
-                        Оставить как есть
-                      </button>
-                    </div>
-                  </div>
+              <section className="ap-card" style={{ ...styles.weekStrip }}>
+                <span style={styles.weekStripText}>
+                  Новая неделя: цифры распределения могли устареть
+                </span>
+                <span style={styles.weekActions}>
+                  <button onClick={() => goScreen("budget")} style={styles.weekGo}>
+                    Распределить
+                  </button>
+                  <button onClick={markWeekPlanned} style={styles.weekSkip}>
+                    Оставить как есть
+                  </button>
+                </span>
+              </section>
+            )}
+
+            {/* Три числа дня — плитками в ряд. Раньше «сколько записано» и
+                «серия» жили в карточке напоминания, а недельный план — только в
+                разделе «Распределение», и сверить день с неделей было негде. */}
+            <div className="ap-tiles" style={styles.tiles}>
+              <div className="ap-card" style={styles.tile}>
+                <div style={styles.tileLabel}>Записано сегодня</div>
+                <div style={styles.tileValueRow}>
+                  <span style={styles.tileValue}>{studyPulse.todayHours > 0 ? hoursLabel(studyPulse.todayHours) : "0 ч"}</span>
+                  {todayGoalHours > 0 && <span style={styles.tileOf}>из {hoursLabel(todayGoalHours)}</span>}
                 </div>
+                <div style={styles.tileTrack}>
+                  <div
+                    className="ap-fill"
+                    style={{
+                      ...styles.tileFill,
+                      width: (todayGoalHours > 0 ? Math.min(100, (studyPulse.todayHours / todayGoalHours) * 100) : 0) + "%",
+                      background: todayGoalHours > 0 && studyPulse.todayHours >= todayGoalHours ? "var(--green)" : "var(--accent)",
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="ap-card" style={styles.tile}>
+                <div style={styles.tileLabel}>Серия</div>
+                {/* Серия, которая шла до вчера, ещё жива: сегодня её можно
+                    продлить, и сказать об этом полезнее, чем показать ноль. */}
+                <div style={styles.tileValueRow}>
+                  <span style={styles.tileValue}>{streakShown}</span>
+                  <span style={{ ...styles.tileOf, color: streakAtRisk ? "var(--warmInk)" : "var(--ink3)" }}>
+                    {streakAtRisk ? "продлите сегодня" : daysWord(streakShown) + " подряд"}
+                  </span>
+                </div>
+                {/* Последние семь дней: закрашен день, в который занимались. */}
+                <div style={styles.streakDots} aria-label="Занятия за последние семь дней">
+                  {last7.map((on, i) => (
+                    <span key={i} style={{ ...styles.streakDot, background: on ? "var(--accent)" : "var(--line)" }} />
+                  ))}
+                </div>
+              </div>
+              <div className="ap-card" style={styles.tile}>
+                <div style={styles.tileLabel}>За неделю</div>
+                <div style={styles.tileValueRow}>
+                  <span style={styles.tileValue}>{weeklyJournalHours > 0 ? hoursLabel(weeklyJournalHours) : "0 ч"}</span>
+                  {weeklyBudget > 0 && <span style={styles.tileOf}>из {hoursLabel(weeklyBudget)} по плану</span>}
+                </div>
+                <div style={styles.tileTrack}>
+                  <div
+                    className="ap-fill"
+                    style={{
+                      ...styles.tileFill,
+                      width: (weeklyBudget > 0 ? Math.min(100, (weeklyJournalHours / weeklyBudget) * 100) : 0) + "%",
+                      background: "var(--green)",
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Напоминание крупным планом: строчкой внизу карточки его не замечали.
+                Когда день уже засчитан и подсказывать нечего, плитки выше говорят
+                всё сами — карточка появляется, только если есть что добавить. */}
+            {(studyReminder.tone !== "ok" || trainerOffer) && (
+            <section
+              className="ap-card"
+              style={{
+                ...styles.card,
+                ...(studyReminder.tone === "warn" ? styles.reminderWarn : null),
+                ...(studyReminder.tone === "ok" ? styles.reminderOk : null),
+              }}
+            >
+              <div style={styles.reminderRow}>
+                {/* Значок — только когда ему есть что сказать: огонёк серии, галочка,
+                    восклицательный знак. В спокойном состоянии там стояла точка
+                    посреди пустого квадрата — место без смысла. */}
+                {reminderKind !== "idle" && (
+                  <div style={styles.reminderMark} aria-hidden="true">
+                    <ReminderMark kind={reminderKind} />
+                  </div>
+                )}
+                <div style={styles.reminderBody}>
+                  <div style={styles.reminderTitle}>{studyReminder.title}</div>
+                  <div style={styles.reminderText}>{studyReminder.text}</div>
+                  {trainerOffer && (
+                    <button onClick={() => goScreen("trainer")} className="ap-row" style={styles.offerBtn}>
+                      <span style={styles.offerText}>
+                        {trainerOffer.solved > 0
+                          ? "Решено " + trainerOffer.solved + " из " + trainerOffer.need + " — осталось " +
+                            trainerOffer.left + " " + tasksWord(trainerOffer.left) + " по предмету «" + trainerOffer.subject + "»"
+                          : "Реши " + trainerOffer.need + " " + tasksWord(trainerOffer.need) +
+                            " по предмету «" + trainerOffer.subject + "» — день зачтётся и серия не оборвётся" +
+                            (trainerOffer.cheaper
+                              ? ". По предмету «" + trainerOffer.cheaper.subjects.join("» или «") + "» хватит " +
+                                trainerOffer.cheaper.need
+                              : "")}
+                      </span>
+                      <span style={styles.offerGo}>В тренажёр →</span>
+                    </button>
+                  )}
+                </div>
+                {/* Серия теперь в плитке над карточкой — здесь её второй раз не пишем. */}
+              </div>
+            </section>
+            )}
+
+            {/* Что идёт прямо сейчас — и у тебя, и у всей параллели. */}
+            <NowCard
+              entriesFor={dayEntries}
+              tasksFor={lessonTasks.forLesson}
+              homeworkOn={homeworkOnDate}
+              colorOf={lyceumColorOf}
+              markOf={priorityInfo}
+              styles={styles}
+            />
+
+            {dueForReview.length > 0 && (
+              <section className="ap-card" style={styles.card}>
+                <CardHead
+                  id="today-review"
+                  title="Пора повторить"
+                  note="Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке"
+                />
+                <div style={styles.reviewList}>
+                  {dueForReview.slice(0, 3).map((row) => (
+                    <div key={row.topicId} style={styles.reviewRow}>
+                      <span style={{ ...styles.dot, background: row.color }} />
+                      <span style={styles.reviewText}>
+                        <span style={styles.reviewName}>{row.name}</span>
+                        <span style={styles.reviewNote}>
+                          {row.subjectName} · {agoWord(row.days)}
+                          {row.reviews > 0 ? " · повторений: " + row.reviews : ""}
+                        </span>
+                      </span>
+                      <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
+                        Повторил
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {dueForReview.length > 3 && (
+                  <button onClick={() => goScreen("study")} style={styles.goLink}>
+                    Ещё {dueForReview.length - 3} — в «Подготовке» →
+                  </button>
+                )}
+              </section>
+            )}
+
+          {/* Уроки дня и запись занятия — рядом: записывают обычно как раз то,
+              что было сегодня в лицее. Раньше форма пряталась в конце карточки
+              с расписанием, под списком уроков. */}
+          <div className="ap-grid2" style={styles.gridToday}>
+            <section className="ap-card" style={styles.card}>
+              <CardHead
+                id="today-school"
+                title="Сегодня в лицее"
+                empty={todayLessons.length === 0}
+                note="Важность — полосой слева, роль урока — подписью"
+              >
+                {todayLessons.length > 0 && (
+                  <span style={styles.cardMeta}>
+                    {todayLessons.length} {lessonsWord(todayLessons.length)}
+                    {todayLessons[0].start ? " · с " + todayLessons[0].start : ""}
+                  </span>
+                )}
+              </CardHead>
+              {todayLessons.length === 0 ? (
+                <p style={styles.muted}>На сегодня уроков в расписании нет.</p>
+              ) : (
+                <div style={styles.todayList}>
+                  {todayLessons.map((e) => (
+                    <div
+                      key={e.id}
+                      style={{
+                        ...styles.todayRow,
+                        borderLeftColor: priorityInfo(e.priority).strong,
+                        background: priorityInfo(e.priority).tint,
+                      }}
+                    >
+                      <span style={styles.todayTime}>{e.start}</span>
+                      <span style={styles.todayName}>{e.subjectName}</span>
+                      <span style={styles.todayMeta}>
+                        {e.kind === "exam"
+                          ? examKindLabel(e.examKind) + (e.place ? " · " + e.place : "")
+                          : levelInfo(e.level).label + (e.room ? " · " + e.room : "") + (e.teacher ? " · " + e.teacher : "")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section id="quick-log" className="ap-card" style={styles.card}>
+              <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
+              <div style={styles.quickGrid}>
+                <label style={styles.quickField}>
+                  <span style={styles.quickLabel}>Предмет</span>
+                  <select
+                    value={jForm.subjectId}
+                    onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })}
+                    style={styles.quickControl}
+                  >
+                    {ALL_SUBJECTS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ ...styles.quickField, flex: "0 0 96px" }}>
+                  <span style={styles.quickLabel}>Часы</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    inputMode="decimal"
+                    value={jForm.hours}
+                    onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
+                    style={styles.quickControl}
+                  />
+                </label>
+              </div>
+              <label style={{ ...styles.quickField, marginTop: 12 }}>
+                <span style={styles.quickLabel}>Что прошли</span>
+                <AutoGrow
+                  placeholder="Например: конституционные права, § 4"
+                  value={jForm.note}
+                  onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
+                  onEnter={() => {
+                    addJournalEntry(todayStr());
+                  }}
+                  style={styles.quickControl}
+                />
+              </label>
+              <button
+                onClick={() => {
+                  addJournalEntry(todayStr());
+                }}
+                style={styles.quickSubmit}
+              >
+                Записать
+              </button>
+            </section>
+          </div>
+
+          <section className="ap-card" style={styles.card}>
+            <CardHead
+              id="hours"
+              title="Часы занятий"
+              empty={!stats.totalAll}
+              note="Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята."
+            >
+              {stats.totalAll > 0 && (
+                <span style={styles.cardMeta}>
+                  пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
+                </span>
+              )}
+            </CardHead>
+            {/* График не сворачивается: ради него карточка и существует. */}
+            <HoursChart journal={journalWithTrainer} homework={homework} subjects={subjectsWithTrainer} goalForDate={goalForDate} />
+          </section>
+
+          {/* Карточка, которой нечего показать, — не карточка: три «ничего нет»
+              подряд занимали пол-экрана в обычный день. Пустые сворачиваются
+              в одну строку ниже и возвращаются, как только в них что-то есть. */}
+          <div className="ap-grid2" style={styles.grid2}>
+            {!eventsEmpty && (
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Ближайшие события</div>
+              {/* Сегодняшнее событие показано отдельной карточкой наверху —
+                  здесь оно было бы вторым упоминанием об одном и том же. */}
+              {laterEvents.length === 0 ? (
+                <p style={styles.muted}>
+                  {todayEvents.length ? "Дальше пока ничего не назначено." : "Событий пока нет — добавьте экзамен или олимпиаду в разделе «События»."}
+                </p>
+              ) : (
+                <div style={styles.todayList}>
+                  {laterEvents.slice(0, 4).map((e) => {
+                    const left = daysUntilDate(e.date);
+                    const info = priorityInfo(e.priority);
+                    return (
+                      <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
+                        <span style={styles.eventMarkCol}>
+                          <PriorityMark value={e.priority} height={11} />
+                        </span>
+                        <span style={styles.todayName}>{e.name}</span>
+                        <span style={styles.todayMeta}>
+                          {left} {daysWord(left)}
+                          {mainEvent && mainEvent.id === e.id ? " · план" : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Тот же вердикт, что и в «Распределении»: ради этого ответа и считаются часы. */}
+              {mainEvent && (
+                <div
+                  style={{
+                    ...styles.verdictLine,
+                    color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
+                  }}
+                >
+                  {capacity.feasible === null
+                    ? "Часы на неделю не заданы — темп считать не от чего."
+                    : capacity.feasible
+                    ? `При таком темпе времени хватит: нужно ${capacity.neededHours} ч, до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`
+                    : `При таком темпе может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
+                </div>
+              )}
+              <button onClick={() => goScreen("events")} style={styles.goLink}>
+                Все события →
+              </button>
+            </section>
+            )}
+
+            {!homeworkEmpty && (
+            <section className="ap-card" style={styles.card}>
+              <CardHead
+                id="today-homework"
+                title="Дела и сроки"
+                empty={upcomingHomework.length === 0}
+                note="По сроку, а не по предмету"
+              />
+              {upcomingHomework.length === 0 ? (
+                <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
+              ) : (
+                <div style={styles.todayList}>
+                  {upcomingHomework.map((h) => (
+                    <label key={h.id} style={styles.taskRow}>
+                      <input
+                        type="checkbox"
+                        checked={!!h.done}
+                        onChange={() => updateHomework(h.id, { done: !h.done })}
+                      />
+                      <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>
+                        {h.text || "без описания"}
+                      </span>
+                      <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
+                        {relativeDayLabel(h.daysUntil)}
+                        {h.subjectName ? " · " + h.subjectName : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => goScreen("journal")} style={styles.goLink}>
+                Дневник и задания →
+              </button>
+            </section>
+            )}
+
+            {!studyEmpty && (
+            <section className="ap-card" style={styles.card}>
+              <div style={styles.cardTitle}>Подготовка</div>
+              <div style={styles.todayList}>
+                {ALL_SUBJECTS.map((s) => {
+                  const st = stats.perSubject[s.id];
+                  if (!st || !st.total) return null;
+                  return (
+                    <div key={s.id}>
+                      <div style={styles.progressRow}>
+                        <span>{s.name}</span>
+                        <span style={styles.mutedSmall}>
+                          {st.done}/{st.total}
+                        </span>
+                      </div>
+                      <div style={styles.miniTrack}>
+                        <div className="ap-fill" style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={() => goScreen("study")} style={styles.goLink}>
+                Открыть подготовку →
+              </button>
+            </section>
+            )}
+          </div>
+
+          {(eventsEmpty || homeworkEmpty || studyEmpty) && (
+            <div style={styles.emptyStrip}>
+              {eventsEmpty && (
+                <button onClick={() => goScreen("events")} style={styles.goLink}>
+                  Событий нет — добавить →
+                </button>
+              )}
+              {homeworkEmpty && <span style={styles.emptyStripNote}>Ничего не горит по срокам</span>}
+              {studyEmpty && (
+                <button onClick={() => goScreen("study")} style={styles.goLink}>
+                  Своих предметов нет — добавить →
+                </button>
+              )}
+            </div>
+          )}
+          </>
+        )}
+
+        {/* Прежний дизайн: «Сегодня» ровно как в 0.14.0. */}
+        {screen === "today" && classic && (
+          <>
+            {todayEvents.length > 0 && (
+              <section
+                className="ap-card"
+                style={{
+                  ...styles.card,
+                  borderColor: priorityInfo(todayEvents[0].priority).strong,
+                  background: priorityInfo(todayEvents[0].priority).tint,
+                }}
+              >
+                <div style={styles.todayEventHead}>Сегодня</div>
+                {todayEvents.map((e) => (
+                  <div key={e.id} style={styles.todayEventRow}>
+                    <PriorityMark value={e.priority} height={13} />
+                    <span style={styles.todayEventName}>{e.name}</span>
+                    {e.description && <span style={styles.todayEventNote}>{e.description}</span>}
+                  </div>
+                ))}
+                <button onClick={() => goScreen("events")} style={styles.goLink}>
+                  Все события →
+                </button>
+              </section>
+            )}
+
+            {weekPlanned !== currentWeek && (
+              <section className="ap-card" style={{ ...styles.weekStrip }}>
+                <span style={styles.weekStripText}>
+                  Новая неделя: цифры распределения могли устареть
+                </span>
+                <span style={styles.weekActions}>
+                  <button onClick={() => goScreen("budget")} style={styles.weekGo}>
+                    Распределить
+                  </button>
+                  <button onClick={markWeekPlanned} style={styles.weekSkip}>
+                    Оставить как есть
+                  </button>
+                </span>
               </section>
             )}
 
@@ -2573,13 +3086,14 @@ export default function StudyPlanner() {
               }}
             >
               <div style={styles.reminderRow}>
-                <div style={styles.reminderMark} aria-hidden="true">
-                  <ReminderMark
-                    kind={
-                      studyStreakOn ? "streak" : studyReminder.tone === "ok" ? "ok" : studyReminder.tone === "warn" ? "warn" : "idle"
-                    }
-                  />
-                </div>
+                {/* Значок — только когда ему есть что сказать: огонёк серии, галочка,
+                    восклицательный знак. В спокойном состоянии там стояла точка
+                    посреди пустого квадрата — место без смысла. */}
+                {reminderKind !== "idle" && (
+                  <div style={styles.reminderMark} aria-hidden="true">
+                    <ReminderMark kind={reminderKind} />
+                  </div>
+                )}
                 <div style={styles.reminderBody}>
                   <div style={styles.reminderTitle}>{studyReminder.title}</div>
                   <div style={styles.reminderText}>{studyReminder.text}</div>
@@ -2616,15 +3130,18 @@ export default function StudyPlanner() {
               entriesFor={dayEntries}
               tasksFor={lessonTasks.forLesson}
               homeworkOn={homeworkOnDate}
+              colorOf={lyceumColorOf}
+              markOf={priorityInfo}
               styles={styles}
             />
 
             {dueForReview.length > 0 && (
               <section className="ap-card" style={styles.card}>
-                <div style={styles.cardTitle}>Пора повторить</div>
-                <div style={styles.cardNote}>
-                  Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке
-                </div>
+                <CardHead
+                  id="today-review"
+                  title="Пора повторить"
+                  note="Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке"
+                />
                 <div style={styles.reviewList}>
                   {dueForReview.slice(0, 3).map((row) => (
                     <div key={row.topicId} style={styles.reviewRow}>
@@ -2643,8 +3160,8 @@ export default function StudyPlanner() {
                   ))}
                 </div>
                 {dueForReview.length > 3 && (
-                  <button onClick={() => goScreen("study")} style={styles.eventsToggle}>
-                    Ещё {dueForReview.length - 3} — в «Подготовке»
+                  <button onClick={() => goScreen("study")} style={styles.goLink}>
+                    Ещё {dueForReview.length - 3} — в «Подготовке» →
                   </button>
                 )}
               </section>
@@ -2652,10 +3169,12 @@ export default function StudyPlanner() {
 
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Часы занятий</div>
-              <div style={styles.cardNote}>
-                Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята.
-              </div>
+              <CardHead
+                id="hours"
+                title="Часы занятий"
+                empty={!stats.totalAll}
+                note="Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята."
+              />
               <div style={styles.overallTrack}>
                 <div className="ap-fill" style={{ ...styles.overallFill, width: stats.overallPct + "%" }} />
               </div>
@@ -2667,8 +3186,12 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Сегодня в лицее</div>
-              <div style={styles.cardNote}>Важность — полосой слева, роль урока — подписью</div>
+              <CardHead
+                id="today-school"
+                title="Сегодня в лицее"
+                empty={todayLessons.length === 0}
+                note="Важность — полосой слева, роль урока — подписью"
+              />
               {todayLessons.length === 0 ? (
                 <p style={styles.muted}>На сегодня уроков в расписании нет.</p>
               ) : (
@@ -2695,8 +3218,7 @@ export default function StudyPlanner() {
               )}
 
               <div style={styles.quickLog}>
-                <div style={styles.cardTitle}>Записать занятие</div>
-                <div style={styles.cardNote}>Запись попадёт в дневник за сегодня</div>
+                <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
 
                 <div style={styles.quickRow}>
                   <select
@@ -2726,15 +3248,13 @@ export default function StudyPlanner() {
                     value={jForm.note}
                     onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
                     onEnter={() => {
-                      setJForm({ ...jForm, date: todayStr() });
-                      addJournalEntry();
+                      addJournalEntry(todayStr());
                     }}
                     style={styles.noteInput}
                   />
                   <button
                     onClick={() => {
-                      setJForm({ ...jForm, date: todayStr() });
-                      addJournalEntry();
+                      addJournalEntry(todayStr());
                     }}
                     style={styles.addBtnSmall}
                   >
@@ -2745,7 +3265,11 @@ export default function StudyPlanner() {
             </section>
           </div>
 
-          <div className="ap-grid3" style={styles.grid3}>
+          {/* Карточка, которой нечего показать, — не карточка: три «ничего нет»
+              подряд занимали пол-экрана в обычный день. Пустые сворачиваются
+              в одну строку ниже и возвращаются, как только в них что-то есть. */}
+          <div className="ap-grid2" style={styles.grid2}>
+            {!eventsEmpty && (
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Ближайшие события</div>
               {/* Сегодняшнее событие показано отдельной карточкой наверху —
@@ -2761,7 +3285,7 @@ export default function StudyPlanner() {
                     const info = priorityInfo(e.priority);
                     return (
                       <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
-                        <span style={styles.todayMark}>
+                        <span style={styles.eventMarkCol}>
                           <PriorityMark value={e.priority} height={11} />
                         </span>
                         <span style={styles.todayName}>{e.name}</span>
@@ -2789,14 +3313,20 @@ export default function StudyPlanner() {
                     : `При таком темпе может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
                 </div>
               )}
-              <button onClick={() => goScreen("events")} style={styles.eventsToggle}>
-                Все события
+              <button onClick={() => goScreen("events")} style={styles.goLink}>
+                Все события →
               </button>
             </section>
+            )}
 
+            {!homeworkEmpty && (
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Дела и сроки</div>
-              <div style={styles.cardNote}>По сроку, а не по предмету</div>
+              <CardHead
+                id="today-homework"
+                title="Дела и сроки"
+                empty={upcomingHomework.length === 0}
+                note="По сроку, а не по предмету"
+              />
               {upcomingHomework.length === 0 ? (
                 <p style={styles.muted}>Ничего не горит: заданий со сроком нет.</p>
               ) : (
@@ -2819,16 +3349,15 @@ export default function StudyPlanner() {
                   ))}
                 </div>
               )}
-              <button onClick={() => goScreen("journal")} style={styles.eventsToggle}>
-                Дневник и задания
+              <button onClick={() => goScreen("journal")} style={styles.goLink}>
+                Дневник и задания →
               </button>
             </section>
+            )}
 
+            {!studyEmpty && (
             <section className="ap-card" style={styles.card}>
               <div style={styles.cardTitle}>Подготовка</div>
-              <div style={styles.cardNote}>
-                Пройдено {stats.doneAll} из {stats.totalAll} уроков
-              </div>
               <div style={styles.todayList}>
                 {ALL_SUBJECTS.map((s) => {
                   const st = stats.perSubject[s.id];
@@ -2848,11 +3377,28 @@ export default function StudyPlanner() {
                   );
                 })}
               </div>
-              <button onClick={() => goScreen("study")} style={styles.eventsToggle}>
-                Открыть подготовку
+              <button onClick={() => goScreen("study")} style={styles.goLink}>
+                Открыть подготовку →
               </button>
             </section>
+            )}
           </div>
+
+          {(eventsEmpty || homeworkEmpty || studyEmpty) && (
+            <div style={styles.emptyStrip}>
+              {eventsEmpty && (
+                <button onClick={() => goScreen("events")} style={styles.goLink}>
+                  Событий нет — добавить →
+                </button>
+              )}
+              {homeworkEmpty && <span style={styles.emptyStripNote}>Ничего не горит по срокам</span>}
+              {studyEmpty && (
+                <button onClick={() => goScreen("study")} style={styles.goLink}>
+                  Своих предметов нет — добавить →
+                </button>
+              )}
+            </div>
+          )}
           </>
         )}
 
@@ -2970,7 +3516,19 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>События</div>
+              <CardHead
+                id="events"
+                title="События"
+                note={
+                  <>
+                    Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события
+                    считается план: <PriorityMark value={3} height={10} /> важнее <PriorityMark value={2} height={10} /> и{" "}
+                    <PriorityMark value={1} height={10} />. Если приоритет одинаковый, берётся ближайшее. Можно выбрать и
+                    вручную — «считать план по нему» у любого события. Экзамены и олимпиады, заведённые в расписании,
+                    появляются здесь сами — это одна и та же запись, и править её можно с любой стороны.
+                  </>
+                }
+              />
               <EventsEditor
                 upcoming={upcomingEvents}
                 past={pastEvents}
@@ -2989,14 +3547,16 @@ export default function StudyPlanner() {
 
         {screen === "budget" && (
           <section className="ap-card" style={styles.card}>
-            <p style={styles.muted}>
-              Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут в день вы
-              реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам и проверка, хватит
-              ли этого ресурса на оставшиеся уроки.
-              {mainEvent
-                ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».`
-                : ""}
-            </p>
+            <CardHead
+              id="budget"
+              title="Бюджет времени"
+              note={
+                "Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут " +
+                "в день вы реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам " +
+                "и проверка, хватит ли этого ресурса на оставшиеся уроки." +
+                (mainEvent ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».` : "")
+              }
+            />
 
             <div style={styles.dailyGoalsBlock}>
               <label style={styles.label}>Сколько минут в день вы можете заниматься</label>
@@ -3104,12 +3664,16 @@ export default function StudyPlanner() {
 
             <div style={styles.ppfSection}>
               <div style={styles.balanceHead}>
-                <div style={styles.cardTitle}>Баланс предметов</div>
-                <div style={styles.cardNote}>
-                  По горизонтали — план на неделю, по вертикали — записанное в дневнике за последние семь дней.
-                  Диагональ — линия баланса: точка на ней значит, что план и факт сошлись. Выше — предмет забирает
-                  больше времени, чем ему отведено, ниже — недобирает. Размер точки — сколько тем по нему пройдено.
-                </div>
+                <CardHead
+                  id="balance"
+                  title="Баланс предметов"
+                  empty={balanceItems.length === 0}
+                  note={
+                    "По горизонтали — план на неделю, по вертикали — записанное в дневнике за последние семь дней. " +
+                    "Диагональ — линия баланса: точка на ней значит, что план и факт сошлись. Выше — предмет забирает " +
+                    "больше времени, чем ему отведено, ниже — недобирает. Размер точки — сколько тем по нему пройдено."
+                  }
+                />
               </div>
               <BalanceChart items={balanceItems} />
             </div>
@@ -3120,46 +3684,51 @@ export default function StudyPlanner() {
           <section style={styles.plainBlock}>
             {ALL_SUBJECTS.length === 0 && (
               <section className="ap-card" style={styles.card}>
-                <div style={styles.cardTitle}>Здесь живёт подготовка вне лицея</div>
+                <CardHead
+                  id="study-intro"
+                  title="Здесь живёт подготовка вне лицея"
+                  note={
+                      <ul style={styles.emptyList}>
+                        <li>
+                          <b>Уроки.</b> Свой список тем: у каждой длительность и ссылка — с ней название урока становится
+                          кликабельным, и занятие открывается в один тап.
+                        </li>
+                        <li>
+                          <b>Отметка «пройдено».</b> Галочка сама пишет занятие в дневник на его длительность — руками
+                          дублировать не нужно.
+                        </li>
+                        <li>
+                          <b>Заметки к уроку.</b> Короткая подпись и потраченное время; время тоже уходит в дневник и в
+                          график часов.
+                        </li>
+                        <li>
+                          <b>Тетрадь.</b> Блоки и ветки с конспектом, форматированием и файлами — то же, что на экране
+                          «Тетради».
+                        </li>
+                        <li>
+                          <b>Учёт времени.</b> Часы по предмету попадают в «Распределение»: там видно, укладываетесь ли вы в
+                          неделю и хватит ли времени до ближайшего экзамена.
+                        </li>
+                      </ul>
+                  }
+                />
                 <p style={styles.muted}>
-                  Курсы, олимпиадная подготовка, любой предмет, который вы учите сами. Раздел отвечает на два вопроса:
-                  что осталось пройти и сколько времени на это ушло.
+                  Курсы, олимпиады, любой предмет, который учите сами. Начните с одного — цвет выбирается рядом
+                  с названием, его же предмет носит в дневнике и на графиках.
                 </p>
-                <ul style={styles.emptyList}>
-                  <li>
-                    <b>Уроки.</b> Свой список тем: у каждой длительность и ссылка — с ней название урока становится
-                    кликабельным, и занятие открывается в один тап.
-                  </li>
-                  <li>
-                    <b>Отметка «пройдено».</b> Галочка сама пишет занятие в дневник на его длительность — руками
-                    дублировать не нужно.
-                  </li>
-                  <li>
-                    <b>Заметки к уроку.</b> Короткая подпись и потраченное время; время тоже уходит в дневник и в
-                    график часов.
-                  </li>
-                  <li>
-                    <b>Тетрадь.</b> Блоки и ветки с конспектом, форматированием и файлами — то же, что на экране
-                    «Тетради».
-                  </li>
-                  <li>
-                    <b>Учёт времени.</b> Часы по предмету попадают в «Распределение»: там видно, укладываетесь ли вы в
-                    неделю и хватит ли времени до ближайшего экзамена.
-                  </li>
-                </ul>
-                <p style={styles.muted}>
-                  Начните с одного предмета — например «Обществознание» или «Математика для олимпиад». Цвет выбирается
-                  рядом с названием, его же будет носить предмет в дневнике и на графиках.
-                </p>
+                <AddSubjectForm onAdd={addSubject} placeholder="Например, «Математика для олимпиад»" />
               </section>
             )}
             {dueForReview.length > 0 && (
               <section className="ap-card" style={styles.card}>
-                <div style={styles.cardTitle}>Пора повторить</div>
-                <div style={styles.cardNote}>
-                  Первое повторение через три дня после урока, дальше через неделю, три недели и два месяца.
-                  «Повторил» пишет занятие в дневник — часы идут в общий план.
-                </div>
+                <CardHead
+                  id="study-review"
+                  title="Пора повторить"
+                  note={
+                    "Первое повторение через три дня после урока, дальше через неделю, три недели и два месяца. " +
+                    "«Повторил» пишет занятие в дневник — часы идут в общий план."
+                  }
+                />
                 <div style={styles.reviewList}>
                   {dueForReview.map((row) => (
                     <div key={row.topicId} style={styles.reviewRow}>
@@ -3274,7 +3843,9 @@ export default function StudyPlanner() {
                 );
               })}
             </div>
-            <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
+            {ALL_SUBJECTS.length > 0 && (
+              <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
+            )}
           </section>
         )}
 
@@ -3455,10 +4026,16 @@ export default function StudyPlanner() {
         {screen === "journal" && (
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-            <p style={styles.muted}>
-              За последние 7 дней записано {weeklyJournalHours} ч. Записи с уроками и заметками к ним добавляются сюда
-              автоматически — можно также добавить запись вручную.
-            </p>
+            <CardHead
+              id="journal-calendar"
+              title={"За 7 дней — " + String(weeklyJournalHours).replace(".", ",") + " ч"}
+              note={
+                "Записи с уроками и заметками к ним добавляются сюда автоматически — можно также добавить запись " +
+                "вручную. Высота заливки дня — доля дневной цели, а цель на каждый день недели задаётся " +
+                "в «Распределении». Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. " +
+                "Красная рамка — день экзамена или олимпиады."
+              }
+            />
 
             <div style={styles.calendarWrap}>
               <div style={styles.calHeader}>
@@ -3546,11 +4123,6 @@ export default function StudyPlanner() {
                 />
                 <span style={styles.calLegendItem}>цель</span>
               </div>
-              <p style={styles.mutedSmall}>
-                Высота заливки — доля дневной цели, а цель на каждый день недели задаётся в «Распределении».
-                Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. Красная рамка — день
-                экзамена или олимпиады.
-              </p>
             </div>
             </section>
             <section className="ap-card" style={styles.card}>
@@ -3655,6 +4227,16 @@ export default function StudyPlanner() {
               </div>
             </div>
 
+            {/* Без заголовка эта форма читалась продолжением «Домашнего задания»
+                выше — две одинаковые строки полей подряд, и какая для чего, не
+                понять. Теперь у неё своё имя и черта сверху, как на «Сегодня». */}
+            <div style={styles.journalEntryHead}>
+              <CardHead
+                id="journal-entry"
+                title="Записать занятие"
+                note="Занятие попадёт в дневник на выбранную дату и в часы занятий."
+              />
+            </div>
             <div style={styles.journalForm}>
               <input type="date" value={jForm.date} onChange={(e) => setJForm({ ...jForm, date: e.target.value })} style={styles.dateInput} />
               <select value={jForm.subjectId} onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })} style={styles.select}>
@@ -3685,6 +4267,7 @@ export default function StudyPlanner() {
             </div>
 
             <div style={styles.journalList}>
+              {journalListed.length > 0 && <div style={styles.journalListHead}>Все записи</div>}
               {journalListed.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
               {journalListed.slice(0, journalShown).map((e) => {
                 const s = anySubjectById.get(e.subjectId);
@@ -3721,8 +4304,11 @@ export default function StudyPlanner() {
           <>
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Предметы</div>
-              <div style={styles.cardNote}>Тетрадь есть у каждого предмета — и своего, и лицейского</div>
+              <CardHead
+                id="notes-subjects"
+                title="Предметы"
+                note="Тетрадь есть у каждого предмета — и своего, и лицейского"
+              />
               <div style={styles.notebookList}>
                 {notebookOwners.map((o) => {
                   const on = o.key === notebookOwner;
@@ -3747,8 +4333,14 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.notebookHead}>
-                <div style={styles.cardTitle}>Тетрадь</div>
+              <CardHead
+                id="notebook"
+                title="Тетрадь"
+                note={
+                  "Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке " +
+                  "предмета и в разделе лицея — записи везде одни."
+                }
+              >
                 {/* Список предметов слева читается как оглавление, а не как выбор,
                     поэтому тот же выбор стоит и здесь — там, где его ищут. Тетрадь
                     одна и та же: и список, и этот выбор открывают одни и те же
@@ -3780,11 +4372,7 @@ export default function StudyPlanner() {
                     </optgroup>
                   )}
                 </select>
-              </div>
-              <div style={styles.cardNote}>
-                Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке
-                предмета и в разделе лицея — записи везде одни.
-              </div>
+              </CardHead>
               {currentNotebook ? (
                 <Notebook
                   blocks={notebooks[currentNotebook.key] || []}
@@ -3855,12 +4443,13 @@ export default function StudyPlanner() {
         )}
 
         {screen === "settings" && (
-          <div className="ap-grid3" style={styles.grid3}>
+          <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Облако</div>
-              <div style={styles.cardNote}>
-                Один аккаунт на все устройства: правки с телефона и ноутбука сливаются, а не затирают друг друга.
-              </div>
+              <CardHead
+                id="cloud"
+                title="Облако"
+                note="Один аккаунт на все устройства: правки с телефона и ноутбука сливаются, а не затирают друг друга."
+              />
               <CloudPanel />
               <div style={styles.syncRow}>
                 <button onClick={() => loadFromStorage()} style={styles.syncBtn} disabled={syncing}>
@@ -3879,7 +4468,14 @@ export default function StudyPlanner() {
             </section>
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Резервная копия</div>
+              <CardHead
+                id="backup"
+                title="Резервная копия"
+                note={
+                  "Если автоматическая синхронизация не работает, данные переносятся вручную: скопируйте текст на " +
+                  "одном устройстве и вставьте его в поле импорта на другом."
+                }
+              />
               {/* Перенос вручную нужен как запасной выход: пока облако на связи, он только
                   занимает место, поэтому сворачивается в строку. */}
               {cloudOn && !saveErr && !cloudPending && !showBackup ? (
@@ -3891,10 +4487,6 @@ export default function StudyPlanner() {
                 </>
               ) : (
                 <>
-                  <div style={styles.cardNote}>
-                    Если автоматическая синхронизация не работает, данные переносятся вручную: скопируйте текст на
-                    одном устройстве и вставьте его в поле импорта на другом.
-                  </div>
                   <label style={styles.label}>Экспорт (скопируйте этот текст)</label>
                   <textarea readOnly value={buildExportPayload()} style={styles.backupTextarea} onFocus={(e) => e.target.select()} />
                   <div style={styles.backupRow}>
@@ -3924,13 +4516,56 @@ export default function StudyPlanner() {
                 </>
               )}
             </section>
+          </div>
+        )}
+
+        {screen === "prefs" && (
+          <div className="ap-grid2" style={styles.grid2}>
+            {/* Первым — выбор дизайна: сюда приходят из окна «Новый дизайн»,
+                когда хотят вернуть прежний, и искать его ниже не должны. */}
+            <section className="ap-card" style={styles.card}>
+              <CardHead
+                id="design"
+                title="Дизайн"
+                note="Как выглядит приложение на этом устройстве. Записи от выбора не зависят: меняется только вид."
+              />
+              <div style={styles.themeRow}>
+                {[
+                  ["new", "Новый"],
+                  ["classic", "Прежний"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setDesign(value)}
+                    aria-pressed={design === value}
+                    style={{
+                      ...styles.themeBtn,
+                      background: design === value ? "var(--accent)" : "var(--panel2)",
+                      color: design === value ? "var(--accentInk)" : "var(--ink2)",
+                      borderColor: design === value ? "var(--accent)" : "var(--line)",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div style={styles.mutedSmall}>
+                {classic
+                  ? "Прежний дизайн — как до версии 1.0.0. Новый можно включить в любой момент."
+                  : "Новый дизайн версии 1.0.0. Прежний остаётся здесь, пока к новому не привыкнете."}
+              </div>
+            </section>
+
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Оформление</div>
-              <div style={styles.cardNote}>
-                Тема и границы ночи — настройка устройства: телефон вечером может быть в ночной, а ноутбук днём в
-                светлой. В облако это не уходит.
-              </div>
+              <CardHead
+                id="looks"
+                title="Оформление"
+                note={
+                  "Тема и границы ночи — настройка устройства: телефон вечером может быть в ночной, а ноутбук днём " +
+                  "в светлой. В облако это не уходит."
+                }
+              />
               <div style={styles.themeRow}>
                 {[
                   ["light", "Светлая"],
@@ -4036,14 +4671,17 @@ export default function StudyPlanner() {
             )}
 
             <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Приложение</div>
-              <div style={styles.cardNote}>
-                С иконки ежедневник открывается без адресной строки и работает без сети — правки уйдут в облако, когда
-                связь появится.
-              </div>
+              <CardHead
+                id="install"
+                title="Приложение"
+                note={
+                  "С иконки ежедневник открывается без адресной строки и работает без сети — правки уйдут в облако, " +
+                  "когда связь появится."
+                }
+              />
               <InstallHint />
               <div style={styles.versionRow}>
-                Ежедневник лицеиста · бета {__APP_VERSION__} · сборка от{" "}
+                Ежедневник лицеиста · версия {__APP_VERSION__} · сборка от{" "}
                 {new Date(__BUILD_DATE__).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })},{" "}
                 {new Date(__BUILD_DATE__).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
               </div>
@@ -4065,6 +4703,16 @@ export default function StudyPlanner() {
         }}
       />
       <ReleaseNotesDialog open={notesOpen} onClose={() => setNotesOpen(false)} />
+      {/* После окна о расписании, если оно тоже открыто: два окна разом друг друга перекрывали бы. */}
+      <DesignIntroDialog
+        open={designIntroOpen && !introOpen && !notesOpen}
+        onKeep={() => closeDesignIntro("new")}
+        onClassic={() => closeDesignIntro("classic")}
+        onNotes={() => {
+          closeDesignIntro("new");
+          setNotesOpen(true);
+        }}
+      />
 
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
@@ -4209,15 +4857,7 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
   }
 
   return (
-    <div style={styles.eventsEditor}>
-      <p style={styles.muted}>
-        Экзамены, этапы олимпиад, пробники — всё, до чего нужен отсчёт. Приоритет решает, до какого события считается
-        план: <PriorityMark value={3} height={10} /> важнее <PriorityMark value={2} height={10} /> и{" "}
-        <PriorityMark value={1} height={10} />. Если
-        приоритет одинаковый, берётся ближайшее. Можно выбрать и вручную — «считать план по нему» у любого события.
-        Экзамены и олимпиады, заведённые в расписании, появляются здесь сами —
-        это одна и та же запись, и править её можно с любой стороны.
-      </p>
+    <div>
 
       {upcoming.map((e) => row(e, false))}
       {past.length > 0 && (
@@ -5061,7 +5701,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
           ))}
         </div>
       )}
-      <div style={styles.reminderRow}>
+      <div style={styles.hwReminderRow}>
         <span style={styles.mutedSmall}>Напоминать:</span>
         <select
           value={reminderMode}
@@ -5094,14 +5734,128 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
   );
 }
 
+// Правила таблицы стилей, которые у двух дизайнов разные: навигация, вкладки,
+// поля ввода и плитки дня на телефоне. Прежний набор — ровно как в 0.14.0.
+const NEW_CSS = `
+        .ap-card:hover { box-shadow: var(--shadow); }
+        /* Состояния навигации описаны здесь целиком: инлайновый стиль перебивал :hover,
+           и подсветка под курсором не появлялась. Выбранный раздел — подложка
+           во всю строку, без полосы слева: полоса уже занята под важность урока. */
+        .ap-nav {
+          padding: 0 12px;
+          border: none;
+          border-radius: 10px;
+          background: transparent;
+          color: var(--railInk2);
+          transition: background .18s ease, color .18s ease;
+        }
+        .ap-nav:hover { background: var(--railActive); color: var(--railInk); }
+        .ap-nav.is-on { background: var(--railActive); color: var(--railInk); font-weight: 600; }
+        .ap-nav.is-on svg { color: var(--accent); }
+        .ap-rail::-webkit-scrollbar { display: none; }
+        .ap-search { background: transparent; color: var(--railInk2); transition: background .18s ease, color .18s ease; }
+        .ap-search:hover, .ap-search.is-on { background: var(--railActive); color: var(--railInk); }
+        .ap-tab {
+          border: none;
+          background: transparent;
+          color: var(--railInk2);
+          padding: 4px 2px;
+          transition: color .18s ease;
+        }
+        .ap-tab:hover, .ap-tab.is-on { color: var(--railInk); }
+        .ap-tab.is-on { font-weight: 600; }
+        .ap-tab-mark { background: transparent; transition: background .18s ease; }
+        .ap-tab.is-on .ap-tab-mark { background: var(--railActive); color: var(--accent); }
+        /* Поля ввода везде одни: скругление, рамка и заметный фокус. Скругление
+           перебивает инлайновое — в стилях полей оно было то 7, то 8, то 9. */
+        .ap-main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+        .ap-main select, .ap-main textarea, .ap-dialog input:not([type="checkbox"]):not([type="radio"]), .ap-dialog select {
+          border-radius: var(--radiusSm) !important;
+          min-height: 36px;
+          transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .ap-main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus,
+        .ap-main select:focus, .ap-main textarea:focus, .ap-main [contenteditable="true"]:focus {
+          outline: none;
+          border-color: var(--accent) !important;
+          box-shadow: 0 0 0 3px var(--accentSoft);
+        }
+        .ap-main input::placeholder, .ap-main textarea::placeholder { color: var(--mute); opacity: 1; }
+        input[type="checkbox"], input[type="radio"] { accent-color: var(--green); }
+        input[type="checkbox"] { width: 17px; height: 17px; }
+        button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        ::selection { background: var(--accentSoft); }
+`;
+const NEW_MOBILE_CSS = `
+          .ap-main { padding: 20px 16px 104px !important; }
+          .ap-main h1 { font-size: 32px !important; }
+          .ap-desktop-only { display: none !important; }
+          /* Три плитки дня на телефоне — одна полоса из трёх чисел: три
+             карточки подряд заняли бы полэкрана раньше уроков. */
+          .ap-tiles {
+            gap: 0 !important;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px 0;
+            margin-bottom: 16px !important;
+          }
+          .ap-tiles > .ap-card {
+            border: none !important;
+            border-radius: 0 !important;
+            background: none !important;
+            padding: 2px 8px !important;
+            align-items: center;
+            text-align: center;
+            gap: 4px !important;
+            animation: none;
+          }
+          .ap-tiles > .ap-card + .ap-card { border-left: 1px solid var(--line) !important; }
+          .ap-tiles > .ap-card:hover { box-shadow: none; }
+          .ap-tiles > .ap-card > :first-child { order: 2; font-size: 12px !important; }
+          .ap-tiles > .ap-card > :nth-child(2) { justify-content: center; }
+          .ap-tiles > .ap-card > :nth-child(2) > :first-child { font-size: 25px !important; }
+          .ap-tiles > .ap-card > :nth-child(2) > :nth-child(2),
+          .ap-tiles > .ap-card > :last-child { display: none; }
+          .ap-main section.ap-card { padding: 18px 16px !important; }
+`;
+const CLASSIC_CSS = `
+        .ap-card:hover { box-shadow: var(--shadow); border-color: var(--mute); }
+        .ap-nav {
+          padding: 10px 12px;
+          border: none;
+          border-left: 3px solid transparent;
+          border-radius: 8px;
+          background: transparent;
+          color: var(--railInk2);
+          transition: background .22s ease, color .22s ease, border-color .22s ease, padding-left .22s ease;
+        }
+        .ap-nav:hover { background: var(--railActive); color: var(--railInk); padding-left: 16px; }
+        .ap-nav.is-on { background: var(--railActive); color: var(--railInk); border-left-color: var(--accent); font-weight: 600; }
+        .ap-tab {
+          border: none;
+          background: transparent;
+          color: var(--railInk2);
+          padding: 10px 4px 12px;
+          transition: background .22s ease, color .22s ease;
+        }
+        .ap-tab:hover { background: var(--railActive); color: var(--railInk); }
+        .ap-tab.is-on { background: var(--railActive); color: var(--railInk); font-weight: 600; }
+        .ap-tab-mark { background: transparent; transition: background .22s ease; }
+        .ap-tab.is-on .ap-tab-mark, .ap-tab:hover .ap-tab-mark { background: var(--accent); }`;
+const CLASSIC_MOBILE_CSS = `
+          .ap-main { padding: 16px 14px 96px !important; }
+`;
+
 const styles = {
   // Оболочка: колонка навигации слева, экран справа. На телефоне колонка
   // превращается в полосу сверху — это делает таблица стилей выше.
-  shell: { display: "flex", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative" },
-  main: { flex: 1, minWidth: 0, padding: "24px 26px 40px", maxWidth: 1400 },
-  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: 16, marginBottom: 16 },
-  grid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))", gap: 16, marginBottom: 16 },
-  cardTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, marginBottom: 5 },
+  shell: { display: "flex", alignItems: "flex-start", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative", fontFamily: "var(--sans)" },
+  main: { flex: 1, minWidth: 0, padding: "36px 44px 56px", maxWidth: 1340 },
+  // Между рядами — только отступ самой карточки: зазор сетки поверх него давал
+  // 32 px между рядами при 16 между карточками вне сетки.
+  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(340px, 100%), 1fr))", gap: "0 20px", alignItems: "start" },
+  cardTitle: { fontFamily: "var(--serif)", fontSize: 22, lineHeight: 1.25, marginBottom: 8 },
   cardNote: { fontSize: 13.5, color: "var(--ink3)", marginBottom: 14, lineHeight: 1.5 },
   todayList: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 },
   todayRow: {
@@ -5109,12 +5863,15 @@ const styles = {
     alignItems: "baseline",
     gap: 8,
     flexWrap: "wrap",
-    borderLeft: "4px solid",
-    borderRadius: "0 4px 4px 0",
-    padding: "6px 9px",
+    borderLeft: "3px solid",
+    borderRadius: 10,
+    padding: "9px 12px",
   },
   todayTime: { fontSize: 12.5, fontWeight: 600, minWidth: 42 },
-  todayMark: { minWidth: 42, display: "flex", alignItems: "center" },
+  // Колонка значка важности в «Ближайших событиях». Звалась todayMark, как и
+  // подпись «сегодня» в расписании, и та её перебивала: колонка теряла ширину,
+  // и названия событий не выстраивались в столбик.
+  eventMarkCol: { minWidth: 42, display: "flex", alignItems: "center" },
   // «Сейчас»: своя строка сверху, свой урок и то же время у всей параллели.
   reviewList: { display: "flex", flexDirection: "column", gap: 6 },
   reviewRow: {
@@ -5123,7 +5880,7 @@ const styles = {
     gap: 9,
     border: "1px solid var(--line2)",
     background: "var(--panel2)",
-    borderRadius: 9,
+    borderRadius: 10,
     padding: "8px 11px",
   },
   reviewText: { display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 },
@@ -5134,7 +5891,7 @@ const styles = {
     border: "1px solid var(--line)",
     background: "var(--panel)",
     color: "var(--ink2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "6px 11px",
     fontSize: 12.5,
     fontWeight: 600,
@@ -5174,7 +5931,7 @@ const styles = {
     textAlign: "left",
     border: "1px solid var(--line2)",
     background: "var(--panel2)",
-    borderRadius: 9,
+    borderRadius: 10,
     padding: "9px 11px",
     marginBottom: 5,
   },
@@ -5193,7 +5950,10 @@ const styles = {
   nowMineMeta: { color: "var(--ink3)", fontSize: 12.5 },
   nowAll: { borderTop: "1px solid var(--line2)", paddingTop: 10 },
   nowAllTitle: { fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--mute)", marginBottom: 8 },
-  nowAllRow: { display: "flex", flexDirection: "column", gap: 2, padding: "5px 0" },
+  nowAllRow: { display: "flex", flexDirection: "column", gap: 2 },
+  // Та же полоска, что у уроков в расписании: урок узнают по ней, и на
+  // «Сегодня» он должен выглядеть так же, а не строчкой текста.
+  nowMark: { borderLeft: "3px solid", borderRadius: 10, padding: "8px 11px" },
   nowAllName: { fontSize: 13.5, fontWeight: 600, color: "var(--ink2)", display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
   nowAllWho: { fontSize: 11, fontWeight: 400, color: "var(--mute)" },
   nowAllItems: { display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12.5, color: "var(--ink3)" },
@@ -5242,24 +6002,32 @@ const styles = {
   streakBox: { textAlign: "center", minWidth: 78 },
   streakNum: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 28, lineHeight: 1, color: "var(--green)" },
   streakWord: { fontSize: 11.5, color: "var(--ink3)", marginTop: 3 },
-  weekCard: { borderColor: "var(--accent)" },
-  weekActions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
-  weekGo: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 9, padding: "8px 15px", fontSize: 13, fontWeight: 600 },
+  // Полоска, а не карточка: напоминание о новой неделе стоит рядом с крупным
+  // напоминанием о занятиях, и двум плашкам во весь экран подряд там тесно.
+  weekStrip: {
+    display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+    padding: "12px 14px 12px 20px", marginBottom: 20, borderRadius: 16,
+    border: "1px solid transparent", background: "var(--accentSoft)",
+  },
+  weekStripText: { fontSize: 14.5, color: "var(--ink)", flex: "1 1 220px", minWidth: 0 },
+  weekActions: { display: "flex", gap: 8, flexWrap: "wrap" },
+  weekGo: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 10, minHeight: 38, padding: "0 16px", fontSize: 13.5, fontWeight: 600 },
   weekSkip: {
-    border: "1px solid var(--line)",
-    background: "var(--panel2)",
+    border: "none",
+    background: "transparent",
     color: "var(--ink2)",
-    borderRadius: 9,
-    padding: "8px 15px",
-    fontSize: 13,
-    fontWeight: 600,
+    borderRadius: 10,
+    minHeight: 38,
+    padding: "0 14px",
+    fontSize: 13.5,
+    fontWeight: 500,
   },
   // Пропущенный день подсвечивается тёплым — это напоминание, а не выговор.
   pulseWarm: {
     background: "var(--warmBg)",
     border: "1px solid var(--warmLine)",
     color: "var(--warmInk)",
-    borderRadius: 9,
+    borderRadius: 10,
     padding: "8px 10px",
   },
   verdictLine: { fontSize: 12.5, lineHeight: 1.5, marginBottom: 8 },
@@ -5274,7 +6042,7 @@ const styles = {
     minWidth: 0,
     padding: "7px 9px",
     border: "1px solid var(--line)",
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 13.5,
     fontWeight: 600,
     background: "var(--panel2)",
@@ -5294,7 +6062,7 @@ const styles = {
   notebookDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
   notebookName: { flex: 1, minWidth: 0 },
   page: {
-    fontFamily: "Inter, system-ui, sans-serif",
+    fontFamily: "'Golos Text', system-ui, sans-serif",
     background: "var(--bg)",
     color: "var(--ink)",
     minHeight: "100vh",
@@ -5344,7 +6112,7 @@ const styles = {
   },
   countdownLeadText: { minWidth: 0 },
   countdownLabel: { fontSize: 12, color: "var(--mute)", marginBottom: 4 },
-  dateInput: { border: "1px solid var(--line)", background: "var(--panel2)", color: "inherit", borderRadius: 8, padding: "7px 9px", fontSize: 12.5, width: "100%" },
+  dateInput: { border: "1px solid var(--line)", background: "var(--panel2)", color: "inherit", borderRadius: 10, padding: "7px 9px", fontSize: 12.5, width: "100%" },
   countdownEvent: {
     display: "flex",
     alignItems: "center",
@@ -5383,7 +6151,7 @@ const styles = {
     width: "100%",
     padding: "5px 8px",
     border: "1px solid var(--line)",
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 11.5,
     background: "var(--panel2)",
     color: "var(--ink2)",
@@ -5396,7 +6164,7 @@ const styles = {
     border: "none",
     color: "var(--btnInk)",
     background: "var(--btnBg)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
@@ -5406,7 +6174,7 @@ const styles = {
     display: "inline-block",
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
@@ -5416,7 +6184,7 @@ const styles = {
   secondaryBtnSmall: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
@@ -5432,6 +6200,18 @@ const styles = {
   },
   eventsActions: { display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" },
   calendarBtn: { background: "none", border: "none", padding: "0 2px", fontSize: 14, lineHeight: 1 },
+  journalEntryHead: { borderTop: "1px solid var(--line2)", paddingTop: 14, marginTop: 18 },
+  journalListHead: { fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--mute)", margin: "4px 0 6px" },
+  // Переход на другой экран — всегда одинаково: «Все события →».
+  goLink: {
+    alignSelf: "flex-start", background: "none", border: "none", padding: 0,
+    fontSize: 13, color: "var(--accent)", fontWeight: 600, cursor: "pointer", textAlign: "left",
+  },
+  emptyStrip: {
+    display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "6px 22px",
+    padding: "4px 2px 16px",
+  },
+  emptyStripNote: { fontSize: 13, color: "var(--mute)" },
   eventsToggle: {
     alignSelf: "flex-start",
     background: "none",
@@ -5442,16 +6222,15 @@ const styles = {
     fontWeight: 600,
     textDecoration: "underline",
   },
-  eventsEditor: { background: "var(--neutralBg)", border: "1px solid var(--line)", borderRadius: 10, padding: 14, marginTop: 4 },
   eventEditRow: {
     display: "flex",
     alignItems: "flex-start",
     gap: 8,
     flexWrap: "wrap",
     marginBottom: 8,
-    borderLeft: "4px solid",
-    borderRadius: "0 9px 9px 0",
-    padding: "10px 12px",
+    borderLeft: "3px solid",
+    borderRadius: 12,
+    padding: "12px 14px",
   },
   eventDays: {
     fontFamily: "'PT Serif', Georgia, serif",
@@ -5463,7 +6242,7 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
   },
-  eventDaysWord: { fontFamily: "Inter, system-ui, sans-serif", fontSize: 10.5, fontWeight: 600, opacity: 0.85, marginTop: 2 },
+  eventDaysWord: { fontFamily: "'Golos Text', system-ui, sans-serif", fontSize: 10.5, fontWeight: 600, opacity: 0.85, marginTop: 2 },
   eventAddRow: {
     display: "flex",
     alignItems: "center",
@@ -5473,21 +6252,21 @@ const styles = {
     paddingTop: 12,
     borderTop: "1px solid var(--line2)",
   },
-  eventNameInput: { flex: "3 1 200px", minWidth: 0, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
-  eventDateInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
+  eventNameInput: { flex: "3 1 200px", minWidth: 0, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
+  eventDateInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
   priorityMark: { display: "inline-flex", alignItems: "flex-end", gap: 2, flexShrink: 0, verticalAlign: "-1px" },
   priorityBar: { width: 3, borderRadius: 1.5, display: "block" },
   priorityRow: { display: "flex", gap: 4 },
-  priorityBtn: { border: "1px solid", borderRadius: 8, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
+  priorityBtn: { border: "1px solid", borderRadius: 10, padding: "4px 7px", fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
   tabsRow: { display: "flex", gap: 6, marginTop: 10 },
-  tabBtn: { border: "1px solid", borderRadius: 8, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
+  tabBtn: { border: "1px solid", borderRadius: 10, padding: "4px 12px", fontSize: 12.5, fontWeight: 600 },
   subHead: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 18, margin: "22px 0 10px" },
   // Сворачиваемые блоки раздела выглядят одинаково — что «Предметы», что
   // «Готовое расписание»: одна рамка, один заголовок, один шеврон.
   foldCard: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 11,
+    borderRadius: 14,
     padding: "10px 14px",
     marginBottom: 12,
   },
@@ -5510,7 +6289,7 @@ const styles = {
   sundayBtn: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "5px 12px",
     fontSize: 12.5,
     fontWeight: 600,
@@ -5565,22 +6344,22 @@ const styles = {
     border: "1px solid var(--railInk2)",
     background: "transparent",
     color: "var(--railInk)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "4px 10px",
     fontSize: 13,
   },
-  undoConfirm: { border: "none", background: "var(--green)", color: "#fff", borderRadius: 8, padding: "4px 10px", fontSize: 13 },
+  undoConfirm: { border: "none", background: "var(--green)", color: "#fff", borderRadius: 10, padding: "4px 10px", fontSize: 13 },
   dayPriority: { fontSize: 11, fontWeight: 700, marginLeft: 6 },
   levelChip: {
     border: "1px solid",
-    borderRadius: 7,
+    borderRadius: 10,
     fontSize: 10,
     fontWeight: 600,
     padding: "1px 5px",
     marginLeft: 6,
     verticalAlign: "middle",
   },
-  fromScheduleBadge: { fontSize: 10.5, color: "var(--red)", border: "1px solid var(--redLine)", borderRadius: 8, padding: "1px 6px" },
+  fromScheduleBadge: { fontSize: 10.5, color: "var(--red)", border: "1px solid var(--redLine)", borderRadius: 10, padding: "1px 6px" },
   mainPick: {
     border: "1px solid var(--line)",
     background: "none",
@@ -5607,7 +6386,7 @@ const styles = {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
     color: "var(--ink3)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "4px 10px",
     fontSize: 11.5,
   },
@@ -5617,7 +6396,68 @@ const styles = {
   overallBtn: { display: "block", width: "100%", border: "none", background: "none", padding: 0, textAlign: "left" },
   overallHint: { color: "var(--accent)", fontWeight: 600, marginLeft: 8, fontSize: 12 },
   overallText: { fontSize: 13, color: "var(--ink2)", marginTop: 6 },
-  card: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 12, padding: "18px 20px", marginBottom: 16 },
+  card: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "22px 24px", marginBottom: 20 },
+  // Подпись справа от заголовка карточки: «6 уроков · с 8:30».
+  cardMeta: { fontSize: 13, color: "var(--ink3)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" },
+  headAction: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 9,
+    minHeight: 46,
+    padding: "0 20px",
+    border: "none",
+    borderRadius: 12,
+    background: "var(--btnBg)",
+    color: "var(--btnInk)",
+    fontSize: 14.5,
+    fontWeight: 600,
+  },
+  // Три числа дня. На телефоне они складываются в одну полосу — это делает
+  // таблица стилей: там плитки без рамок, в одной карточке, разделены чертой.
+  tiles: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16, marginBottom: 20 },
+  tile: {
+    background: "var(--panel)",
+    border: "1px solid var(--line)",
+    borderRadius: 16,
+    padding: "18px 20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    minWidth: 0,
+  },
+  tileLabel: { fontSize: 13.5, color: "var(--ink3)" },
+  tileValueRow: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" },
+  tileValue: { fontFamily: "var(--serif)", fontSize: 34, lineHeight: 1, fontVariantNumeric: "tabular-nums" },
+  tileOf: { fontSize: 14, color: "var(--ink3)" },
+  tileTrack: { height: 6, borderRadius: 999, background: "var(--line2)", overflow: "hidden" },
+  tileFill: { height: "100%", borderRadius: 999 },
+  streakDots: { display: "flex", gap: 5 },
+  streakDot: { flex: 1, height: 6, borderRadius: 999 },
+  // Уроки чуть шире формы: в строке урока время, название, кабинет и учитель.
+  gridToday: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(360px, 100%), 1fr))", gap: "0 20px", alignItems: "start" },
+  quickGrid: { display: "flex", gap: 12, flexWrap: "wrap", marginTop: 6 },
+  quickField: { display: "flex", flexDirection: "column", gap: 6, flex: "1 1 180px", minWidth: 0 },
+  quickLabel: { fontSize: 13, color: "var(--ink3)" },
+  quickControl: {
+    width: "100%",
+    minHeight: 44,
+    padding: "10px 12px",
+    border: "1px solid var(--line)",
+    background: "var(--panel2)",
+    color: "var(--ink)",
+    fontSize: 15,
+  },
+  quickSubmit: {
+    width: "100%",
+    minHeight: 46,
+    marginTop: 16,
+    border: "none",
+    borderRadius: 12,
+    background: "var(--btnBg)",
+    color: "var(--btnInk)",
+    fontSize: 15,
+    fontWeight: 600,
+  },
   // Экран, который сам состоит из карточек: своей коробки ему не нужно.
   plainBlock: { display: "block", marginBottom: 16 },
   muted: { fontSize: 13.5, color: "var(--ink3)", lineHeight: 1.6, marginTop: 0 },
@@ -5626,7 +6466,7 @@ const styles = {
   dailyGoalsRow: { display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 6, marginTop: 4 },
   dailyGoalCell: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 },
   dailyGoalLabel: { fontSize: 11.5, color: "var(--mute)" },
-  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, textAlign: "center", background: "var(--panel2)" },
+  dailyGoalInput: { width: "100%", padding: "4px 3px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, textAlign: "center", background: "var(--panel2)" },
   dailyGoalHours: { fontSize: 11, color: "var(--ink3)" },
   allocGrid: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 },
   allocBlock: { marginBottom: 4 },
@@ -5637,15 +6477,15 @@ const styles = {
   recLabels: { display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--ink3)" },
   dot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0, display: "inline-block" },
   allocName: { fontSize: 13.5, width: 120, flexShrink: 0 },
-  smallNumInput: { width: 52, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
+  smallNumInput: { width: 52, padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
   hUnit: { fontSize: 11.5, color: "var(--mute)", width: 34 },
-  capacityBox: { border: "1px solid", borderRadius: 9, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, background: "var(--panel2)" },
+  capacityBox: { border: "1px solid", borderRadius: 10, padding: "12px 14px", fontSize: 13.5, lineHeight: 1.9, background: "var(--panel2)" },
   skewWarning: {
     marginTop: 10,
     padding: "10px 14px",
     background: "var(--redBg)",
     border: "1px solid var(--redLine)",
-    borderRadius: 9,
+    borderRadius: 10,
     fontSize: 13.5,
     color: "var(--red)",
     fontWeight: 600,
@@ -5660,7 +6500,7 @@ const styles = {
   ppfSection: { marginTop: 22, paddingTop: 18, borderTop: "1px solid var(--line2)" },
   balanceHead: { marginBottom: 12 },
   ppfControls: { flex: "1 1 220px", minWidth: 220 },
-  select: { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
+  select: { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
   svg: { flex: "1 1 280px", maxWidth: 320, background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 9 },
   // alignItems: start — иначе короткая карточка тянется под высоту соседней
   // по строке сетки и кажется раскрытой и пустой.
@@ -5669,7 +6509,7 @@ const styles = {
   subjCard: {
     background: "var(--panel2)",
     border: "1px solid",
-    borderRadius: 11,
+    borderRadius: 14,
     padding: "16px 18px",
     transition: "transform 0.15s ease",
     // Карточка объявлена контейнером: строка урока переносится по её ширине,
@@ -5679,7 +6519,7 @@ const styles = {
   subjHeader: { display: "flex", alignItems: "center", gap: 8, flex: 1, background: "none", border: "none", padding: 0, textAlign: "left" },
   subjHeaderRow: { display: "flex", alignItems: "center", gap: 4 },
   addSubjectRow: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" },
-  addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, background: "var(--panel2)" },
+  addSubjectInput: { flex: "1 1 240px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13.5, background: "var(--panel2)" },
   // alignItems: start — иначе день без уроков вытягивается под высоту дня с
   // экзаменом и выглядит пустой коробкой во весь столбец.
   scheduleGrid: {
@@ -5689,7 +6529,7 @@ const styles = {
     marginTop: 16,
     alignItems: "start",
   },
-  scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 11, padding: "14px 16px" },
+  scheduleDayBlock: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px" },
   scheduleDayHeader: { fontSize: 13.5, fontWeight: 700, marginBottom: 8 },
   // Сегодняшний день видно и в общей сетке: искать его глазами по датам не нужно.
   scheduleDayToday: { borderColor: "var(--accent)", boxShadow: "inset 0 0 0 1px var(--accent)" },
@@ -5715,7 +6555,7 @@ const styles = {
     minWidth: 0,
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "6px 9px",
     fontSize: 12.5,
     resize: "none",
@@ -5724,7 +6564,7 @@ const styles = {
     width: 62,
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "6px 8px",
     fontSize: 12.5,
   },
@@ -5739,9 +6579,9 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    borderLeft: "5px solid",
-    borderRadius: "0 4px 4px 0",
-    padding: "6px 8px",
+    borderLeft: "3px solid",
+    borderRadius: 10,
+    padding: "8px 10px",
     marginBottom: 8,
   },
   // В сетке карточка сама себе строка, поэтому нижний отступ лишний.
@@ -5768,7 +6608,7 @@ const styles = {
     color: "var(--ink3)",
     textDecoration: "underline",
   },
-  rowDone: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600 },
+  rowDone: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 10, minHeight: 34, padding: "0 14px", fontSize: 12.5, fontWeight: 600 },
   rowDelete: {
     marginLeft: "auto",
     border: "none",
@@ -5797,7 +6637,7 @@ const styles = {
     padding: "8px 8px 10px",
     marginBottom: 8,
     border: "1px dashed var(--gold)",
-    borderRadius: 9,
+    borderRadius: 10,
     background: "var(--warmBg)",
   },
   // Экзамен выделяется рамкой: цвет заливки уже занят под важность. Границы заданы
@@ -5815,7 +6655,7 @@ const styles = {
     border: "1px solid var(--redStrong)",
     background: "var(--redStrong)",
     color: "var(--btnInk)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "2px 8px",
     fontSize: 11,
     fontWeight: 700,
@@ -5827,33 +6667,33 @@ const styles = {
     border: "1px solid var(--line)",
     background: "var(--panel)",
     color: "var(--mute)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "2px 8px",
     fontSize: 11,
     fontWeight: 600,
     letterSpacing: 0.3,
     textTransform: "uppercase",
   },
-  examDateInput: { padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
+  examDateInput: { padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12, background: "var(--panel2)" },
   examLink: { fontSize: 12, color: "var(--blue)" },
   // Название переносится на несколько строк, значки важности остаются у первой.
   scheduleSubjectRow: { display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" },
   priorityLegend: { fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.5, marginBottom: 10 },
-  scheduleSelect: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)", width: "100%" },
+  scheduleSelect: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)", width: "100%" },
   scheduleSubjectInput: {
     flex: "1 1 120px",
     minWidth: 0,
     padding: "4px 6px",
     border: "1px solid var(--line)",
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 12.5,
     background: "var(--panel2)",
     fontWeight: 600,
   },
   scheduleTimeRow: { display: "flex", alignItems: "center", gap: 4 },
-  scheduleTimeInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)", width: 82 },
-  scheduleRoomInput: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
-  scheduleTeacherInput: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
+  scheduleTimeInput: { padding: "5px 6px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12, background: "var(--panel2)", width: 82 },
+  scheduleRoomInput: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
+  scheduleTeacherInput: { padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
   addScheduleRow: { display: "flex", flexDirection: "column", gap: 4, marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--line)" },
   subjName: { fontSize: 15.5, fontWeight: 600, flex: 1, color: "var(--ink)" },
   subjPct: { fontSize: 12.5, color: "var(--ink3)" },
@@ -5861,18 +6701,18 @@ const styles = {
   miniFill: { height: "100%", borderRadius: 999 },
   topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 5, maxHeight: 420, overflowY: "auto" },
   topicBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 5 },
-  topicRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "8px 10px", borderRadius: 9, border: "1px solid transparent", flexWrap: "wrap" },
+  topicRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "8px 10px", borderRadius: 10, border: "1px solid transparent", flexWrap: "wrap" },
   topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "1 1 160px", minWidth: 0 },
   topicDone: { textDecoration: "line-through", color: "var(--mute)" },
   durationBox: { display: "inline-flex", alignItems: "center", gap: 4 },
-  durationInput: { width: 44, padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
-  notesToggle: { background: "none", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, padding: "3px 7px", color: "var(--ink2)" },
+  durationInput: { width: 44, padding: "5px 7px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12, background: "var(--panel2)" },
+  notesToggle: { background: "none", border: "1px solid var(--line)", borderRadius: 10, fontSize: 11.5, padding: "3px 7px", color: "var(--ink2)" },
   colorPick: {
     width: 24,
     height: 20,
     padding: 0,
     border: "1px solid var(--line)",
-    borderRadius: 7,
+    borderRadius: 10,
     background: "var(--panel2)",
     flexShrink: 0,
   },
@@ -5897,15 +6737,15 @@ const styles = {
   noteText: { flex: 1, color: "var(--ink2)" },
   noteMins: { color: "var(--ink3)", width: 46, flexShrink: 0, textAlign: "right" },
   noteForm: { display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  noteInput: { flex: "1 1 180px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
-  addBtnSmall: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600 },
+  noteInput: { flex: "1 1 180px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
+  addBtnSmall: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 10, minHeight: 36, padding: "0 14px", fontSize: 13, fontWeight: 600 },
   addTopicRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  addTopicInput: { flex: 1, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
-  addTopicUrlInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, background: "var(--panel2)" },
-  addBtn: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600 },
+  addTopicInput: { flex: 1, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
+  addTopicUrlInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
+  addBtn: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 10, minHeight: 38, padding: "0 16px", fontSize: 13.5, fontWeight: 600 },
   calendarWrap: { marginBottom: 18 },
   calHeader: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 8 },
-  calNavBtn: { background: "none", border: "1px solid var(--line)", borderRadius: 8, width: 28, height: 28, fontSize: 15, color: "var(--ink)" },
+  calNavBtn: { background: "none", border: "1px solid var(--line)", borderRadius: 10, width: 28, height: 28, fontSize: 15, color: "var(--ink)" },
   // capitalize поднимал и «г.» в «Г.», поэтому заглавная ставится только первой букве.
   calMonthLabel: { fontSize: 14.5, fontWeight: 600, minWidth: 150, textAlign: "center" },
   calWeekdays: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 },
@@ -5915,7 +6755,7 @@ const styles = {
     position: "relative",
     aspectRatio: "1",
     border: "none",
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 12.5,
     fontWeight: 600,
     display: "flex",
@@ -5926,12 +6766,12 @@ const styles = {
     color: "var(--ink)",
   },
   calFill: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 0 },
-  calRing: { position: "absolute", inset: 0, border: "2px solid var(--ink)", borderRadius: 8, zIndex: 3, pointerEvents: "none" },
+  calRing: { position: "absolute", inset: 0, border: "2px solid var(--ink)", borderRadius: 10, zIndex: 3, pointerEvents: "none" },
   calExamRing: {
     position: "absolute",
     inset: 0,
     border: "2px solid var(--redStrong)",
-    borderRadius: 8,
+    borderRadius: 10,
     zIndex: 2,
     pointerEvents: "none",
   },
@@ -5944,7 +6784,7 @@ const styles = {
   // Точки сидят над заливкой, поэтому подложка им больше не нужна.
   lessonDots: { position: "absolute", top: 3, display: "flex", gap: 2, alignItems: "center", zIndex: 1 },
   lessonDot: { width: 5, height: 5, borderRadius: "50%" },
-  dayDetail: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 9, padding: "12px 14px", marginBottom: 16 },
+  dayDetail: { background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 14, padding: "14px 16px", marginBottom: 16 },
   homeworkBlock: { marginTop: 12, paddingTop: 10, borderTop: "1px dashed var(--line)" },
   homeworkTitle: { fontSize: 13, fontWeight: 700, marginBottom: 6 },
   homeworkSubjectBlock: { marginBottom: 10 },
@@ -5953,8 +6793,8 @@ const styles = {
   homeworkItemRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "3px 0" },
   homeworkText: { flex: 1, color: "var(--ink2)" },
   homeworkAddRow: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" },
-  homeworkInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12.5, background: "var(--panel2)" },
-  homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12, background: "var(--panel2)" },
+  homeworkInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
+  homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12, background: "var(--panel2)" },
   attachBtn: { background: "none", border: "none", fontSize: 13, padding: "0 2px" },
   attachmentsRow: { display: "flex", flexWrap: "wrap", gap: 6, marginLeft: 24, marginBottom: 4 },
   attachmentChip: {
@@ -5967,19 +6807,21 @@ const styles = {
     fontSize: 11.5,
   },
   attachmentLink: { background: "none", border: "none", color: "var(--blue)", textDecoration: "underline", fontSize: 11.5, padding: 0 },
-  reminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
-  reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, background: "var(--panel2)" },
-  reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 11.5, background: "var(--panel2)" },
+  // Строка напоминания у домашнего задания. Раньше звалась reminderRow — так же,
+  // как строка напоминания о занятиях на «Сегодня», и в одном объекте
+  // выигрывала она: у той карточки был чужой отступ слева.
+  hwReminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
+  reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 11.5, background: "var(--panel2)" },
+  reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 11.5, background: "var(--panel2)" },
   hwBanner: {
     display: "flex",
     alignItems: "stretch",
     gap: 12,
     background: "var(--warmBg)",
-    border: "1px solid var(--gold)",
-    borderLeft: "5px solid var(--gold)",
-    borderRadius: 10,
-    padding: "12px 14px",
-    marginBottom: 16,
+    border: "1px solid var(--warmLine)",
+    borderRadius: 16,
+    padding: "14px 18px",
+    marginBottom: 20,
   },
   hwBannerBody: { flex: 1, minWidth: 0 },
   hwBannerTitle: {
@@ -6007,7 +6849,7 @@ const styles = {
   // Без capitalize: он поднимал заглавные во всей строке — «12 Сентября 2026 Г. — 0 Ч Из 4 Ч Цели».
   dayDetailTitle: { fontSize: 13.5, fontWeight: 600, marginBottom: 8 },
   journalForm: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" },
-  textInput: { flex: "1 1 200px", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13.5, background: "var(--panel2)" },
+  textInput: { flex: "1 1 200px", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13.5, background: "var(--panel2)" },
   journalList: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 320, overflowY: "auto" },
   // Длинная заметка раздвигала строку и уносила крестик за край экрана.
   journalRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, padding: "7px 8px", borderBottom: "1px solid var(--line2)", flexWrap: "wrap" },
@@ -6019,7 +6861,7 @@ const styles = {
   backupHint: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 22 },
   pendingBadge: { fontSize: 11.5, color: "var(--accent)", fontWeight: 600 },
   themeRow: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
-  themeBtn: { border: "1px solid", borderRadius: 8, padding: "6px 14px", fontSize: 13, fontWeight: 600 },
+  themeBtn: { border: "1px solid", borderRadius: 10, padding: "6px 14px", fontSize: 13, fontWeight: 600 },
   eggRow: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 },
   eggBtn: {
     border: "1px solid var(--line)",
@@ -6037,7 +6879,7 @@ const styles = {
   syncBtn: {
     border: "1px solid var(--line)",
     background: "var(--panel2)",
-    borderRadius: 8,
+    borderRadius: 10,
     padding: "5px 10px",
     fontSize: 12.5,
     color: "var(--ink)",
@@ -6047,7 +6889,7 @@ const styles = {
     minHeight: 90,
     padding: "8px 10px",
     border: "1px solid var(--line)",
-    borderRadius: 9,
+    borderRadius: 10,
     fontSize: 11.5,
     fontFamily: "monospace",
     background: "var(--panel2)",
@@ -6056,3 +6898,12 @@ const styles = {
   },
   backupRow: { display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 4, flexWrap: "wrap" },
 };
+
+// Снимок нового набора стилей. Прежний дизайн накладывает поверх него свои
+// значения из styles-classic.js; при возврате к новому всё ставится обратно.
+// Объект один на всё приложение, поэтому подмена видна и мелким компонентам
+// в этом файле, которые берут стили из него напрямую.
+const NEW_STYLES = { ...styles };
+function applyDesignStyles(classic) {
+  Object.assign(styles, NEW_STYLES, classic ? CLASSIC_STYLES : null);
+}

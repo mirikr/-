@@ -3,6 +3,7 @@ import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
 import { loadBank, withBase } from "./bank-load.js";
 import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
 import { ORDERS, newSeed, orderTasks } from "./trainer-order.js";
+import { CardHead } from "./card-head.jsx";
 import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer, votesTakeName } from "./bank-votes.js";
 
 // Тренажёр по открытому банку ФИПИ.
@@ -419,12 +420,17 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   if (!open) {
     return (
       <section className="ap-card" style={styles.card}>
-        <div style={S.alpha}>
-          <b>Это альфа-версия, и ответы здесь решены нами, а не взяты у ФИПИ</b> — банк правильный ответ не
-          показывает, он только говорит «верно» или «неверно». Значит, ошибки в ключах не исключение, а дело
-          времени. Если ты проверил задание в банке — впиши под разбором тот ответ, который банк засчитал.
-          Такой ответ сейчас ценнее любого решённого задания: по нему ключи и правятся.
-        </div>
+        <CardHead
+          id="trainer-alpha"
+          small
+          title="Ответы здесь решены нами, а не взяты у ФИПИ"
+          note={
+            "Банк правильный ответ не показывает, он только говорит «верно» или «неверно». Значит, ошибки " +
+            "в ключах не исключение, а дело времени. Если ты проверил задание в банке — впиши под разбором тот " +
+            "ответ, который банк засчитал. Такой ответ сейчас ценнее любого решённого задания: по нему ключи " +
+            "и правятся."
+          }
+        />
 
         <div style={S.picker}>
           {BANK_SUBJECTS.map((s) => {
@@ -434,13 +440,16 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
               <div key={s.name} style={S.pick}>
                 <div style={S.pickTop}>
                   <span style={S.pickName}>{s.name}</span>
-                  <span style={S.pickCount}>{s.count} {taskWord(s.count)}</span>
+                  {/* Пока не начинали — сколько заданий в наборе; дальше это же
+                      число стоит в строке «решено столько-то из стольких-то»,
+                      и дважды писать его незачем. */}
+                  {done ? null : <span style={S.pickCount}>{s.count} {taskWord(s.count)}</span>}
                 </div>
                 {/* Сколько заданий предмета уже перенесено из банка: у него там
                     тысячи, и без этой строчки «68 заданий» выглядит как весь банк. */}
                 {s.whole ? (
                   <div style={S.pickWhole}>
-                    Перенесено из банка ФИПИ: {s.count} из {s.whole} —{" "}
+                    из {s.whole} в банке ФИПИ —{" "}
                     {Math.max(0.1, (s.count / s.whole) * 100).toFixed(1).replace(".0", "").replace(".", ",")}%
                   </div>
                 ) : null}
@@ -476,11 +485,16 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
           })}
         </div>
 
-        <div style={S.pickHint}>
-          «Начать тест» — только то, что ещё не решено, и можно выбрать раздел.
-          «Все задания подряд» — весь предмет целиком, вместе с уже решённым.
-          «Перерешать неверные» — те, где последний ответ был неверным.
-        </div>
+        <CardHead
+          id="trainer-buttons"
+          small
+          title="Чем отличаются кнопки"
+          note={
+            "«Начать тест» — только то, что ещё не решено, и можно выбрать раздел. " +
+            "«Все задания подряд» — весь предмет целиком, вместе с уже решённым. " +
+            "«Перерешать неверные» — те, где последний ответ был неверным."
+          }
+        />
 
         {/* Итог по всем предметам сразу: по отдельным карточкам его не собрать. */}
         {allStats.done ? (

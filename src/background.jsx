@@ -378,5 +378,7 @@ export default function Background({ theme, enabled = true, showcase = null }) {
 }
 
 const styles = {
-  canvas: { position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" },
+  // Приглушено: созвездия проходят и по заголовкам экранов, где карточки их не
+  // закрывают, и в полную силу спорят с текстом. Фон должен быть фоном.
+  canvas: { position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", opacity: 0.65 },
 };

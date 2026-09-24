@@ -135,8 +135,8 @@ export default function InstallHint() {
 }
 
 const styles = {
-  // Кнопка живёт внутри карточки экрана «Синхронизация», своей ширины ей не нужно.
-  bar: { fontFamily: "Inter, system-ui, sans-serif", marginBottom: 10 },
+  // Кнопка живёт внутри карточки экрана «Настройки», своей ширины ей не нужно.
+  bar: { fontFamily: "'Golos Text', system-ui, sans-serif", marginBottom: 10 },
   button: {
     border: "1px solid var(--line)",
     background: "var(--neutralBg)",

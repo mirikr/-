@@ -66,8 +66,56 @@ await page.goto(`http://127.0.0.1:${port}${base}`);
 await page.waitForTimeout(2500);
 const text = await page.locator("#root").innerText().catch(() => "");
 
+// Свёрнутое должно разворачиваться: и пояснение под «?», и подвал колонки.
+// Оба — обычные кнопки, но обе прячут то, что раньше было на виду, и молча
+// сломаться им нельзя.
+// Уроки на «Сегодня» должны выглядеть как в расписании: полоской в цвете
+// предмета, а не строчкой текста. Цвет у каждого предмета свой и постоянный,
+// поэтому и проверяем, что полоса есть и что у разных предметов она разная.
+const stripes = await page.evaluate(() => {
+  const title = [...document.querySelectorAll("div")]
+    .find((d) => /^(Сейчас идут уроки|Следующим уроком)$/.test(d.textContent.trim()));
+  if (!title) return null;
+  return [...title.parentElement.children]
+    .slice(1)
+    .map((row) => getComputedStyle(row).borderLeftColor + " " + getComputedStyle(row).borderLeftWidth);
+});
+const folded = [];
+if (stripes === null) {
+  console.log("· уроков сейчас нет — полосу у них не проверяем");
+} else {
+  const painted = stripes.filter((c) => /^rgba?\(/.test(c) && !/^rgba\(0, 0, 0, 0\)/.test(c) && !/ 0px$/.test(c));
+  if (painted.length !== stripes.length) folded.push("у урока нет полосы сбоку: " + stripes.join(" | "));
+  else if (new Set(stripes).size < 2 && stripes.length > 1) folded.push("полосы всех уроков одного цвета");
+  else console.log("✓ уроки подсвечены полосой предмета — цветов:", new Set(stripes).size);
+}
+const ask = page.getByRole("button", { name: /^Что это/ }).first();
+if (await ask.count()) {
+  const was = (await page.locator("#root").innerText()).length;
+  await ask.evaluate((el) => el.click());
+  await page.waitForTimeout(300);
+  const now = (await page.locator("#root").innerText()).length;
+  if (now <= was) folded.push("пояснение под «?» не развернулось");
+} else {
+  folded.push("на странице нет ни одной кнопки «?»");
+}
+// В новом дизайне кнопка подвала — «подробнее +», в прежнем — «Подробнее о синхронизации».
+const foot = page.getByRole("button", { name: /Подробнее о синхронизации|^подробнее/i }).first();
+if (await foot.count()) {
+  await foot.evaluate((el) => el.click());
+  await page.waitForTimeout(300);
+  if (!/(бета|версия) \d/.test(await page.locator("#root").innerText())) folded.push("подвал колонки не развернулся");
+} else {
+  folded.push("подвал колонки не сворачивается");
+}
+
 await browser.close();
 server.close();
+
+if (folded.length) {
+  console.error("✗ свёрнутое не разворачивается:", folded.join(" | "));
+  process.exit(1);
+}
 
 if (errors.length || text.trim().length < 200) {
   console.error("✗ приложение не открылось");

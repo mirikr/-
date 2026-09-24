@@ -17,7 +17,7 @@ import {
 // Вторая половина — не украшение: спрашивают обычно не про своё расписание.
 // «А что у вас сейчас?» — и ответить нечего, если у друга другая академическая
 // школа. Поэтому сетка берётся целиком, без фильтра по своему выбору.
-export default function NowCard({ entriesFor, tasksFor, homeworkOn, styles }) {
+export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, markOf, styles }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -82,9 +82,18 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, styles }) {
       {shown && (
         <div style={styles.nowMine}>
           {mine.length ? (
-            mine.map((e) => (
+            mine.map((e) => {
+              const info = markOf ? markOf(e.priority) : null;
+              return (
               <div key={e.id}>
-                <div style={styles.nowMineRow}>
+                <div
+                  style={{
+                    ...styles.nowMineRow,
+                    ...styles.nowMark,
+                    borderLeftColor: info ? info.strong : "var(--line)",
+                    background: info ? info.tint : "transparent",
+                  }}
+                >
                   <span style={styles.nowMineTag}>{state.phase === "lesson" ? "у тебя" : "у тебя дальше"}</span>
                   <span style={styles.nowMineName}>{e.subjectName}</span>
                   {e.room && <span style={styles.nowMineMeta}>{e.room}</span>}
@@ -101,7 +110,8 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, styles }) {
                   </div>
                 ))}
               </div>
-            ))
+              );
+            })
           ) : (
             <div style={styles.nowMineRow}>
               <span style={styles.nowMineTag}>у тебя</span>
@@ -157,10 +167,22 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, styles }) {
           <div style={styles.nowAllTitle}>
             {state.phase === "lesson" ? "Сейчас идут уроки" : "Следующим уроком"}
           </div>
-          {rows.map((row) => (
-            <div key={row.subject} style={styles.nowAllRow}>
+          {rows.map((row) => {
+            const here = mine.find((e) => e.subjectName === row.subject);
+            const info = here && markOf ? markOf(here.priority) : null;
+            return (
+            <div
+              key={row.subject}
+              style={{
+                ...styles.nowAllRow,
+                ...styles.nowMark,
+                borderLeftColor: info ? info.strong : colorOf ? colorOf(row.subject) : "var(--line)",
+                background: info ? info.tint : "transparent",
+              }}
+            >
               <div style={styles.nowAllName}>
                 {row.subject}
+                {here && <span style={styles.nowMineTag}>у тебя</span>}
                 {row.who && <span style={styles.nowAllWho}>{row.who}</span>}
               </div>
               <div style={styles.nowAllItems}>
@@ -171,7 +193,8 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, styles }) {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

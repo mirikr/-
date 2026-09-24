@@ -137,7 +137,7 @@ const styles = {
     background: "var(--bg)",
     color: "var(--ink)",
     padding: "32px 16px",
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, sans-serif",
+    fontFamily: "'Golos Text', system-ui, -apple-system, 'Segoe UI', sans-serif",
     display: "flex",
     justifyContent: "center",
     alignItems: "flex-start",

@@ -130,7 +130,7 @@ export default function CloudPanel() {
 }
 
 const styles = {
-  bar: { fontFamily: "Inter, system-ui, sans-serif", color: "var(--ink)" },
+  bar: { fontFamily: "'Golos Text', system-ui, sans-serif", color: "var(--ink)" },
   row: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
   text: { fontSize: 12.5, color: "var(--ink2)" },
   muted: { fontSize: 12, color: "var(--mute)", lineHeight: 1.55, margin: "8px 0" },

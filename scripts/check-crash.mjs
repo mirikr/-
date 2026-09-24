@@ -34,7 +34,7 @@ const url = `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch({ executablePath: BROWSER });
 const page = await browser.newPage({ viewport: { width: 900, height: 800 } });
 await page.addInitScript(() => {
-  localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+  localStorage.setItem("planner-intro-version", "0.6.0-schedule"); localStorage.setItem("planner-design-intro", "1.0.0");
   const state = {
     journal: [{ id: 1, date: "2026-09-01", subjectId: "law", hours: 2, note: "Занятие" }],
     events: [{ id: "e1", name: "Региональный этап", date: "2026-11-01", priority: 3 }],
