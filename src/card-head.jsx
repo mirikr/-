@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { isClassic } from "./design.js";
 
 // Заголовок карточки с пояснением, спрятанным под знак вопроса.
 //
@@ -51,10 +52,12 @@ export function CardHead({ id, title, note, empty, small, children }) {
     if (id) writeHint(id, want);
   }
 
+  // В прежнем дизайне заголовок мельче и плотнее — как было в 0.14.0.
+  const classic = isClassic();
   return (
     <>
-      <div style={S.head}>
-        <div style={small ? S.titleSmall : S.title}>{title}</div>
+      <div style={classic ? S.headClassic : S.head}>
+        <div style={small ? S.titleSmall : classic ? S.titleClassic : S.title}>{title}</div>
         {note ? (
           <button
             type="button"
@@ -76,13 +79,15 @@ export function CardHead({ id, title, note, empty, small, children }) {
 }
 
 const S = {
-  head: { display: "flex", alignItems: "center", gap: 7, marginBottom: 5 },
-  title: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19 },
+  head: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" },
+  title: { fontFamily: "var(--serif)", fontSize: 22, lineHeight: 1.25 },
+  headClassic: { display: "flex", alignItems: "center", gap: 7, marginBottom: 5 },
+  titleClassic: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19 },
   // Мелкий заголовок — для строки-пояснения, у которой нет своей карточки.
   titleSmall: { fontSize: 13, color: "var(--mute)", lineHeight: 1.4 },
   side: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 },
   ask: {
-    width: 20, height: 20, flexShrink: 0, borderRadius: 999, padding: 0,
+    width: 22, height: 22, flexShrink: 0, borderRadius: 999, padding: 0,
     border: "1px solid var(--line)", background: "none", color: "var(--mute)",
     fontSize: 12, lineHeight: 1, cursor: "pointer",
     display: "inline-flex", alignItems: "center", justifyContent: "center",

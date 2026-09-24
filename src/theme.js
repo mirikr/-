@@ -7,6 +7,42 @@ import { useEffect, useState } from "react";
 export const THEME_CSS = `
 html, body { background: var(--bg); color: var(--ink); }
 [data-theme]{
+  --bg:#F1ECE1;--panel:#FBF8F1;--panel2:#FFFDF8;--line:#DDD5C4;--line2:#E8E1D2;
+  --ink:#22201B;--ink2:#4A453B;--ink3:#6B6558;--mute:#7A7363;
+  --rail:#24221D;--railInk:#EFE8D8;--railInk2:#A9A290;--railActive:#35322B;
+  --accent:#8A6A1F;--accentInk:#FBF8F1;--accentSoft:#EDE2C6;--gold:#B8912A;--green:#2F6B4F;--greenSoft:#D9E6DC;--red:#A4452C;
+  --redStrong:#A93A2E;--blue:#2F4E70;--purple:#5C4A80;
+  --warmBg:#F5EACD;--warmLine:#DCC586;--warmInk:#6E5210;
+  --redBg:#F4DED5;--redLine:#DDA999;--neutralBg:#EDE7DA;
+  --cellFull:#B6CFBC;--cellMid:#E6D79A;--cellLow:#E2B9B4;
+  --barDim:#C9C1AC;--btnBg:#22201B;--btnInk:#FBF8F1;
+  --corridor:rgba(138,106,31,.09);--corridorLine:#B8A879;
+  --shadow:0 1px 2px rgba(34,32,27,.05), 0 10px 28px rgba(34,32,27,.08);
+  --focus:#8A6A1F;
+  --serif:'PT Serif', Georgia, 'Times New Roman', serif;
+  --sans:'Golos Text', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius:18px;--radiusSm:10px;
+  color-scheme:light;
+}
+[data-theme="night"]{
+  --bg:#171612;--panel:#211F1A;--panel2:#25231D;--line:#35322A;--line2:#2C2A23;
+  --ink:#EDE7D8;--ink2:#D6CFBD;--ink3:#A8A08F;--mute:#9A927F;
+  --rail:#100F0C;--railInk:#EDE7D8;--railInk2:#9C9483;--railActive:#24221D;
+  --accent:#D9B45A;--accentInk:#171612;--accentSoft:#332C1E;--gold:#D9B45A;--green:#74B08E;--greenSoft:#22332A;--red:#DC8466;
+  --redStrong:#E07A5F;--blue:#9FC2E0;--purple:#A992D0;
+  --warmBg:#2B2518;--warmLine:#5A4A20;--warmInk:#E3C16C;
+  --redBg:#3A241E;--redLine:#6A3A2F;--neutralBg:#25231D;
+  --cellFull:#3A5C44;--cellMid:#7A6528;--cellLow:#6E3A34;
+  --barDim:#8A5049;--btnBg:#EDE7D8;--btnInk:#171612;
+  --corridor:rgba(217,180,90,.08);--corridorLine:rgba(217,180,90,.5);
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+  --focus:#D9B45A;
+  color-scheme:dark;
+}
+/* Прежний дизайн (0.14.0) — его палитра, включается переключателем в
+   «Настройках». Селектор с двумя атрибутами сильнее одиночного [data-theme],
+   поэтому перекрывает новый набор, где бы ни стоял выше. */
+[data-design="classic"][data-theme]{
   --bg:#EFEBE1;--panel:#FBF9F3;--panel2:#FFFDF8;--line:#DCD5C4;--line2:#E4DECD;
   --ink:#2B2822;--ink2:#5A5347;--ink3:#6B6656;--mute:#8A8370;
   --rail:#2B2822;--railInk:#EDE7D8;--railInk2:#CFC7B4;--railActive:#403C31;
@@ -14,13 +50,12 @@ html, body { background: var(--bg); color: var(--ink); }
   --redStrong:#B23A3A;--blue:#2F4E70;--purple:#5C4A80;
   --warmBg:#FBF0D2;--warmLine:#E0C97C;--warmInk:#7A5A12;
   --redBg:#F9E2DF;--redLine:#D9A6A0;--neutralBg:#F1EEE4;
-  --cellFull:#B6CFBC;--cellMid:#E6D79A;--cellLow:#E2B9B4;
   --barDim:#C9C1AC;--btnBg:#2B2822;--btnInk:#FBF9F3;
   --corridor:rgba(140,115,38,.09);--corridorLine:#B8A879;
   --shadow:0 10px 26px rgba(43,40,34,.1);
-  color-scheme:light;
+  --sans:Inter, system-ui, sans-serif;
 }
-[data-theme="night"]{
+[data-design="classic"][data-theme="night"]{
   --bg:#171612;--panel:#1E1C16;--panel2:#211F19;--line:#34312A;--line2:#2A2821;
   --ink:#EDE7D8;--ink2:#D9D2C0;--ink3:#A49B85;--mute:#A49B85;
   --rail:#12110E;--railInk:#EDE7D8;--railInk2:#BDB4A0;--railActive:#211F19;
@@ -28,12 +63,11 @@ html, body { background: var(--bg); color: var(--ink); }
   --redStrong:#C96A60;--blue:#9FC2E0;--purple:#A992D0;
   --warmBg:#2A2417;--warmLine:#5A4A20;--warmInk:#E8C468;
   --redBg:#2A1D1B;--redLine:#5A322C;--neutralBg:#211F19;
-  --cellFull:#3A5C44;--cellMid:#7A6528;--cellLow:#6E3A34;
   --barDim:#8A5049;--btnBg:#E8C468;--btnInk:#171612;
   --corridor:rgba(232,196,104,.08);--corridorLine:rgba(232,196,104,.5);
   --shadow:0 10px 26px rgba(0,0,0,.4);
-  color-scheme:dark;
 }
+html[data-design="classic"] body, [data-design="classic"].ap-shell { font-family: Inter, system-ui, sans-serif; }
 /* Ползунок масштаба под графиком часов. Системный вид у него слишком яркий
    и в ночной теме светится белым, поэтому дорожка и бегунок свои. */
 /* При живом фоне карточки становятся стеклом: переопределяем сами токены, а
@@ -158,7 +192,7 @@ const WINDOW_KEY = "planner-theme-night-window";
 
 // Границы ночи по умолчанию. Это не про астрономию, а про то, когда за
 // ежедневником сидят при выключенном свете; у каждого это своё время, поэтому
-// границы можно поменять в разделе «Синхронизация».
+// границы можно поменять в разделе «Настройки».
 export const DEFAULT_NIGHT = { from: 20, to: 7 };
 
 export function isNightHour(hour, window = DEFAULT_NIGHT) {
