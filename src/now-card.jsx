@@ -101,7 +101,7 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, mar
                 </div>
                 {/* Задание к этому же уроку — здесь, а не в отдельном списке:
                     «что задали на сейчас» спрашивают вместе с «что сейчас». */}
-                {(tasksFor ? tasksFor(e.id) : []).map((h) => (
+                {(tasksFor ? tasksFor(e) : []).map((h) => (
                   <div key={h.id} style={styles.nowTaskRow}>
                     <span style={{ ...styles.nowTaskText, textDecoration: h.done ? "line-through" : "none" }}>
                       задано: {h.text}

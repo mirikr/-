@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
-import { stampState, mergeSerialized } from "./sync-state.js";
+import { stampState, mergeStates, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments } from "./notebook.jsx";
+import NotebookSubjects from "./notebook-subjects.jsx";
+import { orderOwners, togglePin, moveOwner } from "./notebook-order.js";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
@@ -558,6 +560,8 @@ export default function StudyPlanner() {
   const [events, setEvents] = useState([]);
   // Тетради: ключ владельца ("subj:<id>" или "lyceum:<название>") → массив блоков.
   const [notebooks, setNotebooks] = useState({});
+  // Закреплённые предметы и порядок списка в «Тетрадях»: см. src/notebook-order.js.
+  const [notebookOrder, setNotebookOrder] = useState({});
   const [subjectTab, setSubjectTab] = useState({});
   const [openLyceumNotebook, setOpenLyceumNotebook] = useState(null);
   const [openSubject, setOpenSubject] = useState(null);
@@ -692,6 +696,8 @@ export default function StudyPlanner() {
   // Последнее сохранённое состояние с метками времени: с ним сравнивается текущее,
   // чтобы пометить как изменённые только те элементы, которые вправду поменялись.
   const syncSnapshot = useRef(null);
+  // Всё, что сейчас на экране, — в том числе правки, которые ещё ждут сохранения.
+  const liveState = useRef(null);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudOn, setCloudOn] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
@@ -732,13 +738,22 @@ export default function StudyPlanner() {
         const res = await storageGet(STORAGE_KEY, mergeSerialized);
         if (res && res.value) {
           found = true;
-          const parsed = JSON.parse(res.value);
+          let parsed = JSON.parse(res.value);
+          // Сохранение идёт с задержкой, а перечитывание срабатывает при каждом
+          // возвращении в окно — в том числе после выбора файла в системном диалоге.
+          // Раньше прочитанное просто ставилось поверх экрана, и только что
+          // созданная ветка или прикреплённый файл пропадали. Несохранённое
+          // сливается с прочитанным так же, как правки с двух устройств.
+          if (pendingSince.current !== null && liveState.current && syncSnapshot.current) {
+            parsed = mergeStates(stampState(syncSnapshot.current, liveState.current), parsed);
+          }
           syncSnapshot.current = parsed;
           if (parsed.data) setData(parsed.data);
           if (parsed.journal) setJournal(parsed.journal);
           if (parsed.budget) setBudget(parsed.budget);
           if (parsed.events) setEvents(parsed.events);
           if (parsed.notebooks) setNotebooks(parsed.notebooks);
+          if (parsed.notebookOrder) setNotebookOrder(parsed.notebookOrder);
           if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
           if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
           if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
@@ -859,6 +874,32 @@ export default function StudyPlanner() {
     };
   }, [tryLoad]);
 
+  liveState.current = {
+    data,
+    journal,
+    budget,
+    events,
+    notebooks,
+    notebookOrder,
+    customSubjects,
+    hiddenSubjects,
+    subjectColors,
+    showSunday,
+    calendarToken,
+    lyceumSchedule,
+    presetChoices,
+    examPicks,
+    voshPicks,
+    lyceumRevision,
+    mainEventId,
+    weekPlanned,
+    openSections,
+    homework,
+    trainerLog,
+    trainerState,
+    bankMarks,
+  };
+
   useEffect(() => {
     if (!loaded) return;
     if (firstLoad.current) {
@@ -875,30 +916,7 @@ export default function StudyPlanner() {
     saveTimer.current = setTimeout(() => {
       pendingSince.current = null;
       (async () => {
-        const stamped = stampState(syncSnapshot.current, {
-          data,
-          journal,
-          budget,
-          events,
-          notebooks,
-          customSubjects,
-          hiddenSubjects,
-          subjectColors,
-          showSunday,
-          calendarToken,
-          lyceumSchedule,
-          presetChoices,
-          examPicks,
-          voshPicks,
-          lyceumRevision,
-          mainEventId,
-          weekPlanned,
-          openSections,
-          homework,
-          trainerLog,
-          trainerState,
-          bankMarks,
-        });
+        const stamped = stampState(syncSnapshot.current, liveState.current);
         syncSnapshot.current = stamped;
         const payload = JSON.stringify(stamped);
         let saved = null;
@@ -923,7 +941,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, trainerState, bankMarks, loaded]);
+  }, [data, journal, budget, events, notebooks, notebookOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, trainerState, bankMarks, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1200,7 +1218,9 @@ export default function StudyPlanner() {
   function updateNote(subjectId, topicId, custom, noteId, patch) {
     updateTopic(subjectId, topicId, custom, (t) => ({
       ...t,
-      notes: (t.notes || []).map((n) => (n.id === noteId ? { ...n, ...patch } : n)),
+      notes: (t.notes || []).map((n) =>
+        n.id === noteId ? { ...n, ...(typeof patch === "function" ? patch(n) : patch) } : n
+      ),
     }));
   }
 
@@ -1547,8 +1567,13 @@ export default function StudyPlanner() {
     setCalendarMsg("Подписка отключена. В телефоне календарь придётся удалить вручную.");
   }
 
+  // Принимает и готовый список, и функцию от текущего: файл загружается несколько
+  // секунд, и за это время тетрадь могла измениться — дописывать надо к свежей.
   function setNotebook(ownerKey, blocks) {
-    setNotebooks((prev) => ({ ...prev, [ownerKey]: blocks }));
+    setNotebooks((prev) => ({
+      ...prev,
+      [ownerKey]: typeof blocks === "function" ? blocks(prev[ownerKey] || []) : blocks,
+    }));
   }
 
   // Пока воскресенье скрыто, его уроки не участвуют в дневнике и домашних заданиях,
@@ -1565,16 +1590,39 @@ export default function StudyPlanner() {
   // Всё, что карточке дня нужно знать про задания: чьи они, как добавить и как
   // отметить сделанным. Одним объектом, чтобы не тянуть четыре пропса через
   // каждый день недели.
-  const lessonTasks = useMemo(
-    () => ({
+  const lessonTasks = useMemo(() => {
+    // Задание из «Дневника» знает предмет и дату, но не урок: его заводят на
+    // день, а не на карточку урока. Раньше в неделе оно поэтому не показывалось
+    // вовсе. Теперь оно встаёт под первый урок этого предмета в день своего
+    // срока — на паре подряд одно, а не дважды. Задания с прошедшим сроком
+    // сюда не тянем: неделя смотрит вперёд.
+    const ids = new Set(lyceumSchedule.map((e) => e.id));
+    const today = todayStr();
+    const loose = new Map();
+    homework.forEach((h) => {
+      if (h.lessonId && ids.has(h.lessonId)) return;
+      if (!h.subjectName || !h.date || h.date < today) return;
+      const day = weekdayKeyFromDate(h.date);
+      const lesson = lyceumSchedule
+        .filter((e) => e.kind !== "exam" && e.day === day && e.subjectName === h.subjectName)
+        .sort((a, b) => String(a.start).localeCompare(String(b.start)))[0];
+      if (!lesson) return;
+      if (!loose.has(lesson.id)) loose.set(lesson.id, []);
+      loose.get(lesson.id).push(h);
+    });
+    return {
       dueDate: (dayKey) => nextDateForDay(dayKey),
-      forLesson: (lessonId) => homework.filter((h) => h.lessonId === lessonId),
+      // Принимает урок целиком (или его id — для привязанных заданий этого хватает).
+      forLesson: (lesson) => {
+        const id = typeof lesson === "string" ? lesson : lesson && lesson.id;
+        return homework.filter((h) => h.lessonId === id).concat(loose.get(id) || []);
+      },
       add: (entry, text, minutes) =>
         addHomework(nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
       toggle: (id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done }),
-    }),
-    [homework]
-  );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homework, lyceumSchedule]);
 
   const dayEntries = useCallback(
     (day) =>
@@ -2252,7 +2300,8 @@ export default function StudyPlanner() {
     return own.concat(lyceum);
   }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors]);
 
-  const currentNotebook = notebookOwners.find((o) => o.key === notebookOwner) || notebookOwners[0] || null;
+  const orderedOwners = useMemo(() => orderOwners(notebookOwners, notebookOrder), [notebookOwners, notebookOrder]);
+  const currentNotebook = orderedOwners.find((o) => o.key === notebookOwner) || orderedOwners[0] || null;
 
   // Опись заданий банка для поиска: номер, предмет и начало условия. Она
   // приходит отдельным куском и только когда открыли поиск, — тянуть её вместе
@@ -3986,32 +4035,14 @@ export default function StudyPlanner() {
           <>
           <div className="ap-grid2" style={styles.grid2}>
             <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="notes-subjects"
-                title="Предметы"
-                note="Тетрадь есть у каждого предмета — и своего, и лицейского"
+              <NotebookSubjects
+                owners={orderedOwners}
+                current={currentNotebook ? currentNotebook.key : ""}
+                countOf={(key) => (notebooks[key] || []).length}
+                onPick={setNotebookOwner}
+                onPin={(key) => setNotebookOrder((prev) => togglePin(prev, notebookOwners, key))}
+                onMove={(from, to) => setNotebookOrder((prev) => moveOwner(prev, notebookOwners, from, to))}
               />
-              <div style={styles.notebookList}>
-                {notebookOwners.map((o) => {
-                  const on = o.key === notebookOwner;
-                  const blocks = notebooks[o.key] || [];
-                  return (
-                    <button
-                      key={o.key}
-                      onClick={() => setNotebookOwner(o.key)}
-                      style={{
-                        ...styles.notebookPick,
-                        background: on ? "var(--neutralBg)" : "transparent",
-                        borderColor: on ? "var(--mute)" : "var(--line2)",
-                      }}
-                    >
-                      <span style={{ ...styles.notebookDot, background: o.color }} />
-                      <span style={styles.notebookName}>{o.name}</span>
-                      <span style={styles.mutedSmall}>{blocks.length ? blocks.length + " блок." : "пусто"}</span>
-                    </button>
-                  );
-                })}
-              </div>
             </section>
 
             <section className="ap-card" style={styles.card}>
@@ -4034,7 +4065,7 @@ export default function StudyPlanner() {
                   aria-label="Предмет тетради"
                 >
                   <optgroup label="Самостоятельное изучение">
-                    {notebookOwners
+                    {orderedOwners
                       .filter((o) => o.from === "own")
                       .map((o) => (
                         <option key={o.key} value={o.key}>
@@ -4042,9 +4073,9 @@ export default function StudyPlanner() {
                         </option>
                       ))}
                   </optgroup>
-                  {notebookOwners.some((o) => o.from === "lyceum") && (
+                  {orderedOwners.some((o) => o.from === "lyceum") && (
                     <optgroup label="Лицей КЭО">
-                      {notebookOwners
+                      {orderedOwners
                         .filter((o) => o.from === "lyceum")
                         .map((o) => (
                           <option key={o.key} value={o.key}>
@@ -4721,7 +4752,12 @@ function TopicItem({
                     />
                     <Attachments
                       files={n.files || []}
-                      onChange={(files) => onUpdateNote(n.id, { files })}
+                      onChange={(files) =>
+                        onUpdateNote(
+                          n.id,
+                          typeof files === "function" ? (note) => ({ files: files(note.files || []) }) : { files }
+                        )
+                      }
                       prefix={"note-" + n.id}
                     />
                   </div>
@@ -4829,6 +4865,47 @@ function AddSubjectForm({ onAdd, placeholder }) {
   );
 }
 
+// Задание под уроком. Длинное — в две строки, по нажатию разворачивается:
+// задание на полэкрана раздвигало день так, что соседние уроки уезжали вниз.
+// Отметка «сделано» — своей галочкой, чтобы разворачивание не ставило её.
+const TASK_FOLD_CHARS = 90;
+function LessonTaskRow({ task: h, due, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const text = h.text || "";
+  const long = text.length > TASK_FOLD_CHARS || text.split("\n").length > 2;
+  return (
+    <div style={styles.lessonTaskRow}>
+      <input type="checkbox" checked={!!h.done} onChange={onToggle} aria-label={"Сделано: " + text.slice(0, 40)} />
+      <span
+        style={{
+          ...styles.lessonTaskText,
+          ...(long && !open ? styles.lessonTaskFolded : null),
+          textDecoration: h.done ? "line-through" : "none",
+          cursor: long ? "pointer" : "default",
+        }}
+        onClick={long ? () => setOpen(!open) : undefined}
+      >
+        {text}
+      </span>
+      <span style={styles.lessonTaskMeta}>
+        {h.minutes ? h.minutes + " мин" : ""}
+        {h.date && h.date !== due ? " · " + h.date.slice(8) + "." + h.date.slice(5, 7) : ""}
+      </span>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          style={styles.lessonTaskMore}
+          aria-expanded={open}
+          aria-label={open ? "Свернуть задание" : "Развернуть задание"}
+        >
+          {open ? "свернуть" : "ещё"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
   const [examOpen, setExamOpen] = useState(false);
   // С чем открыть форму экзамена: запрос из уведомления живёт только до того,
@@ -4888,7 +4965,7 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
           Строка при этом однострочная, поэтому столбец выходит короткий. */}
       <div style={today ? styles.dayEntriesList : undefined}>
         {entries.map((e) => {
-          const list = tasks ? tasks.forLesson(e.id) : [];
+          const list = tasks ? tasks.forLesson(e) : [];
           return (
             <div key={e.id}>
               <ScheduleEntryRow
@@ -4904,16 +4981,7 @@ function ScheduleDay({ day, label, entries, today, onAdd, onUpdate, onRemove, ta
               {list.length > 0 && (
                 <div style={styles.lessonTasks}>
                   {list.map((h) => (
-                    <label key={h.id} style={styles.lessonTaskRow}>
-                      <input type="checkbox" checked={!!h.done} onChange={() => tasks.toggle(h.id)} />
-                      <span style={{ ...styles.lessonTaskText, textDecoration: h.done ? "line-through" : "none" }}>
-                        {h.text}
-                      </span>
-                      <span style={styles.lessonTaskMeta}>
-                        {h.minutes ? h.minutes + " мин" : ""}
-                        {h.date && h.date !== due ? " · " + h.date.slice(8) + "." + h.date.slice(5, 7) : ""}
-                      </span>
-                    </label>
+                    <LessonTaskRow key={h.id} task={h} due={due} onToggle={() => tasks.toggle(h.id)} />
                   ))}
                 </div>
               )}
@@ -5824,19 +5892,6 @@ const styles = {
     background: "var(--panel2)",
     color: "var(--ink)",
   },
-  notebookList: { display: "flex", flexDirection: "column", gap: 4 },
-  notebookPick: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "7px 9px",
-    border: "1px solid",
-    borderRadius: 10,
-    fontSize: 13.5,
-    textAlign: "left",
-  },
-  notebookDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
-  notebookName: { flex: 1, minWidth: 0 },
   page: {
     fontFamily: "'Golos Text', system-ui, sans-serif",
     background: "var(--bg)",
@@ -6322,7 +6377,13 @@ const styles = {
   // Задания живут под своим уроком: «к какому уроку» — это первое, что
   // спрашивают, а раньше они лежали отдельным списком и связи не было видно.
   lessonTasks: { display: "flex", flexDirection: "column", gap: 3, margin: "3px 0 2px 14px" },
-  lessonTaskRow: { display: "flex", alignItems: "baseline", gap: 7, fontSize: 12.5, cursor: "pointer" },
+  lessonTaskRow: { display: "flex", alignItems: "baseline", gap: 7, fontSize: 12.5, flexWrap: "wrap" },
+  // Длинное задание — в две строки, пока его не развернут.
+  lessonTaskFolded: { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
+  lessonTaskMore: {
+    border: "none", background: "none", padding: 0, fontSize: 11.5, color: "var(--accent)",
+    fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+  },
   lessonTaskText: { flex: 1, minWidth: 0, color: "var(--ink2)", overflowWrap: "anywhere" },
   lessonTaskMeta: { fontSize: 11.5, color: "var(--mute)", whiteSpace: "nowrap" },
   lessonTaskForm: { display: "flex", alignItems: "center", gap: 6, margin: "4px 0 6px 14px", flexWrap: "wrap" },

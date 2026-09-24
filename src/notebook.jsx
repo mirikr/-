@@ -30,23 +30,30 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
 
   const list = blocks || [];
 
+  // Правки считаются от текущей тетради, а не от той, что была на экране при
+  // нажатии: пока грузился файл, в ней могли появиться ветки и текст.
+  function update(fn) {
+    onChange((prev) => fn(prev || []));
+  }
+
   function addBlock() {
     if (!title.trim()) return;
     const id = "blk-" + Date.now() + "-" + Math.round(Math.random() * 1000);
-    onChange([...list, { id, title: title.trim(), branches: [] }]);
+    const name = title.trim();
+    update((cur) => [...cur, { id, title: name, branches: [] }]);
     setOpenBlocks((p) => ({ ...p, [id]: true }));
     setTitle("");
   }
 
   function patchBlock(id, patch) {
-    onChange(list.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+    update((cur) => cur.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   }
 
   function dropBlock(id) {
     const index = list.findIndex((b) => b.id === id);
     if (index === -1) return;
     const block = list[index];
-    onChange(list.filter((b) => b.id !== id));
+    update((cur) => cur.filter((b) => b.id !== id));
 
     const files = (block.branches || []).flatMap(branchFiles);
     if (isBlockEmpty(block)) {
@@ -57,20 +64,28 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
     onUndo(
       `Вы удалили блок «${block.title}»`,
       () => {
-        onChange((() => {
-          const next = list.filter((b) => b.id !== id);
+        update((cur) => {
+          const next = cur.filter((b) => b.id !== id);
           next.splice(Math.min(index, next.length), 0, block);
           return next;
-        })());
+        });
       },
       () => files.forEach((f) => removeAttachment(f).catch(() => {}))
     );
   }
 
+  // patch — объект или функция от текущей ветки.
   function patchBranch(blockId, branchId, patch) {
-    onChange(
-      list.map((b) =>
-        b.id === blockId ? { ...b, branches: b.branches.map((r) => (r.id === branchId ? { ...r, ...patch } : r)) } : b
+    update((cur) =>
+      cur.map((b) =>
+        b.id === blockId
+          ? {
+              ...b,
+              branches: (b.branches || []).map((r) =>
+                r.id === branchId ? { ...r, ...(typeof patch === "function" ? patch(r) : patch) } : r
+              ),
+            }
+          : b
       )
     );
   }
@@ -78,9 +93,10 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
   function addBranch(blockId, name) {
     if (!name.trim()) return;
     const id = "brn-" + Date.now() + "-" + Math.round(Math.random() * 1000);
-    onChange(
-      list.map((b) =>
-        b.id === blockId ? { ...b, branches: [...b.branches, { id, title: name.trim(), html: "", files: [] }] } : b
+    const branchTitle = name.trim();
+    update((cur) =>
+      cur.map((b) =>
+        b.id === blockId ? { ...b, branches: [...(b.branches || []), { id, title: branchTitle, html: "", files: [] }] } : b
       )
     );
     setOpenBranches((p) => ({ ...p, [id]: true }));
@@ -92,7 +108,9 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
     const index = branches.findIndex((r) => r.id === branchId);
     if (index === -1) return;
     const branch = branches[index];
-    onChange(list.map((b) => (b.id === blockId ? { ...b, branches: b.branches.filter((r) => r.id !== branchId) } : b)));
+    update((cur) =>
+      cur.map((b) => (b.id === blockId ? { ...b, branches: (b.branches || []).filter((r) => r.id !== branchId) } : b))
+    );
 
     const files = branchFiles(branch);
     if (isBranchEmpty(branch)) {
@@ -103,10 +121,10 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
     onUndo(
       `Вы удалили ветку «${branch.title}»`,
       () => {
-        onChange(
-          list.map((b) => {
+        update((cur) =>
+          cur.map((b) => {
             if (b.id !== blockId) return b;
-            const next = b.branches.filter((r) => r.id !== branchId);
+            const next = (b.branches || []).filter((r) => r.id !== branchId);
             next.splice(Math.min(index, next.length), 0, branch);
             return { ...b, branches: next };
           })
@@ -198,7 +216,8 @@ export function Attachments({ files, onChange, prefix }) {
       setError(res.error);
       return;
     }
-    onChange([...list, res.attachment]);
+    // Файл дописывается к тому списку, что есть сейчас, а не к снимку до загрузки.
+    onChange((cur) => [...(cur || []), res.attachment]);
   }
 
   async function openFile(att) {
@@ -219,7 +238,8 @@ export function Attachments({ files, onChange, prefix }) {
 
   function drop(att) {
     removeAttachment(att).catch(() => {});
-    onChange(list.filter((f) => f !== att));
+    const same = (f) => (att.path ? f.path === att.path : att.key ? f.key === att.key : f === att);
+    onChange((cur) => (cur || []).filter((f) => !same(f)));
   }
 
   return (
@@ -265,7 +285,13 @@ function Branch({ branch, open, onToggle, onPatch, onRemove, prefix }) {
       <Collapsible open={open}>
         <div style={styles.branchBody}>
           <RichText docId={branch.id} html={branch.html} onChange={(html) => onPatch({ html })} />
-          <Attachments files={files} onChange={(next) => onPatch({ files: next })} prefix={prefix} />
+          <Attachments
+            files={files}
+            onChange={(next) =>
+              onPatch(typeof next === "function" ? (cur) => ({ files: next(cur.files || []) }) : { files: next })
+            }
+            prefix={prefix}
+          />
         </div>
       </Collapsible>
     </div>
