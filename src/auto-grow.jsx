@@ -16,7 +16,8 @@ function fit(el) {
   el.style.height = el.scrollHeight + borders + "px";
 }
 
-export default function AutoGrow({ value, onChange, onEnter, style, ...rest }) {
+// multiline — для описания: там Enter переносит строку, как в обычном тексте.
+export default function AutoGrow({ value, onChange, onEnter, multiline, style, ...rest }) {
   const ref = useRef(null);
 
   useLayoutEffect(() => {
@@ -48,7 +49,7 @@ export default function AutoGrow({ value, onChange, onEnter, style, ...rest }) {
       onChange={onChange}
       onKeyDown={(e) => {
         // Перевод строки здесь не нужен: это одно значение, а не текст.
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && !multiline) {
           e.preventDefault();
           if (onEnter) onEnter();
           else e.currentTarget.blur();

@@ -483,6 +483,80 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   }
 }
 
+// 9. Подробности событий: время, место, ссылки, описание. У олимпиады из
+// расписания они видны сразу и правятся там же, где живут, — в записи
+// расписания; у своего события их можно добавить.
+{
+  const inDays = (n) => { const d = new Date(Date.now() + n * 864e5); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const oDate = inDays(4);
+  const state = {
+    events: [{ id: "ev-own", name: "Пробник по обществознанию", date: inDays(9), priority: 2 }],
+    lyceumSchedule: [{ id: "sch-o1", day: DOW[new Date(oDate + "T00:00:00").getDay()], kind: "exam", examKind: "olympiad", subjectName: "Право · ВсОШ", level: "base", priority: 3, start: "10:00", end: "13:00", room: "", teacher: "", place: "Лицей НИУ ВШЭ · итоги 20 октября", url: "https://siriusolymp.ru", date: oDate }],
+  };
+  for (const [w, h, tag] of [[1280, 900, "desktop"], [390, 844, "phone"]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.addInitScript((st) => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+      localStorage.setItem("planner-design-intro", "1.0.0");
+      localStorage.setItem("planner-screen", "events");
+      localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+    }, state);
+    await page.goto(URL0);
+    await page.waitForTimeout(2000);
+    const details = page.locator('[data-event-details="schedule:sch-o1"], [data-event-details$="sch-o1"]').first();
+    const txt = (await details.count()) ? await details.innerText() : "";
+    want(`${tag}: у олимпиады видно время`, /10:00–13:00/.test(txt), txt.replace(/\n/g, " "));
+    want(`${tag}: и место`, /Лицей НИУ ВШЭ/.test(txt));
+    const link = details.getByRole("link", { name: /siriusolymp\.ru/ });
+    want(`${tag}: и ссылка — открывается в новой вкладке`, (await link.count()) === 1 && (await link.getAttribute("target")) === "_blank" && (await link.getAttribute("href")) === "https://siriusolymp.ru");
+    want(`${tag}: в отсчёте — время события`, /10:00–13:00/.test(await page.locator("main").innerText()));
+
+    // Время олимпиады меняется здесь — и в расписании тоже.
+    await page.getByRole("button", { name: "Подробности: Право · ВсОШ" }).click();
+    await page.getByLabel("Начало").first().fill("11:30");
+    await page.getByLabel("Конец").first().fill("14:30");
+    await page.getByPlaceholder("Что взять с собой, что повторить, когда итоги").first().fill("Взять паспорт\nПравила: olimpiada.ru/vos");
+    await page.getByRole("button", { name: "Скрыть подробности: Право · ВсОШ" }).click();
+    await page.waitForTimeout(1500);
+    const stored = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value));
+    const entry = (stored.lyceumSchedule || []).find((e) => e.id === "sch-o1") || {};
+    want(`${tag}: время записано в расписание`, entry.start === "11:30" && entry.end === "14:30", entry.start + "–" + entry.end);
+    want(`${tag}: описание записано`, /паспорт/.test(entry.note || ""));
+    const after = await details.innerText();
+    want(`${tag}: новое время на экране`, /11:30–14:30/.test(after), after.replace(/\n/g, " "));
+    const noteLink = page.getByRole("link", { name: "olimpiada.ru/vos" });
+    want(`${tag}: ссылка в описании — кликабельна`, (await noteLink.count()) === 1 && (await noteLink.getAttribute("href")) === "https://olimpiada.ru/vos");
+
+    // Своё событие: подробностей не было — добавляем.
+    await page.getByRole("button", { name: "Подробности: Пробник по обществознанию" }).click();
+    await page.getByLabel("Начало").first().fill("09:00");
+    await page.getByPlaceholder("Например: лицей, ауд. 401").first().fill("Лицей, ауд. 305");
+    await page.getByPlaceholder("Регистрация, задания, результаты").first().fill("javascript:alert(1) https://example.org/probnik");
+    await page.getByRole("button", { name: "Скрыть подробности: Пробник по обществознанию" }).click();
+    await page.waitForTimeout(1500);
+    const own = ((await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value))).events || []).find((e) => e.id === "ev-own") || {};
+    want(`${tag}: у своего события время и место сохранились`, own.start === "09:00" && own.place === "Лицей, ауд. 305");
+    const ownBox = page.locator('[data-event-details="ev-own"]');
+    const ownLinks = await ownBox.getByRole("link").evaluateAll((els) => els.map((a) => a.getAttribute("href")));
+    want(`${tag}: javascript: ссылкой не становится`, ownLinks.length === 1 && ownLinks[0] === "https://example.org/probnik", JSON.stringify(ownLinks));
+    await page.reload();
+    await page.waitForTimeout(1800);
+    want(`${tag}: после перезагрузки всё на месте`, /09:00/.test(await ownBox.innerText()) && /11:30–14:30/.test(await details.innerText()));
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    want(`${tag}: ничего не едет вбок`, wide <= 0, wide + " px");
+    if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/events-${tag}.png`, fullPage: true });
+    want(`${tag}: события без ошибок`, errors.length === 0, errors[0] || "");
+    await ctx.close();
+  }
+}
+
 await browser.close(); server.close();
 console.log(bad ? `\nпровалов: ${bad}` : "\nновый дизайн работает, старого переключателя нет, записи целы");
 process.exit(bad ? 1 : 0);
