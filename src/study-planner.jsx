@@ -8,11 +8,12 @@ import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
 import { buildIcs } from "./calendar.js";
+import { sequenceItems } from "./calendar-seq.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import EventDetails from "./event-details.jsx";
 import { eventDescription, eventTime } from "./event-details.js";
-import CalendarHowTo from "./calendar-howto.jsx";
+import CalendarHowTo, { CalendarSyncNote } from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
 import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design-intro.jsx";
 import { CardHead } from "./card-head.jsx";
@@ -199,6 +200,23 @@ const STORAGE_KEY = "planner-state-v5";
 const SCREEN_KEY = "planner-screen";
 // Разовое окно об обновлении: помним последнюю версию, о которой рассказали.
 // Ключ свой на каждом устройстве — апдейт и приходит на каждое отдельно.
+// Номера версий событий календаря — память устройства (src/calendar-seq.js).
+const CALENDAR_SEQ_KEY = "planner-calendar-seq";
+function readCalendarSeq() {
+  try {
+    return JSON.parse(localStorage.getItem(CALENDAR_SEQ_KEY) || "{}") || {};
+  } catch (e) {
+    return {};
+  }
+}
+function writeCalendarSeq(memory) {
+  try {
+    localStorage.setItem(CALENDAR_SEQ_KEY, JSON.stringify(memory));
+  } catch (e) {
+    /* приватное окно — номера начнутся заново, календарь это переживёт */
+  }
+}
+
 const TASK_FOLDS_KEY = "planner-task-folds";
 function readTaskFolds() {
   try {
@@ -355,12 +373,26 @@ function byWeekOrder(a, b) {
   return String(a.start).localeCompare(String(b.start));
 }
 
+// Сколько минут между «10:00» и «13:00»; без конца — час.
+function spanMinutes(start, end) {
+  const toMin = (t) => {
+    const m = String(t || "").match(/^(\d{1,2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const a = toMin(start);
+  const b = toMin(end);
+  return a !== null && b !== null && b > a ? b - a : 60;
+}
+
 function eventIcsItem(event) {
   const info = priorityInfo(event.priority);
   return {
     uid: event.id,
     title: `${info.mark} ${event.name}`,
     date: event.date,
+    // Событие со временем встаёт в календаре на свой час, а не на весь день.
+    time: event.start || "",
+    minutes: spanMinutes(event.start, event.end),
     description: event.description || "",
     alarmDaysBefore: EVENT_ALARM_DAYS[Number(event.priority)] || 1,
   };
@@ -735,6 +767,8 @@ export default function StudyPlanner() {
   const [calendarMsg, setCalendarMsg] = useState("");
   const [calendarBusy, setCalendarBusy] = useState(false);
   const publishedIcs = useRef("");
+  // Когда файл подписки обновился в последний раз и не было ли ошибки.
+  const [calendarSync, setCalendarSync] = useState({ at: null, error: "", count: 0 });
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncDebug, setSyncDebug] = useState("");
@@ -1520,7 +1554,7 @@ export default function StudyPlanner() {
 
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
   // домашние задания. Расписание уроков — нет: недельная сетка живёт в приложении.
-  const calendarIcs = useMemo(() => {
+  const calendarItems = useMemo(() => {
     const items = allEvents.map(eventIcsItem);
     homework.filter((h) => h.date).forEach((h) => items.push(homeworkIcsItem(h)));
     // Пропущенный день превращается в напоминание на сегодняшний вечер: телефон
@@ -1535,20 +1569,36 @@ export default function StudyPlanner() {
         description: studyReminder.text,
       });
     }
-    return buildIcs(items, { name: "Ежедневник лицеиста", refreshHours: 1 });
+    return items;
   }, [allEvents, homework, studyReminder]);
+  // По этому ключу видно, изменилось ли содержимое подписки.
+  const calendarKey = useMemo(() => JSON.stringify(calendarItems), [calendarItems]);
+
+  // Файл подписки собирается перед отправкой: номер версии события растёт,
+  // только когда событие поменялось (src/calendar-seq.js).
+  async function publishCalendar(token) {
+    const { items, memory } = sequenceItems(calendarItems, readCalendarSeq());
+    const res = await publishFeed(token, buildIcs(items, { name: "Ежедневник лицеиста", refreshHours: 1 }));
+    if (res.ok) {
+      writeCalendarSeq(memory);
+      publishedIcs.current = calendarKey;
+      setCalendarSync({ at: new Date(), error: "", count: items.length });
+    } else {
+      setCalendarSync((prev) => ({ ...prev, error: res.error }));
+    }
+    return res;
+  }
 
   async function enableCalendarFeed() {
     setCalendarBusy(true);
     setCalendarMsg("");
     const token = calendarToken || newFeedToken();
-    const res = await publishFeed(token, calendarIcs);
+    const res = await publishCalendar(token);
     setCalendarBusy(false);
     if (!res.ok) {
       setCalendarMsg(res.error);
       return;
     }
-    publishedIcs.current = calendarIcs;
     setCalendarToken(token);
     setCalendarLinks(await feedUrls(token));
     setCalendarMsg("Подписка готова.");
@@ -1557,23 +1607,30 @@ export default function StudyPlanner() {
   async function refreshCalendarFeed() {
     if (!calendarToken) return;
     setCalendarBusy(true);
-    const res = await publishFeed(calendarToken, calendarIcs);
+    const res = await publishCalendar(calendarToken);
     setCalendarBusy(false);
-    publishedIcs.current = res.ok ? calendarIcs : publishedIcs.current;
     setCalendarMsg(res.ok ? "Обновлено." : res.error);
   }
 
   // Файл подписки обновляется сам, когда меняется то, что в нём лежит: иначе
-  // календарь в телефоне показывал бы вчерашние даты.
+  // календарь в телефоне показывал бы вчерашние даты. Не вышло — раньше это
+  // проходило молча, и в телефоне навсегда оставалась первая версия. Теперь
+  // ошибка видна в «Календаре телефона», а попытка повторяется через минуту.
+  const [calendarRetry, setCalendarRetry] = useState(0);
   useEffect(() => {
     if (!loaded || !calendarToken || !cloudOn) return;
-    if (publishedIcs.current === calendarIcs) return;
+    if (publishedIcs.current === calendarKey) return;
+    let retry = null;
     const timer = setTimeout(async () => {
-      const res = await publishFeed(calendarToken, calendarIcs);
-      if (res.ok) publishedIcs.current = calendarIcs;
+      const res = await publishCalendar(calendarToken);
+      if (!res.ok) retry = setTimeout(() => setCalendarRetry((n) => n + 1), 60000);
     }, 5000);
-    return () => clearTimeout(timer);
-  }, [calendarIcs, calendarToken, cloudOn, loaded]);
+    return () => {
+      clearTimeout(timer);
+      if (retry) clearTimeout(retry);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarKey, calendarToken, cloudOn, loaded, calendarRetry]);
 
   useEffect(() => {
     if (!calendarToken) return;
@@ -3286,6 +3343,9 @@ export default function StudyPlanner() {
                     </>
                   )}
                   {calendarMsg && <div style={styles.calendarMsg}>{calendarMsg}</div>}
+                  {calendarToken && cloudOn && (
+                    <CalendarSyncNote sync={calendarSync} platform={devicePlatform} styles={styles} />
+                  )}
                 </div>
               </Collapsible>
             </section>
@@ -6100,6 +6160,11 @@ const styles = {
     background: "var(--panel2)",
     color: "var(--ink2)",
   },
+  calendarSync: { marginTop: 10, display: "flex", flexDirection: "column", gap: 4 },
+  calendarSyncOk: { margin: 0, fontSize: 12, color: "var(--green)" },
+  calendarSyncError: { margin: 0, fontSize: 12, color: "var(--red)" },
+  calendarTrouble: { fontSize: 12, color: "var(--ink3)" },
+  calendarTroubleHead: { cursor: "pointer", fontWeight: 600, color: "var(--ink2)" },
   calendarMsg: { fontSize: 12, color: "var(--green)", marginTop: 8 },
   calendarSteps: { margin: "0 0 8px", paddingLeft: 20, fontSize: 12.5, color: "var(--ink2)", lineHeight: 1.6 },
   // Ссылка webcal: выглядит и ведёт себя как кнопка рядом с соседями.

@@ -56,3 +56,51 @@ export default function CalendarHowTo({ platform, styles }) {
     </>
   );
 }
+
+// Состояние подписки: когда файл обновился и не было ли ошибки, — и что
+// проверить, если в телефоне остались старые даты. Раньше автообновление
+// молчало: не получилось — и в календаре навсегда оставалась первая версия.
+export function CalendarSyncNote({ sync, platform, styles }) {
+  const time = sync.at ? sync.at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "";
+  return (
+    <div style={styles.calendarSync} data-calendar-sync>
+      {sync.error ? (
+        <p style={styles.calendarSyncError}>
+          Файл подписки не обновился: {sync.error}. Попробую ещё раз через минуту — или нажмите «Обновить».
+        </p>
+      ) : sync.at ? (
+        <p style={styles.calendarSyncOk}>
+          Файл подписки обновлён в {time} · событий в нём: {sync.count}.
+        </p>
+      ) : (
+        <p style={styles.mutedSmall}>Файл подписки обновляется сам через несколько секунд после любой правки.</p>
+      )}
+      <details style={styles.calendarTrouble}>
+        <summary style={styles.calendarTroubleHead}>В календаре старые даты?</summary>
+        <ul style={styles.calendarSteps}>
+          <li>
+            События, добавленные <b>файлом</b> («Добавить все», импорт .ics), не обновляются никогда — это копия.
+            Удалите их и подпишитесь по ссылке: подписанный календарь называется «Ежедневник лицеиста» и стоит
+            отдельно от остальных.
+          </li>
+          {platform === "android" ? (
+            <li>
+              Google Календарь перечитывает подписки сам, раз в несколько часов, иногда реже, и ускорить это нельзя. С
+              приложением <b>ICSx⁵</b> можно задать период обновления хоть раз в 15 минут.
+            </li>
+          ) : platform === "ios" ? (
+            <li>
+              iPhone перечитывает подписку по своему расписанию: Настройки → Календарь → Учётные записи → «Загрузка
+              данных» — поставьте «Ежечасно» или «Каждые 15 минут».
+            </li>
+          ) : (
+            <li>
+              Календарь перечитывает подписку сам: Apple — по своей настройке (обычно раз в час), Google — раз в
+              несколько часов, иногда реже.
+            </li>
+          )}
+        </ul>
+      </details>
+    </div>
+  );
+}
