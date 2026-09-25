@@ -39,8 +39,8 @@ function localStamp(dateStr, time, addMinutes = 0) {
   );
 }
 
-function stamp() {
-  return new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+function stamp(ms) {
+  return new Date(ms === undefined ? Date.now() : ms).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 }
 
 // Строки .ics длиннее 75 октетов положено сворачивать: продолжение начинается с пробела.
@@ -60,7 +60,9 @@ function fold(line) {
   return chunks.map((c, i) => (i === 0 ? c : " " + c)).join("\r\n");
 }
 
-// items: [{ uid, title, date: "YYYY-MM-DD", description, alarmDaysBefore }]
+// items: [{ uid, title, date: "YYYY-MM-DD", time?, minutes?, description, alarmDaysBefore, seq?, modified? }]
+// seq и modified — номер версии и время правки (см. src/calendar-seq.js): по
+// ним календарь понимает, что событие изменилось, и не держит старое.
 // options.name — имя календаря в телефоне; options.refreshHours — как часто
 // подписка просит перечитать файл.
 export function buildIcs(items, options = {}) {
@@ -86,6 +88,9 @@ export function buildIcs(items, options = {}) {
     const days = Number.isFinite(Number(item.alarmDaysBefore)) ? Math.max(0, Number(item.alarmDaysBefore)) : 1;
     // У события со временем есть час, у экзамена и задания — только дата.
     const timed = /^\d{1,2}:\d{2}$/.test(String(item.time || ""));
+    // Напоминание «позаниматься» звонит в свой час; у события со временем —
+    // как у всесуточного, за сколько-то дней.
+    const alarmAtTime = timed && item.alarmDaysBefore === undefined;
     const when = timed
       ? [`DTSTART:${localStamp(item.date, item.time)}`, `DTEND:${localStamp(item.date, item.time, item.minutes || 60)}`]
       : [`DTSTART;VALUE=DATE:${dateOnly(item.date)}`, `DTEND;VALUE=DATE:${nextDay(item.date)}`];
@@ -94,13 +99,15 @@ export function buildIcs(items, options = {}) {
       "BEGIN:VEVENT",
       `UID:${escapeText(item.uid)}@planner`,
       `DTSTAMP:${stamp()}`,
+      ...(Number.isFinite(item.seq) ? [`SEQUENCE:${item.seq}`] : []),
+      ...(item.modified ? [`LAST-MODIFIED:${stamp(item.modified)}`] : []),
       // Событие на весь день: DTEND по стандарту указывает на следующий день.
       ...when,
       fold(`SUMMARY:${escapeText(item.title)}`),
       ...(item.description ? [fold(`DESCRIPTION:${escapeText(stripHtml(item.description))}`)] : []),
       "BEGIN:VALARM",
       // У напоминания со временем будильник звонит в его час, а не за сутки.
-      timed ? "TRIGGER:-PT0M" : `TRIGGER:-P${days}D`,
+      alarmAtTime ? "TRIGGER:-PT0M" : `TRIGGER:-P${days}D`,
       "ACTION:DISPLAY",
       fold(`DESCRIPTION:${escapeText(item.title)}`),
       "END:VALARM",
