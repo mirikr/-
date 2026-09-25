@@ -10,6 +10,8 @@ import HoursChart from "./hours-chart.jsx";
 import { buildIcs } from "./calendar.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
+import EventDetails from "./event-details.jsx";
+import { eventDescription, eventTime } from "./event-details.js";
 import CalendarHowTo from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
 import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design-intro.jsx";
@@ -985,12 +987,21 @@ export default function StudyPlanner() {
           priority: Number(e.priority) || 3,
           fromSchedule: true,
           examKind: e.examKind === "olympiad" ? "olympiad" : "exam",
-          description: [e.place, e.start && e.end ? e.start + "–" + e.end : "", e.url].filter(Boolean).join(" · "),
+          // Время, место и ссылка — те же поля записи расписания.
+          start: e.start || "",
+          end: e.end || "",
+          place: e.place || "",
+          url: e.url || "",
+          note: e.note || "",
         })),
     [lyceumSchedule]
   );
 
-  const allEvents = useMemo(() => [...events, ...scheduleEvents], [events, scheduleEvents]);
+  // Подробности одной строкой — для календаря телефона и карточки «Сегодня».
+  const allEvents = useMemo(
+    () => [...events, ...scheduleEvents].map((e) => ({ ...e, description: eventDescription(e) })),
+    [events, scheduleEvents]
+  );
 
   // Событие сегодня — не строчка в списке «ближайших»: сегодня оно и есть день.
   const todayEvents = useMemo(() => allEvents.filter((e) => e.date === todayStr()), [allEvents]);
@@ -1707,6 +1718,9 @@ export default function StudyPlanner() {
       if (patch.name !== undefined) mapped.subjectName = patch.name;
       if (patch.date !== undefined) mapped.date = patch.date;
       if (patch.priority !== undefined) mapped.priority = patch.priority;
+      ["start", "end", "place", "url", "note"].forEach((field) => {
+        if (patch[field] !== undefined) mapped[field] = patch[field];
+      });
       updateScheduleEntry(entryId, mapped);
       return;
     }
@@ -1884,7 +1898,9 @@ export default function StudyPlanner() {
     const was = new Map(mine.map((e) => [key(e), e]));
     const next = fresh.map((e) => {
       const old = was.get(key(e));
-      return old ? { ...e, priority: old.priority, level: old.level, ...(old.folded ? { folded: true } : null) } : e;
+      return old
+        ? { ...e, priority: old.priority, level: old.level, ...(old.folded ? { folded: true } : null), ...(old.note ? { note: old.note } : null) }
+        : e;
     });
     // Задание привязано к уроку по идентификатору: если урок пересобрался под
     // новым, привязку надо перенести, иначе задание повиснет в пустоте.
@@ -3182,6 +3198,8 @@ export default function StudyPlanner() {
                       </div>
                       <div style={styles.countdownDate}>
                         {formatEventDate(nextEvent.date)}
+                        {eventTime(nextEvent) && <b style={styles.countdownTime}> · {eventTime(nextEvent)}</b>}
+                        {nextEvent.place && <span> · {nextEvent.place}</span>}
                         {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
                       </div>
                     </div>
@@ -4629,6 +4647,7 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
         >
           ×
         </button>
+        <EventDetails event={e} fromSchedule={e.fromSchedule} onUpdate={(patch) => onUpdate(e.id, patch)} />
       </div>
     );
   }
@@ -6048,6 +6067,7 @@ const styles = {
     overflowWrap: "anywhere",
   },
   countdownDate: { fontSize: 12, color: "var(--ink3)", marginTop: 3 },
+  countdownTime: { color: "var(--ink2)" },
   countdownRest: { marginTop: 12, display: "flex", flexDirection: "column" },
   countdownRestRow: {
     display: "flex",
