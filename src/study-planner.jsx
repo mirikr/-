@@ -17,6 +17,8 @@ import CalendarHowTo, { CalendarSyncNote } from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
 import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design-intro.jsx";
 import { CardHead } from "./card-head.jsx";
+import MoreMenu from "./more-menu.jsx";
+import NotebookWorkspace from "./notebook-workspace.jsx";
 import BalanceChart from "./balance-chart.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
@@ -606,9 +608,21 @@ export default function StudyPlanner() {
   const [notebooks, setNotebooks] = useState({});
   // Закреплённые предметы и порядок списка в «Тетрадях»: см. src/notebook-order.js.
   const [notebookOrder, setNotebookOrder] = useState({});
+  // На телефоне: открыт ли список предметов для закрепления и перестановки.
+  const [notesOrderOpen, setNotesOrderOpen] = useState(false);
   const [subjectTab, setSubjectTab] = useState({});
   const [openLyceumNotebook, setOpenLyceumNotebook] = useState(null);
   const [openSubject, setOpenSubject] = useState(null);
+  // «Подготовка» на телефоне — два шага: список предметов, потом предмет.
+  const [studyView, setStudyView] = useState("list");
+  // Скрыть пройденные уроки — удобство этого устройства, в облако не едет.
+  const [hideDone, setHideDone] = useState(() => {
+    try {
+      return localStorage.getItem("planner-hide-done") === "1";
+    } catch (e) {
+      return false;
+    }
+  });
   const [openNotes, setOpenNotes] = useState({});
   const [openLinks, setOpenLinks] = useState({});
   const [jForm, setJForm] = useState({ date: todayStr(), subjectId: "law", hours: "1", note: "" });
@@ -2467,7 +2481,12 @@ export default function StudyPlanner() {
   const [notebookFocus, setNotebookFocus] = useState(null);
 
   function openFound(item) {
-    if (item.subjectId) setOpenSubject(item.subjectId);
+    if (item.subjectId) {
+      setOpenSubject(item.subjectId);
+      // На телефоне сразу страница предмета, а не список: урок ищут в нём.
+      setStudyView("subject");
+      setSubjectTab((prev) => ({ ...prev, [item.subjectId]: "lessons" }));
+    }
     if (item.notebook) setNotebookOwner(item.notebook);
     if (item.notebookFocus) setNotebookFocus({ ...item.notebookFocus, at: Date.now() });
     // Задание открывается на своей дате: раньше дневник открывался на сегодня,
@@ -2760,11 +2779,63 @@ export default function StudyPlanner() {
         /* На телефоне навигация уходит вниз, как в обычных приложениях: до полосы
            внизу большой палец дотягивается, до колонки слева — нет. */
         .ap-tabbar, .ap-only-mobile { display: none; }
+        /* «Подготовка» и «Тетради», вариант A. */
+        .ap-mobile-only { display: none !important; }
+        .topic-row:hover { background: none; }
+        /* Название урока со ссылкой — не подчёркнуто в покое: одиннадцать подчёркнутых
+           строк подряд читались как сплошная рябь. Подчёркивание — под курсором. */
+        .topic-row a.lesson-link { text-decoration: none; }
+        .topic-row a.lesson-link:hover { text-decoration: underline; text-decoration-color: currentColor; }
+        .ap-study-row { background: transparent; transition: background .15s ease; }
+        .ap-study-row:hover, .ap-study-row.is-on { background: var(--neutralBg); }
+        .ap-menu-item:hover { background: var(--neutralBg) !important; }
+        .ap-nbw-branch:hover:not([aria-current]) { background: var(--line2) !important; }
+        .ap-notes-subject:hover { background: var(--line2); }
+        .ap-nbw.is-compact { grid-template-columns: 264px minmax(0, 1fr) !important; }
+        .ap-notes-chips { display: none; }
+        .ap-notes-order { display: none; }
+        .ap-notes .ap-nbw { flex: 1; }
+        .ap-main .ap-nbw-title:focus {
+          box-shadow: none !important; border-color: transparent !important; border-bottom-color: var(--accent) !important;
+        }
+        .ap-main .ap-nbw label input:focus { box-shadow: none !important; border-color: transparent !important; }
+        .ap-rt-toolbar::-webkit-scrollbar, .ap-notes-chips::-webkit-scrollbar { display: none; }
+        .ap-rt-editor h3 { font-family: var(--serif); font-size: 1.25em; font-weight: 700; margin: .8em 0 .3em; }
+        .ap-rt-editor ul, .ap-rt-editor ol { padding-left: 1.4em; }
         @media (max-width: 900px) {
           .ap-shell { flex-direction: column; }
           .ap-rail { display: none !important; }
           .ap-tabbar, .ap-only-mobile { display: block; }
           ${NEW_MOBILE_CSS}
+          /* Телефон: и «Подготовка», и тетрадь — два шага вместо двух колонок.
+             Список → предмет, оглавление → ветка; назад — кнопкой сверху. */
+          .ap-mobile-only { display: inline-flex !important; }
+          .ap-study { grid-template-columns: minmax(0, 1fr) !important; }
+          .ap-study[data-view="list"] .ap-study-detail { display: none !important; }
+          .ap-study[data-view="subject"] .ap-study-list { display: none !important; }
+          .ap-study-list { position: static !important; }
+          .ap-study-row { min-height: 60px; }
+          .ap-main section.ap-card.ap-study-detail { padding: 14px 16px 18px !important; }
+          .ap-study-detail .ap-note-panel { margin-left: 0 !important; }
+          .ap-study-detail .ap-study-nb { margin: 0 -16px -18px !important; }
+          .ap-nbw { grid-template-columns: minmax(0, 1fr) !important; min-height: 0 !important; }
+          .ap-nbw[data-view="outline"] .ap-nbw-editor { display: none !important; }
+          .ap-nbw[data-view="editor"] .ap-nbw-outline { display: none !important; }
+          .ap-nbw-outline { border-right: none !important; background: transparent !important; padding: 14px 14px 18px !important; }
+          .ap-nbw-preview { display: block !important; }
+          .ap-nbw-branch { min-height: 54px !important; border-radius: 10px !important; }
+          .ap-nbw-editor > div { padding: 12px 16px 22px !important; }
+          .ap-nbw-title { font-size: 26px !important; }
+          .ap-nbw-crumbs { display: none; }
+          .ap-notes { grid-template-columns: minmax(0, 1fr) !important; min-height: 0 !important; }
+          .ap-notes-side { display: none; }
+          .ap-notes-chips { display: flex !important; }
+          .ap-notes-order { display: block; }
+          .ap-rt-toolbar { flex-wrap: nowrap !important; }
+        }
+        @media (max-width: 560px) {
+          .ap-topic-mins { display: none; }
+        }
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
           .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
@@ -3622,134 +3693,259 @@ export default function StudyPlanner() {
                 <AddSubjectForm onAdd={addSubject} placeholder="Например, «Математика для олимпиад»" />
               </section>
             )}
-            {dueForReview.length > 0 && (
-              <section className="ap-card" style={styles.card}>
-                <CardHead
-                  id="study-review"
-                  title="Пора повторить"
-                  note={
-                    "Первое повторение через три дня после урока, дальше через неделю, три недели и два месяца. " +
-                    "«Повторил» пишет занятие в дневник — часы идут в общий план."
-                  }
-                />
-                <div style={styles.reviewList}>
-                  {dueForReview.map((row) => (
-                    <div key={row.topicId} style={styles.reviewRow}>
-                      <span style={{ ...styles.dot, background: row.color }} />
-                      <span style={styles.reviewText}>
-                        <span style={styles.reviewName}>{row.name}</span>
-                        <span style={styles.reviewNote}>
-                          {row.subjectName} · {agoWord(row.days)}
-                          {row.reviews > 0 ? " · повторений: " + row.reviews : ""}
-                        </span>
-                      </span>
-                      <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
-                        Повторил
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
 
-            <div style={styles.subjGrid}>
-              {ALL_SUBJECTS.map((s) => {
-                const st = stats.perSubject[s.id];
-                const open = openSubject === s.id;
-                const isCustomSubject = customSubjects.some((cs) => cs.id === s.id);
-                const allTopics = [
-                  ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
-                  ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
-                ];
-                return (
-                  <div key={s.id} className="subj-card ap-card" style={{ ...styles.subjCard, borderColor: s.color }}>
-                    <div style={styles.subjHeaderRow}>
-                      <button onClick={() => setOpenSubject(open ? null : s.id)} style={styles.subjHeader}>
-                        <span style={{ ...styles.dot, background: s.color }} />
-                        <span style={styles.subjName}>{s.name}</span>
-                        <span style={styles.subjPct}>
-                          {st.done}/{st.total} · {st.pct}%
-                        </span>
-                      </button>
-                      <input
-                        type="color"
-                        value={hexOf(s.color)}
-                        onChange={(e) => setSubjectColor(s.id, e.target.value)}
-                        style={styles.colorPick}
-                        title="Цвет предмета"
-                      />
-                      <button onClick={() => removeSubject(s.id)} style={styles.subjRemoveBtn} title="Удалить предмет">
-                        ×
-                      </button>
-                    </div>
-                    <div style={styles.miniTrack}>
-                      <div className="ap-fill" style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
-                    </div>
-                    <Collapsible open={open}>
-                      <div style={styles.tabsRow}>
-                        {[
-                          ["lessons", "Уроки"],
-                          ["notebook", "Тетрадь"],
-                        ].map(([key, label]) => {
-                          const active = (subjectTab[s.id] || "lessons") === key;
-                          return (
-                            <button
-                              key={key}
-                              onClick={() => setSubjectTab((prev) => ({ ...prev, [s.id]: key }))}
-                              style={{
-                                ...styles.tabBtn,
-                                color: active ? "#fff" : "var(--ink2)",
-                                background: active ? s.color: "var(--btnInk)",
-                                borderColor: active ? s.color : "var(--line)",
-                              }}
-                            >
-                              {label}
+            {/* Вариант A: слева все предметы с прогрессом, справа выбранный — на всю
+                ширину. Раньше открытый предмет раскрывался внутри узкой карточки сетки
+                в три колонки, каждый урок занимал две строки, а рядом было пусто. */}
+            {ALL_SUBJECTS.length > 0 && (() => {
+              const s = ALL_SUBJECTS.find((x) => x.id === openSubject) || ALL_SUBJECTS[0];
+              const st = stats.perSubject[s.id] || { done: 0, total: 0, pct: 0 };
+              const allTopics = [
+                ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
+                ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
+              ];
+              const tab = subjectTab[s.id] || "lessons";
+              const next = allTopics.find((t) => !t.done);
+              const nextIndex = next ? allTopics.indexOf(next) : -1;
+              const shownTopics = allTopics.filter((t) => !hideDone || !t.done || (next && t.id === next.id));
+              const notesAll = allTopics
+                .flatMap((t) => (t.notes || []).map((n) => ({ ...n, topic: t })))
+                .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+              const subjectHours =
+                Math.round(journalWithTrainer.filter((e) => e.subjectId === s.id).reduce((sum, e) => sum + (Number(e.hours) || 0), 0) * 10) / 10;
+              const blocksCount = (notebooks["subj:" + s.id] || []).length;
+              // «Право: Семейное право» внутри предмета «Право» — просто «Семейное право».
+              const shortName = (name) => {
+                if (!name.startsWith(s.name + ": ")) return name;
+                const rest = name.slice(s.name.length + 2);
+                return rest.charAt(0).toUpperCase() + rest.slice(1);
+              };
+              const pickSubject = (id) => {
+                setOpenSubject(id);
+                setStudyView("subject");
+              };
+              const setTab = (key) => setSubjectTab((prev) => ({ ...prev, [s.id]: key }));
+              return (
+                <div className="ap-study" data-view={studyView} style={styles.studyGrid}>
+                  <div className="ap-study-list" style={styles.studyLeft}>
+                    <nav aria-label="Предметы" className="ap-card" style={styles.studyList}>
+                      {ALL_SUBJECTS.map((x) => {
+                        const xs = stats.perSubject[x.id] || { done: 0, total: 0, pct: 0 };
+                        const on = x.id === s.id;
+                        return (
+                          <button
+                            key={x.id}
+                            type="button"
+                            onClick={() => pickSubject(x.id)}
+                            aria-current={on ? "true" : undefined}
+                            className={"ap-study-row" + (on ? " is-on" : "")}
+                            style={styles.studyRow}
+                          >
+                            <span style={styles.studyRowTop}>
+                              <span style={{ ...styles.dot, width: 9, height: 9, background: x.color }} />
+                              <span style={styles.studyRowName}>{x.name}</span>
+                              <span style={styles.studyRowCount}>{xs.total ? xs.done + "/" + xs.total : "нет уроков"}</span>
+                              <svg className="ap-mobile-only" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--mute)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                            </span>
+                            <span style={styles.studyRowTrack}>
+                              <span className="ap-fill" style={{ ...styles.studyRowFill, width: xs.pct + "%", background: x.color }} />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </nav>
+                    <AddSubjectForm onAdd={addSubject} placeholder="Свой предмет — например, «Математика»" />
+                    {dueForReview.length > 0 && (
+                      <section style={styles.studyReview}>
+                        <div style={styles.studyReviewHead}>Пора повторить · {dueForReview.length}</div>
+                        {dueForReview.slice(0, 3).map((row) => (
+                          <div key={row.topicId} style={styles.studyReviewRow}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={styles.reviewName}>{row.name}</div>
+                              <div style={styles.reviewNote}>
+                                {row.subjectName} · {agoWord(row.days)}
+                              </div>
+                            </div>
+                            <button onClick={() => reviewTopic(row)} style={styles.studyReviewBtn}>
+                              Повторил
                             </button>
-                          );
-                        })}
+                          </div>
+                        ))}
+                      </section>
+                    )}
+                  </div>
+
+                  <section className="ap-study-detail ap-card" aria-label={"Предмет: " + s.name} style={styles.studyDetail}>
+                    <button type="button" onClick={() => setStudyView("list")} className="ap-mobile-only" style={styles.studyBack}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+                      Предметы
+                    </button>
+                    <div style={styles.studyHead}>
+                      <span style={{ ...styles.dot, width: 12, height: 12, background: s.color }} />
+                      <h2 style={styles.studyTitle}>{s.name}</h2>
+                      <span className="ap-study-meta" style={styles.studyMeta}>
+                        {st.total ? `${st.done} из ${st.total} · ${st.pct}%` : "уроков пока нет"}
+                        {subjectHours ? ` · ${hoursLabel(subjectHours)}` : ""}
+                      </span>
+                      <MoreMenu
+                        label={"Предмет «" + s.name + "»: цвет, удаление"}
+                        size={40}
+                        items={[
+                          {
+                            render: () => (
+                              <label style={styles.menuColor}>
+                                <input type="color" value={hexOf(s.color)} onChange={(e) => setSubjectColor(s.id, e.target.value)} style={styles.colorPick} />
+                                Цвет предмета
+                              </label>
+                            ),
+                          },
+                          { label: "Удалить предмет", danger: true, onSelect: () => removeSubject(s.id) },
+                        ]}
+                      />
+                    </div>
+                    <div style={styles.studyTrack}>
+                      <div className="ap-fill" style={{ ...styles.studyFill, width: st.pct + "%", background: s.color }} />
+                    </div>
+
+                    <div style={styles.studyTabsRow}>
+                      <div role="tablist" aria-label="Разделы предмета" style={styles.studyTabs}>
+                        {[
+                          ["lessons", "Уроки", allTopics.length],
+                          ["notebook", "Тетрадь", blocksCount],
+                          ["notes", "Заметки", notesAll.length],
+                        ].map(([key, label, n]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            role="tab"
+                            aria-selected={tab === key}
+                            onClick={() => setTab(key)}
+                            style={{ ...styles.studyTab, ...(tab === key ? styles.studyTabOn : null) }}
+                          >
+                            {label} {n ? <span style={styles.studyTabN}>{n}</span> : null}
+                          </button>
+                        ))}
                       </div>
-                      {(subjectTab[s.id] || "lessons") === "notebook" ? (
-                      <div style={styles.topicList}>
-                        <Notebook
+                      {tab === "lessons" && st.done > 0 && (
+                        <label style={styles.studyHide}>
+                          <input
+                            type="checkbox"
+                            checked={hideDone}
+                            onChange={(e) => {
+                              setHideDone(e.target.checked);
+                              try {
+                                localStorage.setItem("planner-hide-done", e.target.checked ? "1" : "0");
+                              } catch (err) {
+                                /* приватный режим — выбор доживёт до перезагрузки */
+                              }
+                            }}
+                          />
+                          Скрыть пройденные
+                        </label>
+                      )}
+                    </div>
+
+                    {tab === "lessons" && (
+                      <>
+                        {next && (
+                          <div style={styles.nextCard}>
+                            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+                              <div style={styles.nextLabel}>
+                                СЛЕДУЮЩИЙ УРОК · {nextIndex + 1} ИЗ {allTopics.length}
+                              </div>
+                              <div style={styles.nextName}>{shortName(next.name)}</div>
+                              <div style={styles.nextMeta}>{next.duration || D} минут</div>
+                            </div>
+                            <div style={styles.nextActions}>
+                              {next.url ? (
+                                <a href={next.url} target="_blank" rel="noreferrer" style={styles.nextOpen}>
+                                  Открыть урок ↗
+                                </a>
+                              ) : (
+                                <button type="button" onClick={() => toggleLinkPanel(next.id)} style={styles.nextGhost}>
+                                  + ссылка на урок
+                                </button>
+                              )}
+                              <button type="button" onClick={() => toggleTopic(s.id, next.id, next.custom)} style={styles.nextGhost}>
+                                Пройден
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {!next && allTopics.length > 0 && (
+                          <div style={styles.doneCard}>Все уроки пройдены — осталось повторять.</div>
+                        )}
+                        <div style={styles.lessonList}>
+                          {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
+                          {shownTopics.map((t) => (
+                            <TopicItem
+                              key={t.id}
+                              subjectId={s.id}
+                              topic={t}
+                              index={allTopics.indexOf(t) + 1}
+                              displayName={shortName(t.name)}
+                              isNext={next && next.id === t.id}
+                              notesOpen={!!openNotes[t.id]}
+                              onToggleNotes={() => toggleNotesPanel(t.id)}
+                              linkOpen={!!openLinks[t.id]}
+                              onToggleLink={() => toggleLinkPanel(t.id)}
+                              onSetUrl={(url) => setTopicUrl(s.id, t.id, t.custom, url)}
+                              onToggleDone={() => toggleTopic(s.id, t.id, t.custom)}
+                              onDurationChange={(v) => setTopicDuration(s.id, t.id, t.custom, v)}
+                              onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
+                              onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
+                              onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
+                              onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
+                              onUndo={showUndo}
+                            />
+                          ))}
+                          {hideDone && st.done > 0 && (
+                            <button type="button" onClick={() => setHideDone(false)} style={styles.showDone}>
+                              Показать пройденные · {st.done}
+                            </button>
+                          )}
+                        </div>
+                        <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
+                      </>
+                    )}
+
+                    {tab === "notebook" && (
+                      <div className="ap-study-nb" style={styles.studyNotebook}>
+                        <NotebookWorkspace
+                          compact
+                          owner={{ name: s.name, color: s.color }}
                           blocks={notebooks["subj:" + s.id] || []}
                           onChange={(blocks) => setNotebook("subj:" + s.id, blocks)}
                           onUndo={showUndo}
                           prefix={"subj-" + s.id}
                         />
                       </div>
-                      ) : (
-                      <div style={styles.topicList}>
-                        {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
-                        {allTopics.map((t) => (
-                          <TopicItem
-                            key={t.id}
-                            subjectId={s.id}
-                            topic={t}
-                            notesOpen={!!openNotes[t.id]}
-                            onToggleNotes={() => toggleNotesPanel(t.id)}
-                            linkOpen={!!openLinks[t.id]}
-                            onToggleLink={() => toggleLinkPanel(t.id)}
-                            onSetUrl={(url) => setTopicUrl(s.id, t.id, t.custom, url)}
-                            onToggleDone={() => toggleTopic(s.id, t.id, t.custom)}
-                            onDurationChange={(v) => setTopicDuration(s.id, t.id, t.custom, v)}
-                            onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
-                            onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
-                            onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
-                            onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
-                            onUndo={showUndo}
-                          />
+                    )}
+
+                    {tab === "notes" && (
+                      <div style={styles.notesAll}>
+                        {notesAll.length === 0 && (
+                          <p style={styles.muted}>
+                            Заметок пока нет. Их пишут к уроку: «⋯» у урока → «Заметки» — короткая подпись и потраченное
+                            время, оно уходит в дневник.
+                          </p>
+                        )}
+                        {notesAll.map((n) => (
+                          <div key={n.id} style={styles.notesAllRow}>
+                            <span style={styles.notesAllDate}>{new Date(n.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: "block" }}>{n.text}</span>
+                              <span style={styles.notesAllTopic}>{shortName(n.topic.name)}</span>
+                            </span>
+                            <span style={styles.notesAllMins}>{n.minutes} мин</span>
+                          </div>
                         ))}
-                        <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
                       </div>
-                      )}
-                    </Collapsible>
-                  </div>
-                );
-              })}
-            </div>
-            {ALL_SUBJECTS.length > 0 && (
-              <AddSubjectForm onAdd={addSubject} placeholder="Добавить свой предмет (например, «Математика для олимпиад»)" />
-            )}
+                    )}
+                  </section>
+                </div>
+              );
+            })()}
           </section>
         )}
 
@@ -4212,9 +4408,11 @@ export default function StudyPlanner() {
         )}
 
         {screen === "notes" && (
-          <>
-          <div className="ap-grid2" style={styles.grid2}>
-            <section className="ap-card" style={styles.card}>
+          // Вариант A: предметы · оглавление тетради · открытая ветка. Раньше
+          // список предметов занимал половину ширины, выбор предмета был ещё и
+          // выпадающим списком, а конспект читался в коробке внутри коробки.
+          <div className="ap-notes ap-card" style={styles.notesShell}>
+            <aside className="ap-notes-side" aria-label="Предметы" style={styles.notesSide}>
               <NotebookSubjects
                 owners={orderedOwners}
                 current={currentNotebook ? currentNotebook.key : ""}
@@ -4223,51 +4421,59 @@ export default function StudyPlanner() {
                 onPin={(key) => setNotebookOrder((prev) => togglePin(prev, notebookOwners, key))}
                 onMove={(from, to) => setNotebookOrder((prev) => moveOwner(prev, notebookOwners, from, to))}
               />
-            </section>
-
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="notebook"
-                title="Тетрадь"
-                note={
-                  "Блок — большая тема, внутри ветки с конспектом и вложениями. Эта же тетрадь открыта в карточке " +
-                  "предмета и в разделе лицея — записи везде одни."
-                }
-              >
-                {/* Список предметов слева читается как оглавление, а не как выбор,
-                    поэтому тот же выбор стоит и здесь — там, где его ищут. Тетрадь
-                    одна и та же: и список, и этот выбор открывают одни и те же
-                    блоки, они же лежат в карточке предмета и в разделе лицея. */}
-                <select
-                  value={currentNotebook ? currentNotebook.key : ""}
-                  onChange={(e) => setNotebookOwner(e.target.value)}
-                  style={styles.notebookSelect}
-                  aria-label="Предмет тетради"
+            </aside>
+            <div style={styles.notesMain}>
+              {/* На телефоне колонки предметов нет — те же предметы чипами сверху. */}
+              <div className="ap-notes-chips" role="tablist" aria-label="Предмет" style={styles.notesChips}>
+                {orderedOwners.map((o) => {
+                  const on = currentNotebook && o.key === currentNotebook.key;
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={!!on}
+                      onClick={() => setNotebookOwner(o.key)}
+                      style={{ ...styles.notesChip, ...(on ? styles.notesChipOn : null) }}
+                    >
+                      <span style={{ ...styles.dot, width: 8, height: 8, background: o.color }} />
+                      {o.name}
+                    </button>
+                  );
+                })}
+                {/* Закрепить и расставить предметы можно и на телефоне: карандаш в
+                    конце чипов открывает тот же список, что в колонке на компьютере. */}
+                <button
+                  type="button"
+                  onClick={() => setNotesOrderOpen(!notesOrderOpen)}
+                  aria-pressed={notesOrderOpen}
+                  aria-label="Изменить порядок предметов"
+                  title="Закрепить и расставить предметы"
+                  style={{ ...styles.notesChip, ...(notesOrderOpen ? styles.notesChipOn : null), padding: "0 12px" }}
                 >
-                  <optgroup label="Самостоятельное изучение">
-                    {orderedOwners
-                      .filter((o) => o.from === "own")
-                      .map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {o.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                  {orderedOwners.some((o) => o.from === "lyceum") && (
-                    <optgroup label="Лицей КЭО">
-                      {orderedOwners
-                        .filter((o) => o.from === "lyceum")
-                        .map((o) => (
-                          <option key={o.key} value={o.key}>
-                            {o.name}
-                          </option>
-                        ))}
-                    </optgroup>
-                  )}
-                </select>
-              </CardHead>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z" />
+                    <path d="M13.5 6.5l4 4" />
+                  </svg>
+                </button>
+              </div>
+              {notesOrderOpen && (
+                <div className="ap-notes-order" style={styles.notesOrder}>
+                  <NotebookSubjects
+                    startEditing
+                    onDone={() => setNotesOrderOpen(false)}
+                    owners={orderedOwners}
+                    current={currentNotebook ? currentNotebook.key : ""}
+                    countOf={(key) => (notebooks[key] || []).length}
+                    onPick={setNotebookOwner}
+                    onPin={(key) => setNotebookOrder((prev) => togglePin(prev, notebookOwners, key))}
+                    onMove={(from, to) => setNotebookOrder((prev) => moveOwner(prev, notebookOwners, from, to))}
+                  />
+                </div>
+              )}
               {currentNotebook ? (
-                <Notebook
+                <NotebookWorkspace
+                  owner={currentNotebook}
                   blocks={notebooks[currentNotebook.key] || []}
                   focus={notebookFocus}
                   onChange={(blocks) => setNotebook(currentNotebook.key, blocks)}
@@ -4275,13 +4481,11 @@ export default function StudyPlanner() {
                   prefix={"nb-" + currentNotebook.key}
                 />
               ) : (
-                <p style={styles.muted}>Предметы появятся, как только вы добавите их в подготовку или в расписание.</p>
+                <p style={{ ...styles.muted, padding: 24 }}>Предметы появятся, как только вы добавите их в подготовку или в расписание.</p>
               )}
-            </section>
+            </div>
           </div>
-          </>
         )}
-
         {screen === "search" && (
           <section className="ap-card" style={styles.card}>
             <input
@@ -4825,9 +5029,17 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
   );
 }
 
+// Урок — одна строка: галочка, номер, название (ссылка, если она есть),
+// заметки, минуты и «⋯». Раньше рядом с каждым уроком стояли поле минут,
+// «ссылка», «заметки» и крестик — строка разъезжалась на две, а удалить урок
+// можно было промахнувшись мимо заметок. Ссылка, длительность и удаление теперь
+// в «⋯», заметки раскрываются под строкой.
 function TopicItem({
   subjectId,
   topic,
+  index,
+  displayName,
+  isNext,
   notesOpen,
   onToggleNotes,
   linkOpen,
@@ -4844,84 +5056,91 @@ function TopicItem({
   const [noteText, setNoteText] = useState("");
   const [noteMins, setNoteMins] = useState("15");
   const [urlDraft, setUrlDraft] = useState(topic.url || "");
+  const [minsDraft, setMinsDraft] = useState(String(topic.duration || D));
   const [openNoteBodies, setOpenNoteBodies] = useState({});
   const notes = topic.notes || [];
+  const name = displayName || topic.name;
 
   return (
     <div style={styles.topicBlock} data-focus-id={"topic:" + topic.id}>
-      <div className="topic-row" style={styles.topicRow}>
-        <label style={styles.topicLabel}>
-          <input type="checkbox" checked={topic.done} onChange={onToggleDone} />
-          {topic.url ? (
-            <a
-              className="lesson-link"
-              href={topic.url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              style={topic.done ? styles.topicDone : undefined}
-            >
-              {topic.name}
-            </a>
-          ) : (
-            <span style={topic.done ? styles.topicDone : undefined}>{topic.name}</span>
-          )}
-        </label>
-        {/* Поле и «мин» — один блок: при переносе строки они разъезжались по разным. */}
-        <span style={styles.durationBox}>
-          <input
-            type="number"
-            min="5"
-            value={topic.duration}
-            onChange={(e) => onDurationChange(e.target.value)}
-            style={styles.durationInput}
-            title="Длительность урока, минут"
-          />
-          <span style={styles.hUnit}>мин</span>
-        </span>
-        <button onClick={onToggleLink} style={styles.notesToggle} title="Добавить или изменить ссылку">
-          {topic.url ? "ссылка ✓" : "+ ссылка"}
-        </button>
-        <button onClick={onToggleNotes} style={styles.notesToggle}>
-          заметки{notes.length ? ` (${notes.length})` : ""}
-        </button>
-        <button onClick={onRemoveTopic} style={styles.removeBtn} title="Удалить урок">
-          ×
-        </button>
+      <div className={"topic-row" + (isNext ? " is-next" : "")} style={{ ...styles.topicRow, ...(isNext ? styles.topicRowNext : null) }}>
+        <input
+          type="checkbox"
+          checked={topic.done}
+          onChange={onToggleDone}
+          aria-label={(topic.done ? "Пройден: " : "Отметить пройденным: ") + name}
+          style={styles.topicCheck}
+        />
+        <span style={styles.topicNum}>{index}</span>
+        {topic.url ? (
+          <a
+            className="lesson-link"
+            href={topic.url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...styles.topicName, ...(topic.done ? styles.topicDone : null), ...(isNext ? { fontWeight: 600 } : null) }}
+          >
+            {name}
+          </a>
+        ) : (
+          <span style={{ ...styles.topicName, ...(topic.done ? styles.topicDone : null), ...(isNext ? { fontWeight: 600 } : null) }}>{name}</span>
+        )}
+        {notes.length > 0 && (
+          <button type="button" onClick={onToggleNotes} aria-expanded={notesOpen} style={styles.noteBadge}>
+            {notes.length} {notes.length === 1 ? "заметка" : notes.length < 5 ? "заметки" : "заметок"}
+          </button>
+        )}
+        <span className="ap-topic-mins" style={styles.topicMins}>{topic.duration || D} мин</span>
+        <MoreMenu
+          quiet
+          label={"Урок «" + name + "»"}
+          size={34}
+          items={[
+            { label: notesOpen ? "Скрыть заметки" : notes.length ? "Заметки" : "+ Заметка со временем", onSelect: onToggleNotes },
+            { label: linkOpen ? "Скрыть настройки" : topic.url ? "Ссылка и длительность" : "+ Ссылка, длительность", onSelect: onToggleLink },
+            { label: "Удалить урок", danger: true, onSelect: onRemoveTopic },
+          ]}
+        />
       </div>
 
       <Collapsible open={linkOpen}>
-        <div style={styles.notesPanel}>
+        <div className="ap-note-panel" style={styles.notesPanel}>
           <div style={styles.noteForm}>
             <input
               type="url"
-              placeholder="https://..."
+              placeholder="Ссылка на урок: https://..."
               value={urlDraft}
               onChange={(e) => setUrlDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSetUrl(urlDraft)}
               style={styles.noteInput}
+              aria-label="Ссылка на урок"
             />
-            <button onClick={() => onSetUrl(urlDraft)} style={styles.addBtnSmall}>
+            <input
+              type="number"
+              min="5"
+              step="5"
+              value={minsDraft}
+              onChange={(e) => setMinsDraft(e.target.value)}
+              style={styles.smallNumInput}
+              aria-label="Длительность урока, минут"
+            />
+            <span style={styles.hUnit}>мин</span>
+            <button
+              onClick={() => {
+                onSetUrl(urlDraft);
+                onDurationChange(minsDraft);
+                onToggleLink();
+              }}
+              style={styles.addBtnSmall}
+            >
               Сохранить
             </button>
-            {topic.url && (
-              <button
-                onClick={() => {
-                  setUrlDraft("");
-                  onSetUrl("");
-                }}
-                style={styles.removeBtn}
-                title="Убрать ссылку"
-              >
-                ×
-              </button>
-            )}
           </div>
         </div>
       </Collapsible>
 
       <Collapsible open={notesOpen}>
-        <div style={styles.notesPanel}>
+        <div className="ap-note-panel" style={styles.notesPanel}>
           {notes.map((n) => {
             const bodyOpen = !!openNoteBodies[n.id];
             const hasBody = (n.html && n.html !== "<br>") || (n.files && n.files.length);
@@ -4931,15 +5150,16 @@ function TopicItem({
                   <button
                     onClick={() => setOpenNoteBodies((prev) => ({ ...prev, [n.id]: !bodyOpen }))}
                     style={styles.noteChevron}
-                    title="Конспект и файлы"
+                    aria-expanded={bodyOpen}
+                    aria-label={(bodyOpen ? "Свернуть конспект: " : "Конспект и файлы: ") + n.text}
                   >
                     {bodyOpen ? "▾" : "▸"}
                   </button>
-                  <span style={styles.noteDate}>{new Date(n.date).toLocaleDateString("ru-RU")}</span>
+                  <span style={styles.noteDate}>{new Date(n.date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
                   <span style={styles.noteText}>{n.text}</span>
-                  {!bodyOpen && hasBody && <span style={styles.noteHasBody}>✎</span>}
+                  {!bodyOpen && hasBody && <span style={styles.noteHasBody}>конспект</span>}
                   <span style={styles.noteMins}>{n.minutes} мин</span>
-                  <button onClick={() => onRemoveNote(n.id)} style={styles.removeBtn}>
+                  <button onClick={() => onRemoveNote(n.id)} style={styles.removeBtn} aria-label={"Удалить заметку: " + n.text}>
                     ×
                   </button>
                 </div>
@@ -4970,10 +5190,17 @@ function TopicItem({
           <div style={styles.noteForm}>
             <input
               type="text"
-              placeholder="Например: законспектировал, осталось выучить конспект"
+              placeholder="Например: законспектировал, осталось выучить"
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onAddNote(noteText, noteMins);
+                  setNoteText("");
+                }
+              }}
               style={styles.noteInput}
+              aria-label="Заметка к уроку"
             />
             <input
               type="number"
@@ -4982,7 +5209,7 @@ function TopicItem({
               value={noteMins}
               onChange={(e) => setNoteMins(e.target.value)}
               style={styles.smallNumInput}
-              title="Затраченное время, минут"
+              aria-label="Затраченное время, минут"
             />
             <span style={styles.hUnit}>мин</span>
             <button
@@ -5016,23 +5243,29 @@ function AddTopicForm({ onAdd, color }) {
     <div style={styles.addTopicRow}>
       <input
         type="text"
-        placeholder="Добавить свой урок"
+        placeholder="+ Добавить урок"
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submit()}
         style={styles.addTopicInput}
+        aria-label="Название нового урока"
       />
-      <input
-        type="url"
-        placeholder="Ссылка (необязательно)"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && submit()}
-        style={styles.addTopicUrlInput}
-      />
-      <button onClick={submit} style={{ ...styles.addBtn, background: color }}>
-        +
-      </button>
+      {val.trim() && (
+        <input
+          type="url"
+          placeholder="Ссылка (необязательно)"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          style={styles.addTopicUrlInput}
+          aria-label="Ссылка на новый урок"
+        />
+      )}
+      {val.trim() && (
+        <button onClick={submit} style={{ ...styles.addBtn, background: color, color: "#fff" }}>
+          Добавить
+        </button>
+      )}
     </div>
   );
 }
@@ -5960,6 +6193,64 @@ const NEW_MOBILE_CSS = `
 `;
 
 const styles = {
+  // «Подготовка», вариант A.
+  studyGrid: { display: "grid", gridTemplateColumns: "288px minmax(0, 1fr)", gap: 22, alignItems: "start" },
+  studyLeft: { display: "flex", flexDirection: "column", gap: 14, position: "sticky", top: 16 },
+  studyList: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 8, display: "flex", flexDirection: "column", gap: 2 },
+  studyRow: { display: "block", width: "100%", padding: "11px 12px 12px", border: "none", borderRadius: 12, textAlign: "left", color: "var(--ink)", cursor: "pointer" },
+  studyRowTop: { display: "flex", alignItems: "center", gap: 10 },
+  studyRowName: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500 },
+  studyRowCount: { fontSize: 12.5, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
+  studyRowTrack: { display: "block", height: 4, borderRadius: 999, background: "var(--line2)", margin: "8px 0 0 19px", overflow: "hidden" },
+  studyRowFill: { display: "block", height: "100%", borderRadius: 999 },
+  studyReview: { background: "var(--warmBg)", borderRadius: 16, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 },
+  studyReviewHead: { fontSize: 13, fontWeight: 600, color: "var(--warmInk)" },
+  studyReviewRow: { display: "flex", alignItems: "center", gap: 10 },
+  studyReviewBtn: { flexShrink: 0, minHeight: 34, padding: "0 12px", border: "none", borderRadius: 9, background: "var(--btnBg)", color: "var(--btnInk)", fontSize: 12.5, fontWeight: 600 },
+  studyDetail: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "24px 28px 26px", display: "flex", flexDirection: "column", gap: 16, minWidth: 0 },
+  studyBack: { alignSelf: "flex-start", alignItems: "center", gap: 4, minHeight: 40, padding: "0 6px 0 0", border: "none", background: "none", color: "var(--ink3)", fontSize: 15 },
+  studyHead: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  studyTitle: { margin: 0, flex: 1, minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 30, lineHeight: 1.15 },
+  studyMeta: { fontSize: 14, color: "var(--ink3)" },
+  menuColor: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "var(--ink)", cursor: "pointer", minHeight: 36 },
+  studyTrack: { height: 8, borderRadius: 999, background: "var(--line2)", overflow: "hidden", marginTop: -4 },
+  studyFill: { height: "100%", borderRadius: 999 },
+  studyTabsRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  studyTabs: { display: "flex", gap: 2, padding: 3, borderRadius: 11, background: "var(--line2)" },
+  studyTab: { minHeight: 36, padding: "0 14px", border: "none", borderRadius: 8, background: "transparent", color: "var(--ink2)", fontSize: 14 },
+  studyTabOn: { background: "var(--panel2)", color: "var(--ink)", fontWeight: 600, boxShadow: "0 1px 2px rgba(34,32,27,.08)" },
+  studyTabN: { color: "var(--ink3)", fontWeight: 400, marginLeft: 2 },
+  studyHide: { display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", fontSize: 13.5, color: "var(--ink2)", minHeight: 36 },
+  nextCard: { display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", padding: "16px 18px", borderRadius: 14, background: "var(--accentSoft)" },
+  nextLabel: { fontSize: 12, fontWeight: 600, color: "var(--warmInk)", letterSpacing: "0.03em" },
+  nextName: { fontFamily: "var(--serif)", fontSize: 22, lineHeight: 1.25, marginTop: 4 },
+  nextMeta: { fontSize: 13, color: "var(--ink3)", marginTop: 2 },
+  nextActions: { display: "flex", gap: 8, flexWrap: "wrap" },
+  nextOpen: { display: "inline-flex", alignItems: "center", minHeight: 42, padding: "0 16px", borderRadius: 11, background: "var(--btnBg)", color: "var(--btnInk)", fontSize: 14, fontWeight: 600, textDecoration: "none" },
+  nextGhost: { minHeight: 42, padding: "0 14px", border: "1px solid var(--warmLine)", borderRadius: 11, background: "transparent", color: "var(--ink)", fontSize: 14 },
+  doneCard: { padding: "14px 18px", borderRadius: 14, background: "var(--greenSoft)", color: "var(--green)", fontSize: 14.5, fontWeight: 600 },
+  lessonList: { display: "flex", flexDirection: "column" },
+  showDone: { alignSelf: "flex-start", minHeight: 38, marginTop: 6, padding: "0 12px", border: "none", borderRadius: 10, background: "none", color: "var(--accent)", fontSize: 13.5, fontWeight: 500 },
+  studyNotebook: { margin: "0 -28px -26px", borderTop: "1px solid var(--line)", borderRadius: "0 0 var(--radius) var(--radius)", overflow: "hidden" },
+  notesAll: { display: "flex", flexDirection: "column" },
+  notesAllRow: { display: "flex", alignItems: "flex-start", gap: 14, padding: "12px 0", borderTop: "1px solid var(--line2)", fontSize: 14.5, lineHeight: 1.45 },
+  notesAllDate: { width: 64, flexShrink: 0, fontSize: 13, color: "var(--mute)", paddingTop: 1 },
+  notesAllTopic: { display: "block", fontSize: 12.5, color: "var(--ink3)", marginTop: 2 },
+  notesAllMins: { flexShrink: 0, fontSize: 13, color: "var(--ink3)" },
+  topicRowNext: { background: "var(--warmBg)", margin: "0 -12px", padding: "4px 12px", borderRadius: 10 },
+  topicCheck: { width: 19, height: 19, margin: 0, flexShrink: 0 },
+  topicNum: { width: 22, flexShrink: 0, fontSize: 13, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
+  topicName: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 1.4, overflowWrap: "anywhere" },
+  noteBadge: { flexShrink: 0, minHeight: 26, padding: "0 10px", border: "none", borderRadius: 13, background: "var(--neutralBg)", color: "var(--ink2)", fontSize: 12, cursor: "pointer" },
+  topicMins: { flexShrink: 0, width: 58, textAlign: "right", fontSize: 13, color: "var(--ink3)" },
+  // «Тетради», вариант A: три колонки в одной рамке.
+  notesShell: { display: "grid", gridTemplateColumns: "228px minmax(0, 1fr)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", overflow: "hidden", minHeight: 640 },
+  notesSide: { padding: "18px 10px", background: "var(--neutralBg)", borderRight: "1px solid var(--line)", minWidth: 0 },
+  notesMain: { minWidth: 0, display: "flex", flexDirection: "column" },
+  notesChips: { gap: 8, padding: "12px 14px", overflowX: "auto", borderBottom: "1px solid var(--line)", scrollbarWidth: "none" },
+  notesChip: { display: "flex", alignItems: "center", gap: 7, flexShrink: 0, minHeight: 38, padding: "0 14px", border: "1px solid var(--line)", borderRadius: 999, background: "var(--panel2)", color: "var(--ink)", fontSize: 14, whiteSpace: "nowrap" },
+  notesOrder: { padding: "14px 14px 16px", borderBottom: "1px solid var(--line)" },
+  notesChipOn: { background: "var(--btnBg)", borderColor: "var(--btnBg)", color: "var(--btnInk)", fontWeight: 600 },
   // Оболочка: колонка навигации слева, экран справа. На телефоне колонка
   // превращается в полосу сверху — это делает таблица стилей выше.
   shell: { display: "flex", alignItems: "flex-start", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", position: "relative", fontFamily: "var(--sans)" },
@@ -6843,8 +7134,8 @@ const styles = {
   miniTrack: { height: 6, background: "var(--line)", borderRadius: 999, marginTop: 8, overflow: "hidden" },
   miniFill: { height: "100%", borderRadius: 999 },
   topicList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 5, maxHeight: 420, overflowY: "auto" },
-  topicBlock: { borderBottom: "1px solid var(--line2)", paddingBottom: 5 },
-  topicRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, padding: "8px 10px", borderRadius: 10, border: "1px solid transparent", flexWrap: "wrap" },
+  topicBlock: { borderTop: "1px solid var(--line2)" },
+  topicRow: { display: "flex", alignItems: "center", gap: 12, minHeight: 50, padding: "4px 0", fontSize: 15 },
   topicLabel: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: "1 1 160px", minWidth: 0 },
   topicDone: { textDecoration: "line-through", color: "var(--mute)" },
   durationBox: { display: "inline-flex", alignItems: "center", gap: 4 },
@@ -6870,21 +7161,21 @@ const styles = {
     marginRight: -6,
   },
   removeBtn: { marginLeft: 2, background: "none", border: "none", color: "var(--red)", fontSize: 16, lineHeight: 1, padding: "0 4px" },
-  notesPanel: { margin: "4px 0 8px 26px", padding: "8px 10px", background: "var(--panel2)", border: "1px solid var(--line2)", borderRadius: 9 },
+  notesPanel: { margin: "0 0 10px 56px", padding: "12px 14px", background: "var(--neutralBg)", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8 },
   noteBlock: { marginBottom: 6 },
   noteChevron: { background: "none", border: "none", padding: 0, fontSize: 11, color: "var(--mute)", width: 12 },
-  noteHasBody: { fontSize: 11, color: "var(--accent)" },
+  noteHasBody: { fontSize: 12, color: "var(--accent)" },
   noteBody: { display: "flex", flexDirection: "column", gap: 6, margin: "6px 0 10px 14px" },
-  noteRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "3px 0" },
-  noteDate: { color: "var(--mute)", width: 68, flexShrink: 0 },
+  noteRow: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, minHeight: 36 },
+  noteDate: { color: "var(--mute)", width: 64, flexShrink: 0, fontSize: 13 },
   noteText: { flex: 1, color: "var(--ink2)" },
   noteMins: { color: "var(--ink3)", width: 46, flexShrink: 0, textAlign: "right" },
   noteForm: { display: "flex", alignItems: "center", gap: 6, marginTop: 6, flexWrap: "wrap" },
   noteInput: { flex: "1 1 180px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12.5, background: "var(--panel2)" },
   addBtnSmall: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 10, minHeight: 36, padding: "0 14px", fontSize: 13, fontWeight: 600 },
-  addTopicRow: { display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" },
-  addTopicInput: { flex: 1, padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
-  addTopicUrlInput: { flex: "1 1 160px", padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, background: "var(--panel2)" },
+  addTopicRow: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" },
+  addTopicInput: { flex: "1 1 220px", minHeight: 44, padding: "0 14px", border: "1px dashed var(--line)", borderRadius: 12, fontSize: 14.5, background: "transparent", color: "var(--ink)" },
+  addTopicUrlInput: { flex: "1 1 200px", minHeight: 44, padding: "0 14px", border: "1px solid var(--line)", borderRadius: 12, fontSize: 14.5, background: "var(--panel2)", color: "var(--ink)" },
   addBtn: { border: "none", color: "var(--btnInk)", background: "var(--btnBg)", borderRadius: 10, minHeight: 38, padding: "0 16px", fontSize: 13.5, fontWeight: 600 },
   calendarWrap: { marginBottom: 18 },
   calHeader: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 8 },

@@ -1,13 +1,14 @@
 import React, { useRef, useState } from "react";
-import { CardHead } from "./card-head.jsx";
 import { dropIndex } from "./notebook-order.js";
 
 // Список предметов в «Тетрадях». Карандаш в заголовке включает правку:
 // у каждой строки появляются булавка и ручка. Тянуть можно мышью за всю
 // строку, пальцем — за ручку, чтобы по остальной строке список по-прежнему
 // прокручивался. Стрелки ↑/↓ на ручке делают то же с клавиатуры.
-export default function NotebookSubjects({ owners, current, countOf, onPick, onPin, onMove }) {
-  const [editing, setEditing] = useState(false);
+// startEditing и onDone — для телефона: там колонки предметов нет, список
+// открывается сразу в правке по карандашу у чипов, а «Готово» его закрывает.
+export default function NotebookSubjects({ owners, current, countOf, onPick, onPin, onMove, startEditing, onDone }) {
+  const [editing, setEditing] = useState(!!startEditing);
   const [drag, setDrag] = useState(null); // { from, over, mids }
   const rows = useRef([]);
   const pinnedCount = owners.filter((o) => o.pinned).length;
@@ -59,12 +60,17 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
 
   return (
     <>
-      <CardHead id="notes-subjects" title="Предметы" note="Тетрадь есть у каждого предмета — и своего, и лицейского">
+      <div style={S.head}>
+        <span style={S.headTitle}>Предметы</span>
         <button
           type="button"
           onClick={() => {
-            setEditing((v) => !v);
             setDrag(null);
+            if (editing && onDone) {
+              onDone();
+              return;
+            }
+            setEditing((v) => !v);
           }}
           className="ap-row"
           style={{ ...S.iconBtn, ...(editing ? S.iconBtnOn : null) }}
@@ -74,10 +80,47 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
         >
           {editing ? <CheckIcon /> : <PencilIcon />}
         </button>
-      </CardHead>
+      </div>
       {editing && (
         <div style={S.hint}>Булавка поднимает предмет наверх. Порядок — перетаскиванием за ⋮⋮.</div>
       )}
+      {/* В обычном режиме предметы — группами: закреплённые, свои, лицейские.
+          Порядок внутри групп тот же, что задан карандашом. */}
+      {!editing && (
+        <div style={S.groups}>
+          {[
+            ["Закреплённые", owners.filter((o) => o.pinned)],
+            ["Свои предметы", owners.filter((o) => !o.pinned && o.from !== "lyceum")],
+            ["Лицей КЭО", owners.filter((o) => !o.pinned && o.from === "lyceum")],
+          ].filter(([, list]) => list.length).map(([label, list], gi) =>
+            list.length ? (
+              <div key={label} style={S.group}>
+                {/* Первая группа «своих» идёт сразу под заголовком «Предметы» — вторая подпись там лишняя. */}
+                {!(gi === 0 && label === "Свои предметы") && <div style={S.groupLabel}>{label}</div>}
+                {list.map((o) => {
+                  const on = o.key === current;
+                  const count = countOf(o.key);
+                  return (
+                    <button
+                      key={o.key}
+                      type="button"
+                      onClick={() => onPick(o.key)}
+                      aria-current={on ? "true" : undefined}
+                      className="ap-notes-subject"
+                      style={{ ...S.row, ...(on ? S.rowOn : null) }}
+                    >
+                      <span style={{ ...S.dot, background: o.color }} />
+                      <span style={S.name}>{o.name}</span>
+                      <span style={S.count}>{count || ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null
+          )}
+        </div>
+      )}
+      {editing && (
       <div style={S.list} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
         {shown.map(({ o, i }) => {
           const on = o.key === current;
@@ -152,6 +195,7 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
           );
         })}
       </div>
+      )}
     </>
   );
 }
@@ -183,6 +227,13 @@ function PinIcon({ filled }) {
 }
 
 const S = {
+  head: { display: "flex", alignItems: "center", gap: 8, padding: "0 8px 10px" },
+  headTitle: { flex: 1, fontSize: 12, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
+  groups: { display: "flex", flexDirection: "column", gap: 14 },
+  group: { display: "flex", flexDirection: "column", gap: 2 },
+  groupLabel: { padding: "0 10px 4px", fontSize: 11.5, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
+  row: { display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 40, padding: "0 10px", border: "none", borderRadius: 10, background: "transparent", color: "var(--ink)", fontSize: 14, textAlign: "left", cursor: "pointer" },
+  rowOn: { background: "var(--panel2)", fontWeight: 600, boxShadow: "0 1px 2px rgba(34,32,27,.08)" },
   list: { display: "flex", flexDirection: "column", gap: 4 },
   pick: {
     display: "flex",

@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from "react";
 // при монтировании и при смене ветки (docId), — а наружу уходит через onChange.
 const DEFAULT_HIGHLIGHT = "#F2E7B8";
 
-export default function RichText({ docId, html, onChange, placeholder }) {
+export default function RichText({ docId, html, onChange, placeholder, large }) {
   const ref = useRef(null);
   const [focused, setFocused] = useState(false);
   const [highlight, setHighlight] = useState(DEFAULT_HIGHLIGHT);
@@ -64,37 +64,27 @@ export default function RichText({ docId, html, onChange, placeholder }) {
 
   const empty = !html || html === "<br>" || html === "<div><br></div>";
 
+  // Панель — подписями, а не значками: «H», «•—» и «✕ф» приходилось угадывать.
+  // Кнопки с палец высотой; на узком экране панель прокручивается вбок, а не
+  // переносится в три ряда над текстом.
+  const B = (label, title, onClick, extra) => (
+    <button type="button" onMouseDown={keepSelection} onClick={onClick} style={{ ...styles.btn, ...extra }} title={title} aria-label={title}>
+      {label}
+    </button>
+  );
+
   return (
-    <div style={styles.wrap}>
-      <div style={styles.toolbar}>
-        <button onMouseDown={keepSelection} onClick={() => exec("bold")} style={{ ...styles.btn, fontWeight: 700 }} title="Жирный">
-          Ж
-        </button>
-        <button onMouseDown={keepSelection} onClick={() => exec("italic")} style={{ ...styles.btn, fontStyle: "italic" }} title="Курсив">
-          К
-        </button>
-        <button onMouseDown={keepSelection} onClick={() => exec("underline")} style={{ ...styles.btn, textDecoration: "underline" }} title="Подчёркнутый">
-          П
-        </button>
+    <div style={large ? styles.wrapLarge : styles.wrap}>
+      <div role="toolbar" aria-label="Форматирование" className="ap-rt-toolbar" style={large ? styles.toolbarLarge : styles.toolbar}>
+        {B("Ж", "Жирный", () => exec("bold"), { fontWeight: 700 })}
+        {B("К", "Курсив", () => exec("italic"), { fontStyle: "italic" })}
+        {B("П", "Подчёркнутый", () => exec("underline"), { textDecoration: "underline" })}
         <span style={styles.sep} />
-        <button onMouseDown={keepSelection} onClick={() => exec("formatBlock", "<h3>")} style={styles.btn} title="Заголовок">
-          H
-        </button>
-        <button onMouseDown={keepSelection} onClick={() => exec("insertUnorderedList")} style={styles.btn} title="Список">
-          •—
-        </button>
-        <button onMouseDown={keepSelection} onClick={() => exec("insertOrderedList")} style={styles.btn} title="Нумерованный список">
-          1.
-        </button>
+        {B("Заголовок", "Заголовок", () => exec("formatBlock", "<h3>"))}
+        {B("• Список", "Список", () => exec("insertUnorderedList"))}
+        {B("1. Список", "Нумерованный список", () => exec("insertOrderedList"))}
         <span style={styles.sep} />
-        <button
-          onMouseDown={keepSelection}
-          onClick={() => exec("hiliteColor", highlight)}
-          style={{ ...styles.btn, background: highlight }}
-          title="Выделить выбранным цветом"
-        >
-          ▉
-        </button>
+        {B("Маркер", "Выделить выбранным цветом", () => exec("hiliteColor", highlight), { background: highlight, color: "#22201B" })}
         <input
           type="color"
           value={highlight}
@@ -105,26 +95,19 @@ export default function RichText({ docId, html, onChange, placeholder }) {
             withSelection(() => exec("hiliteColor", color));
           }}
           style={styles.colorInput}
-          title="Цвет выделения"
+          title="Цвет маркера"
+          aria-label="Цвет маркера"
         />
-        <button
-          onMouseDown={keepSelection}
-          onClick={() => exec("hiliteColor", "transparent")}
-          style={styles.btn}
-          title="Снять выделение"
-        >
-          ▢
-        </button>
-        <button onMouseDown={keepSelection} onClick={() => exec("removeFormat")} style={styles.btn} title="Убрать форматирование">
-          ✕ф
-        </button>
+        {B("Без маркера", "Снять выделение", () => exec("hiliteColor", "transparent"))}
+        {B("Очистить", "Убрать форматирование", () => exec("removeFormat"), { color: "var(--ink3)" })}
       </div>
       <div style={styles.editorWrap}>
-        {empty && !focused && <div style={styles.placeholder}>{placeholder || "Конспект, определения, примеры…"}</div>}
+        {empty && !focused && <div style={large ? styles.placeholderLarge : styles.placeholder}>{placeholder || "Конспект, определения, примеры…"}</div>}
         <div
           ref={ref}
           contentEditable
           suppressContentEditableWarning
+          className="ap-rt-editor"
           onInput={() => onChange(ref.current.innerHTML)}
           onPaste={handlePaste}
           onFocus={() => setFocused(true)}
@@ -132,45 +115,58 @@ export default function RichText({ docId, html, onChange, placeholder }) {
             rememberSelection();
             setFocused(false);
           }}
-          style={styles.editor}
+          style={large ? styles.editorLarge : styles.editor}
         />
       </div>
     </div>
   );
 }
-
 const styles = {
-  wrap: { border: "1px solid var(--line)", borderRadius: 5, background: "var(--panel2)", overflow: "hidden" },
+  wrap: { border: "1px solid var(--line)", borderRadius: 12, background: "var(--panel2)", overflow: "hidden" },
+  wrapLarge: { display: "flex", flexDirection: "column", gap: 10 },
   toolbar: {
     display: "flex",
     alignItems: "center",
-    gap: 3,
-    flexWrap: "wrap",
-    padding: "5px 6px",
+    gap: 2,
+    flexWrap: "nowrap",
+    overflowX: "auto",
+    padding: 4,
     borderBottom: "1px solid var(--line2)",
     background: "var(--neutralBg)",
+    scrollbarWidth: "none",
+  },
+  toolbarLarge: {
+    display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap", overflowX: "auto", alignSelf: "flex-start", maxWidth: "100%",
+    padding: 4, border: "1px solid var(--line2)", borderRadius: 12, background: "var(--panel2)", scrollbarWidth: "none",
   },
   btn: {
-    border: "1px solid var(--line)",
-    background: "var(--panel2)",
-    borderRadius: 3,
-    minWidth: 26,
-    padding: "3px 6px",
-    fontSize: 12,
-    color: "var(--ink)",
-    lineHeight: 1.2,
+    flexShrink: 0,
+    border: "none",
+    background: "transparent",
+    borderRadius: 8,
+    minWidth: 34,
+    height: 34,
+    padding: "0 9px",
+    fontSize: 13,
+    color: "var(--ink2)",
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
   },
-  sep: { width: 1, height: 16, background: "var(--line)", margin: "0 3px" },
+  sep: { flexShrink: 0, width: 1, height: 18, background: "var(--line)", margin: "0 4px" },
   colorInput: {
-    width: 28,
-    height: 24,
+    flexShrink: 0,
+    width: 30,
+    height: 30,
     padding: 0,
     border: "1px solid var(--line)",
-    borderRadius: 3,
-    background: "var(--panel2)",
+    borderRadius: 8,
+    background: "transparent",
     cursor: "pointer",
   },
   editorWrap: { position: "relative" },
-  placeholder: { position: "absolute", top: 10, left: 10, fontSize: 13, color: "var(--railInk2)", pointerEvents: "none" },
-  editor: { minHeight: 110, padding: 10, fontSize: 13.5, lineHeight: 1.6, outline: "none", overflowWrap: "anywhere" },
+  placeholder: { position: "absolute", top: 12, left: 12, fontSize: 14, color: "var(--mute)", pointerEvents: "none" },
+  placeholderLarge: { position: "absolute", top: 2, left: 0, fontSize: 16, color: "var(--mute)", pointerEvents: "none" },
+  editor: { minHeight: 110, padding: 12, fontSize: 14.5, lineHeight: 1.6, outline: "none", overflowWrap: "anywhere" },
+  editorLarge: { minHeight: 260, padding: "2px 0", fontSize: 16, lineHeight: 1.7, outline: "none", overflowWrap: "anywhere", maxWidth: 760 },
 };

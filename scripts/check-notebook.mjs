@@ -47,19 +47,26 @@ const refocus = () => page.evaluate(() => { window.dispatchEvent(new Event("focu
 const stored = () => page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).notebooks || {});
 const branchesIn = (nb) => Object.values(nb).flat().flatMap((b) => b.branches || []);
 
+// Тетрадь с 1.2.0 — оглавление слева, открытая ветка справа (notebook-workspace.jsx).
+const outline = page.locator(".ap-nbw-outline");
+const branchTitle = () => page.getByLabel("Название ветки").inputValue().catch(() => "");
+
 // 1. Блок и ветка, и сразу — возвращение в окно, пока сохранение ещё не прошло.
+await page.getByRole("button", { name: "+ Новый блок" }).click();
 await page.getByPlaceholder(/Название блока/).fill("Теория государства");
-await page.getByRole("button", { name: "+ Блок" }).click();
+await page.keyboard.press("Enter");
 await refocus();
+// После нового блока сразу просится первая ветка.
 await page.getByPlaceholder(/Название ветки/).fill("Признаки государства");
-await page.getByRole("button", { name: "+ Ветка" }).click();
+await page.keyboard.press("Enter");
 await refocus();
 await page.waitForTimeout(300);
-want("блок не пропал после возвращения в окно", (await page.locator('input[value="Теория государства"]').count()) === 1);
-want("ветка не пропала после возвращения в окно", (await page.locator('input[value="Признаки государства"]').count()) === 1);
+want("блок не пропал после возвращения в окно", (await outline.getByText("Теория государства", { exact: true }).count()) === 1);
+want("ветка не пропала после возвращения в окно", (await outline.getByRole("button", { name: /Признаки государства/ }).count()) === 1);
+want("новая ветка открыта в редакторе", (await branchTitle()) === "Признаки государства");
 
 // 2. Пишем конспект и прикрепляем файл; диалог выбора файла возвращает фокус окну.
-const editor = page.locator("[contenteditable]").first();
+const editor = page.locator(".ap-rt-editor").first();
 await editor.click();
 await page.keyboard.type("Суверенитет, территория, население");
 await page.locator('input[type="file"]').first().setInputFiles({ name: "схема.txt", mimeType: "text/plain", buffer: Buffer.from("публичная власть") });
@@ -85,14 +92,9 @@ want("оба файла сохранены", br && (br.files || []).map((f) => f
 want("конспект сохранён", br && /население\. Налоги/.test(br.html || ""), br && br.html);
 await page.reload();
 await page.waitForTimeout(1800);
-// Блоки и ветки после перезагрузки свёрнуты — раскрываем.
-await page.locator('input[value="Теория государства"]').locator("xpath=..").getByRole("button").first().click();
-await page.waitForTimeout(300);
-want("после перезагрузки ветка на месте", (await page.locator('input[value="Признаки государства"]').count()) === 1);
+want("после перезагрузки ветка на месте", (await outline.getByRole("button", { name: /Признаки государства/ }).count()) === 1 && (await branchTitle()) === "Признаки государства");
 
 // 5. Удаление файла — только того, что убрали.
-await page.locator('input[value="Признаки государства"]').locator("xpath=..").getByRole("button").first().click();
-await page.waitForTimeout(300);
 // Файл лежит в памяти браузера под своим ключом — по нему видно, стёрт ли он.
 const fileKept = (key) => page.evaluate((k) => localStorage.getItem("planner:" + k) !== null, key);
 const before = branchesIn(await stored()).find((b) => b.title === "Признаки государства");
@@ -184,9 +186,12 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
 
   const kept = await p.locator("[data-subject]").evaluateAll((els) => els.map((e) => e.dataset.subject).join(","));
   await p.getByRole("button", { name: "Готово" }).click();
-  want("в обычном виде видна булавка", (await p.getByLabel("закреплён").count()) === 1);
-  await p.getByRole("button", { name: /^Химия/ }).click();
-  want("предмет по-прежнему выбирается", (await p.getByLabel("Предмет тетради").inputValue()) === "lyceum:Химия");
+  // В обычном виде (1.2.0) закреплённые — своей группой сверху.
+  const normal = await p.locator(".ap-notes-subject").evaluateAll((els) => els.map((e) => e.innerText.trim()));
+  want("в обычном виде закреплённые — своей группой сверху", (await p.getByText("Закреплённые", { exact: true }).count()) === 1 && /^История/.test(normal[0] || ""), normal.join(" | "));
+  await p.locator(".ap-notes-subject", { hasText: "Химия" }).click();
+  await p.waitForTimeout(200);
+  want("предмет по-прежнему выбирается", /Химия/.test(await p.locator(".ap-nbw-outline").innerText()) && (await p.locator('.ap-notes-subject[aria-current="true"]').innerText()).includes("Химия"));
   await p.waitForTimeout(1500);
   const stored = await p.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).notebookOrder);
   want("порядок сохранён", stored && stored.pinned && stored.pinned.includes("lyceum:История"), JSON.stringify(stored));
@@ -252,16 +257,16 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   await p.waitForTimeout(1800);
   const countdownShown = () => p.getByText("до события").evaluateAll((els) => els.filter((e) => e.offsetParent).length);
   want("телефон: на «Тетрадях» нет отсчёта до события", (await countdownShown()) === 0);
-  const blockBtn = p.getByRole("button", { name: "Раскрыть блок: Теория государства" });
+  // Телефон (1.2.0): сначала оглавление, потом ветка; назад — «Оглавление».
+  const blockBtn = p.locator(".ap-nbw-outline").getByRole("button", { name: /^Теория государства/ }).first();
   const bb = await blockBtn.boundingBox();
-  want("телефон: кнопка раскрытия блока — с палец", bb && bb.width >= 32 && bb.height >= 32, bb ? Math.round(bb.width) + "×" + Math.round(bb.height) : "нет");
-  await blockBtn.tap();
-  await p.waitForTimeout(300);
-  const branchBtn = p.getByRole("button", { name: "Раскрыть ветку: Признаки" });
+  want("телефон: строка блока — с палец", bb && bb.height >= 36, bb ? Math.round(bb.width) + "×" + Math.round(bb.height) : "нет");
+  const branchBtn = p.locator(".ap-nbw-outline").getByRole("button", { name: /Признаки/ });
   const rb = await branchBtn.boundingBox();
-  want("телефон: кнопка раскрытия ветки — с палец", rb && rb.width >= 32 && rb.height >= 32, rb ? Math.round(rb.width) + "×" + Math.round(rb.height) : "нет");
+  want("телефон: строка ветки — с палец", rb && rb.height >= 44, rb ? Math.round(rb.width) + "×" + Math.round(rb.height) : "нет");
   await branchBtn.tap();
   await p.waitForTimeout(400);
+  want("телефон: ветка открылась отдельным шагом", (await p.locator(".ap-nbw-outline").isHidden()) && (await p.getByRole("button", { name: "Оглавление" }).isVisible()));
   const wide = await p.evaluate(() => document.documentElement.scrollWidth);
   want("телефон: страница не шире экрана", wide <= 390, wide + " px");
   const name = p.locator("span", { hasText: longName }).first();
