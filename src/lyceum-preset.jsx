@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Collapsible from "./collapsible.jsx";
 import {
   SCHOOLS,
@@ -19,8 +19,12 @@ import {
 //
 // Собранные уроки помечаются меткой набора, и «Применить» заменяет только их:
 // то, что вы завели руками, остаётся на месте.
-export default function SchedulePreset({ choices, onChoices, onApply, onClear, appliedCount, locked, onSignIn }) {
+export default function SchedulePreset({ choices, onChoices, onApply, onClear, appliedCount, locked, onSignIn, openRequest }) {
   const [open, setOpen] = useState(false);
+  // Из окна «Расписание лицея изменилось» → «Выбрать»: панель раскрывается сама.
+  useEffect(() => {
+    if (openRequest) setOpen(true);
+  }, [openRequest]);
   const school = choices.school || "";
   const groups = choices.groups || {};
   const specs = choices.specs || [];
@@ -31,8 +35,8 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     [school, tiers]
   );
   const preview = useMemo(
-    () => (school ? buildSchedule({ school, groups, specs }) : []),
-    [school, groups, specs]
+    () => (school ? buildSchedule({ school, groups, specs, tiers }) : []),
+    [school, groups, specs, tiers]
   );
 
   // Группу, которой у школы нет, спрашивать незачем — но и хранить тоже:
@@ -111,7 +115,7 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
             ? "нужен вход в аккаунт"
             : appliedCount > 0
             ? `в расписании ${appliedCount} уроков из набора`
-            : "3 курс · 10 класс · 1-е полугодие"}
+            : "3 курс · 10 класс · сетка с 28 сентября"}
         </span>
       </div>
 
@@ -192,8 +196,8 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
               })}
 
               <div style={styles.field}>
-                <div style={styles.label}>Спецкурсы</div>
-                <div style={styles.hint}>Отмечайте те, на которые ходите: они встанут седьмым-восьмым уроком и в субботу.</div>
+                <div style={styles.label}>Олимпиадные треки</div>
+                <div style={styles.hint}>Отмечайте те, на которые ходите: они встанут седьмым-восьмым уроком, вечером и в субботу, а если трек идёт в учебные часы — рядом с уроком.</div>
                 <div style={styles.pills}>
                   {SPECS.map((s) => (
                     <button

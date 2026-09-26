@@ -26,6 +26,8 @@ import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js"
 import { THEME_CSS, useThemeMode } from "./theme.js";
 import ReleaseNotesDialog from "./release-notes.jsx";
 import IntroDialog from "./intro-dialog.jsx";
+import ScheduleNews from "./schedule-news.jsx";
+import { carryLessonSettings, moveHomework } from "./schedule-switch.js";
 import Background from "./background.jsx";
 import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
@@ -219,6 +221,11 @@ function writeCalendarSeq(memory) {
   }
 }
 
+const SCHEDULE_NEWS_KEY = "planner-schedule-news";
+// Сборка для проверки перед выкладкой: без облака (VITE_SANDBOX=1 и пустые
+// ключи Supabase). Всё, что в ней делают, остаётся в ней и не трогает данные
+// в облаке; на сайте плашки нет.
+const SANDBOX = import.meta.env.VITE_SANDBOX === "1";
 const TASK_FOLDS_KEY = "planner-task-folds";
 function readTaskFolds() {
   try {
@@ -651,6 +658,32 @@ export default function StudyPlanner() {
   const [voshPicks, setVoshPicks] = useState(DEFAULT_VOSH);
   // Какой выпуск встроенных данных лицея уже разложен в расписании.
   const [lyceumRevision, setLyceumRevision] = useState(LYCEUM_REVISION);
+  // Окно «Расписание лицея изменилось» — висит, пока его не закроют, и
+  // переживает перезагрузку. Это удобство устройства, в облако не едет.
+  const [scheduleNews, setScheduleNews] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SCHEDULE_NEWS_KEY) || "null");
+    } catch (e) {
+      return null;
+    }
+  });
+  const [presetOpenRequest, setPresetOpenRequest] = useState(0);
+  function showScheduleNews(news) {
+    setScheduleNews(news);
+    try {
+      localStorage.setItem(SCHEDULE_NEWS_KEY, JSON.stringify(news));
+    } catch (e) {
+      /* приватное окно — окно покажется до перезагрузки */
+    }
+  }
+  function closeScheduleNews() {
+    setScheduleNews(null);
+    try {
+      localStorage.removeItem(SCHEDULE_NEWS_KEY);
+    } catch (e) {
+      /* не страшно */
+    }
+  }
   const [query, setQuery] = useState("");
   // Сколько записей дневника показано. Разом рисовать весь год — это
   // полсекунды на телефоне при переходе на экран, а дальше первого десятка
@@ -1763,14 +1796,23 @@ export default function StudyPlanner() {
   const sundayLessons = useMemo(() => lyceumSchedule.filter((e) => e.day === "sun").length, [lyceumSchedule]);
 
   // Экзамен — не предмет: тетрадь и цвет ему ни к чему, он живёт только в расписании.
+  // Лицейские предметы — из расписания и из тетрадей. Тетрадь привязана к
+  // названию предмета, а не к уроку: если сетка сменится и предмета в ней не
+  // станет, его тетрадь с записями всё равно останется в списке, а не
+  // пропадёт вместе с уроками.
   const lyceumSubjectNames = useMemo(() => {
     const names = [];
     lyceumSchedule.forEach((e) => {
       if (e.kind === "exam") return;
       if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
     });
+    Object.keys(notebooks).forEach((k) => {
+      if (!k.startsWith("lyceum:") || !(notebooks[k] || []).length) return;
+      const name = k.slice("lyceum:".length);
+      if (name && !names.includes(name)) names.push(name);
+    });
     return names.sort((a, b) => a.localeCompare(b, "ru"));
-  }, [lyceumSchedule]);
+  }, [lyceumSchedule, notebooks]);
 
   function addEvent(name, date, priority) {
     if (!name.trim() || !date) return;
@@ -1963,41 +2005,34 @@ export default function StudyPlanner() {
       return;
     }
 
-    // Важность и роль урока человек мог поменять под себя — переносим их на
-    // новые записи, а не сбрасываем на умолчание.
-    const key = (e) => e.day + "|" + e.start + "|" + e.subjectName;
-    const was = new Map(mine.map((e) => [key(e), e]));
-    const next = fresh.map((e) => {
-      const old = was.get(key(e));
-      return old
-        ? { ...e, priority: old.priority, level: old.level, ...(old.folded ? { folded: true } : null), ...(old.note ? { note: old.note } : null) }
-        : e;
-    });
-    // Задание привязано к уроку по идентификатору: если урок пересобрался под
-    // новым, привязку надо перенести, иначе задание повиснет в пустоте.
-    const moved = new Map();
-    next.forEach((e) => {
-      const old = was.get(key(e));
-      if (old && old.id !== e.id) moved.set(old.id, e.id);
-    });
-
-    const before = lyceumSchedule;
+    // Важность, роль и описание урока — свойства предмета: переносим их на
+    // новые уроки того же предмета, даже если урок сменил день и час.
+    // Задания — на новый урок своего предмета в ту же неделю
+    // (src/schedule-switch.js). Список предметов и тетради не трогаются.
+    const next = carryLessonSettings(fresh, mine);
+    const today = todayStr();
+    const { moves } = moveHomework(homework, mine, next, today);
     setLyceumSchedule((prev) => [...prev.filter((e) => !e.preset), ...next]);
-    if (moved.size) {
-      setHomework((prev) => prev.map((h) => (moved.has(h.lessonId) ? { ...h, lessonId: moved.get(h.lessonId) } : h)));
-    }
+    setHomework((prev) => moveHomework(prev, mine, next, today).homework);
     setLyceumRevision(LYCEUM_REVISION);
 
-    const added = next.filter((e) => !was.has(key(e))).length;
-    const gone = mine.filter((e) => !next.some((n) => key(n) === key(e))).length;
-    if (added || gone) {
-      const parts = [added ? "добавилось " + added : "", gone ? "убралось " + gone : ""].filter(Boolean);
-      showUndo("Расписание лицея обновлено: " + parts.join(", "), () => {
-        setLyceumSchedule(before);
-        setLyceumRevision(LYCEUM_REVISION);
-      });
+    const key = (e) => e.day + "|" + e.start + "|" + e.subjectName;
+    const was = new Set(mine.map(key));
+    const now = new Set(next.map(key));
+    const changed = next.some((e) => !was.has(key(e))) || mine.some((e) => !now.has(key(e)));
+    if (!changed && !moves.length) return;
+    // Физкультура с 28 сентября — по группам: этот выбор новый, его и просим.
+    const need = [];
+    if (presetChoices.school && has(PRESET_ID) && !(presetChoices.groups || {}).pe) {
+      need.push("Группу физкультуры — теперь она по академическим группам, у девочек и мальчиков свои преподаватели.");
     }
-  }, [loaded, lyceumRevision, lyceumSchedule, presetChoices, examPicks, voshPicks, showUndo]);
+    showScheduleNews({
+      lessons: next.filter((e) => e.preset === PRESET_ID).length,
+      moves,
+      need,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, lyceumRevision, lyceumSchedule, presetChoices, examPicks, voshPicks]);
 
   function addScheduleEntry(day, entry) {
     if (!entry.subjectName || !entry.subjectName.trim()) return;
@@ -2832,16 +2867,19 @@ export default function StudyPlanner() {
           .ap-notes-chips { display: flex !important; }
           .ap-notes-order { display: block; }
           .ap-rt-toolbar { flex-wrap: nowrap !important; }
-        }
-        @media (max-width: 560px) {
-          .ap-topic-mins { display: none; }
-        }
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
           .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
           /* Подзаголовок экрана на телефоне пересказывает название вкладки,
              которое и так подсвечено внизу, и занимает две строки. */
           .ap-head-note { display: none; }
+        }
+        /* Отдельным блоком после телефонного: в 1.2.0 он встал внутрь, закрыл
+           телефонный раньше времени, и правила «одна колонка» и «без
+           подзаголовка» заработали на любом экране — «Дневник» и «События»
+           вытянулись в одну колонку и на компьютере. */
+        @media (max-width: 560px) {
+          .ap-topic-mins { display: none; }
         }
       `}</style>
 
@@ -2874,6 +2912,13 @@ export default function StudyPlanner() {
       />
 
       <main className="ap-main" style={styles.main}>
+        {SANDBOX && (
+          <div style={styles.sandbox} role="note">
+            <b>Превью для проверки.</b> Облако здесь отключено: всё, что вы делаете, остаётся только в этом превью и не
+            трогает ваши записи. Чтобы проверить на своих данных: на сайте «Синхронизация» → «Резервная копия» →
+            «Скопировать», здесь — то же место, «Импорт».
+          </div>
+        )}
         {homeworkReminders.length > 0 && (
           <div style={styles.hwBanner}>
             <div style={styles.hwBannerBody}>
@@ -4026,6 +4071,7 @@ export default function StudyPlanner() {
             </div>
 
             <h3 style={styles.subHead}>Расписание</h3>
+            <div data-focus-id="preset">
             <SchedulePreset
               choices={presetChoices}
               onChoices={setPresetChoices}
@@ -4034,7 +4080,9 @@ export default function StudyPlanner() {
               appliedCount={presetLessons}
               locked={presetLocked}
               onSignIn={() => goScreen("settings")}
+              openRequest={presetOpenRequest}
             />
+            </div>
             {/* Блок «Контрольные тесты КТ1» убран: тесты прошли 17–23 сентября.
                 Уже добавленные КТ1 остаются в записях как прошедшие экзамены — из
                 недели они скрыты сами, а в «Событиях» их убирает очистка
@@ -4773,6 +4821,21 @@ export default function StudyPlanner() {
         </div>
       </main>
 
+      <ScheduleNews
+        news={scheduleNews}
+        onClose={closeScheduleNews}
+        onPick={
+          scheduleNews && (scheduleNews.need || []).length
+            ? () => {
+                closeScheduleNews();
+                goScreen("school");
+                setPresetOpenRequest(Date.now());
+                setFocusTarget({ id: "preset", at: Date.now() });
+              }
+            : null
+        }
+      />
+
       <IntroDialog
         open={introOpen}
         onClose={() => setIntroOpen(false)}
@@ -5097,7 +5160,7 @@ function TopicItem({
           size={34}
           items={[
             { label: notesOpen ? "Скрыть заметки" : notes.length ? "Заметки" : "+ Заметка со временем", onSelect: onToggleNotes },
-            { label: linkOpen ? "Скрыть настройки" : topic.url ? "Ссылка и длительность" : "+ Ссылка, длительность", onSelect: onToggleLink },
+            { label: linkOpen ? "Скрыть настройки" : topic.url ? "Изменить ссылку и длительность" : "Добавить ссылку, изменить длительность", onSelect: onToggleLink },
             { label: "Удалить урок", danger: true, onSelect: onRemoveTopic },
           ]}
         />
@@ -7237,6 +7300,10 @@ const styles = {
   hwReminderRow: { display: "flex", alignItems: "center", gap: 6, marginLeft: 24, marginBottom: 6 },
   reminderSelect: { padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 11.5, background: "var(--panel2)" },
   reminderDaysInput: { width: 40, padding: "2px 4px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 11.5, background: "var(--panel2)" },
+  sandbox: {
+    marginBottom: 16, padding: "10px 14px", borderRadius: 12, fontSize: 13, lineHeight: 1.5,
+    background: "var(--accentSoft)", border: "1px dashed var(--accent)", color: "var(--ink)",
+  },
   hwBanner: {
     display: "flex",
     alignItems: "stretch",

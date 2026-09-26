@@ -51,7 +51,8 @@ check("в субботу день короче, чем в понедельник
 // Ради этого всё и затевалось: в одну и ту же клетку у разных школ разные
 // уроки, и видно должно быть оба — чтобы ответить другу, у которого своё.
 check("в одной клетке видно уроки всех школ, а не только свои", () => {
-  const rows = lessonsAt("mon", 5);
+  // Сетка с 28 сентября: понедельник, 2 урок — геометрия по трём группам и история.
+  const rows = lessonsAt("mon", 2);
   const names = rows.map((r) => r.subject);
   assert.ok(names.includes("Геометрия"), names.join(", "));
   assert.ok(names.includes("История"), names.join(", "));
@@ -61,7 +62,7 @@ check("в одной клетке видно уроки всех школ, а н
 });
 
 check("у урока всей параллели не пишется, кому он", () => {
-  const rows = lessonsAt("mon", 2);
+  const rows = lessonsAt("mon", 1);
   const talk = rows.find((r) => r.subject === "Разговоры о важном");
   assert.ok(talk);
   assert.strictEqual(talk.who, "");
