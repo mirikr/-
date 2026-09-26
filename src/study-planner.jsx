@@ -37,7 +37,7 @@ import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainer
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
 import { dueTopics, reviewHours, agoWord } from "./repetition.js";
-import { search as searchAll } from "./search.js";
+import { search as searchAll, markParts } from "./search.js";
 import SchedulePreset from "./lyceum-preset.jsx";
 import { KT_PRESET_ID, DEFAULT_KT, buildExams } from "./lyceum-exams-10.js";
 import { VOSH_PRESET_ID, DEFAULT_VOSH, buildOlympiads } from "./lyceum-olympiads.js";
@@ -2461,15 +2461,57 @@ export default function StudyPlanner() {
 
   // Находка ведёт туда, где она живёт: экран, а при надобности — предмет или
   // тетрадь, которые надо там раскрыть.
+  // К чему прокрутить после перехода и что подсветить (data-focus-id).
+  const [focusTarget, setFocusTarget] = useState(null);
+  // Какой блок и ветку тетради раскрыть.
+  const [notebookFocus, setNotebookFocus] = useState(null);
+
   function openFound(item) {
     if (item.subjectId) setOpenSubject(item.subjectId);
     if (item.notebook) setNotebookOwner(item.notebook);
+    if (item.notebookFocus) setNotebookFocus({ ...item.notebookFocus, at: Date.now() });
+    // Задание открывается на своей дате: раньше дневник открывался на сегодня,
+    // и найденное задание приходилось искать ещё раз по календарю.
+    if (item.date && item.screen === "journal") {
+      setSelectedDate(item.date);
+      const d = new Date(item.date + "T00:00:00");
+      setCalMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    }
+    // Урок может стоять только в свёрнутой «Всей неделе» — раскрываем её.
+    if (item.screen === "school") setOpenSections((prev) => ({ ...prev, scheduleWeek: true }));
+    const focus = item.focus === undefined ? item.id : item.focus;
+    setFocusTarget(focus ? { id: focus, at: Date.now() } : null);
     // Найденное задание открывается само, а не «где-то там в тренажёре».
     // Раздел не выставляем, а решённые не прячем: иначе задание, которое искали,
     // на экране не покажется — именно потому, что его уже решали.
     if (item.task) setTrainerState({ open: item.task.subject, section: "", taskId: item.task.id, again: true });
     goScreen(item.screen);
   }
+
+  // Найденное прокручивается в середину экрана и коротко подсвечивается.
+  // Экран и свёрнутые блоки открываются не мгновенно, поэтому ждём элемент
+  // до полутора секунд.
+  useEffect(() => {
+    if (!focusTarget) return undefined;
+    let tries = 0;
+    let flash = null;
+    const selector = '[data-focus-id="' + String(focusTarget.id).replace(/["\\]/g, "\\$&") + '"]';
+    const timer = setInterval(() => {
+      tries += 1;
+      const el = [...document.querySelectorAll(selector)].find((n) => n.offsetParent);
+      if (el || tries > 30) clearInterval(timer);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.remove("ap-flash");
+      void el.offsetWidth;
+      el.classList.add("ap-flash");
+      flash = setTimeout(() => el.classList.remove("ap-flash"), 2200);
+    }, 50);
+    return () => {
+      clearInterval(timer);
+      if (flash) clearTimeout(flash);
+    };
+  }, [focusTarget]);
 
   // Попытка — отдельная запись: по журналу потом видно и серию, и время.
   function addAttempt(entry) {
@@ -2697,6 +2739,9 @@ export default function StudyPlanner() {
         .ap-bar { transform-origin: bottom; animation: ap-grow .7s cubic-bezier(.2,.8,.3,1) both; }
         /* В SVG точка отсчёта трансформации задаётся отдельно, иначе столбец растёт из угла холста. */
         .ap-bar-svg { transform-box: fill-box; transform-origin: bottom; animation: ap-grow .7s cubic-bezier(.2,.8,.3,1) both; }
+        .ap-flash { animation: ap-flash 2.2s ease-out; border-radius: 12px; }
+        @keyframes ap-flash { 0%, 35% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+        @media (prefers-reduced-motion: reduce) { .ap-flash { animation: none; box-shadow: 0 0 0 3px var(--accent); } }
         @keyframes ap-rise { from { opacity: .35; transform: translateY(6px); } to { opacity: 1; transform: none; } }
         @keyframes ap-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
         @keyframes ap-grow { from { transform: scaleY(.02); } to { transform: scaleY(1); } }
@@ -4006,7 +4051,7 @@ export default function StudyPlanner() {
               {selectedDayEntries.map((e) => {
                 const s = anySubjectById.get(e.subjectId);
                 return (
-                  <div key={e.id} style={styles.journalRow}>
+                  <div key={e.id} style={styles.journalRow} data-focus-id={"journal:" + e.id}>
                     <span style={{ ...styles.dot, background: s?.color }} />
                     <span style={styles.jSubj}>{s?.name}</span>
                     <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
@@ -4224,6 +4269,7 @@ export default function StudyPlanner() {
               {currentNotebook ? (
                 <Notebook
                   blocks={notebooks[currentNotebook.key] || []}
+                  focus={notebookFocus}
                   onChange={(blocks) => setNotebook(currentNotebook.key, blocks)}
                   onUndo={showUndo}
                   prefix={"nb-" + currentNotebook.key}
@@ -4254,8 +4300,9 @@ export default function StudyPlanner() {
             )}
             {query.trim().length < 2 ? (
               <p style={styles.muted}>
-                Наберите хотя бы две буквы. Ищется везде сразу: темы подготовки, записи дневника, домашка, события,
-                уроки расписания, текст тетрадей и задания банка ФИПИ. Задание находится по своему номеру —
+                Наберите хотя бы две буквы. Ищется везде сразу: домашка, уроки расписания, события, тетради (и
+                названия файлов), темы и заметки подготовки, записи дневника и задания банка ФИПИ. Можно несколько
+                слов или их начал — «сужде брак» найдёт записи, где есть каждое, в любом порядке. Задание находится по своему номеру —
                 тому самому, что подписан у него в тренажёре, — целиком или по началу; найденное открывается
                 сразу в тренажёре. По условию ищется его начало: опись нарочно лёгкая.
               </p>
@@ -4265,21 +4312,37 @@ export default function StudyPlanner() {
               <>
                 <div style={styles.searchCount}>Нашлось: {found.total}</div>
                 {found.groups.map((group) => (
-                  <div key={group.id} style={styles.searchGroup}>
+                  <div key={group.id} style={styles.searchGroup} data-search-group={group.id}>
+                    {/* Раздел — заметным заголовком со значком: мелкая серая
+                        подпись терялась между карточками находок. */}
                     <div style={styles.searchGroupTitle}>
-                      {group.title}
+                      <span style={styles.searchGroupIcon} aria-hidden="true">
+                        <Icon name={group.icon} size={16} strokeWidth={1.9} />
+                      </span>
+                      <span>{group.title}</span>
                       <span style={styles.searchGroupCount}>{group.total}</span>
+                      <span style={styles.searchGroupLine} aria-hidden="true" />
                     </div>
-                    {group.shown.map((item) => (
-                      <button key={item.id} onClick={() => openFound(item)} className="ap-row" style={styles.searchRow}>
-                        {item.color && <span style={{ ...styles.dot, background: item.color }} />}
-                        <span style={styles.searchRowText}>
-                          <span style={styles.searchRowTitle}>{item.title}</span>
-                          {item.note && <span style={styles.searchRowNote}>{item.note}</span>}
-                          {item.body && <span style={styles.searchRowBody}>{item.body}</span>}
-                        </span>
-                      </button>
-                    ))}
+                    {group.shown.map((item) => {
+                      // Урок и событие подсвечены своей важностью — как на «Сегодня».
+                      const info = item.priority ? priorityInfo(item.priority) : null;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => openFound(item)}
+                          className="ap-row"
+                          style={{ ...styles.searchRow, ...(info ? { ...styles.searchRowMarked, borderLeftColor: info.strong, background: info.tint } : null) }}
+                        >
+                          {item.color && <span style={{ ...styles.dot, background: item.color }} />}
+                          {info && <PriorityMark value={item.priority} height={12} />}
+                          <span style={styles.searchRowText}>
+                            <span style={styles.searchRowTitle}><Marked text={item.title} query={query} /></span>
+                            {item.note && <span style={styles.searchRowNote}><Marked text={item.note} query={query} /></span>}
+                            {item.body && <span style={styles.searchRowBody}><Marked text={item.body} query={query} /></span>}
+                          </span>
+                        </button>
+                      );
+                    })}
                     {group.total > group.shown.length && (
                       <div style={styles.searchMore}>и ещё {group.total - group.shown.length} — уточните запрос</div>
                     )}
@@ -4685,6 +4748,7 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
       <div
         key={e.id}
         className="ap-row"
+        data-focus-id={"event:" + e.id}
         style={{
           ...styles.eventEditRow,
           opacity: isPast ? 0.55 : 1,
@@ -4784,7 +4848,7 @@ function TopicItem({
   const notes = topic.notes || [];
 
   return (
-    <div style={styles.topicBlock}>
+    <div style={styles.topicBlock} data-focus-id={"topic:" + topic.id}>
       <div className="topic-row" style={styles.topicRow}>
         <label style={styles.topicLabel}>
           <input type="checkbox" checked={topic.done} onChange={onToggleDone} />
@@ -5152,7 +5216,7 @@ function ScheduleDay({ day, label, entries, today, wide, onAdd, onUpdate, onRemo
         {entries.map((e) => {
           const list = tasks ? tasks.forLesson(e) : [];
           return (
-            <div key={e.id}>
+            <div key={e.id} data-focus-id={"lesson:" + e.id}>
               <ScheduleEntryRow
                 entry={e}
                 onUpdate={onUpdate}
@@ -5730,13 +5794,26 @@ function HomeworkAddForm({ onAdd, placeholder }) {
   );
 }
 
+// Найденный кусок текста — подсвечен, как маркером.
+function Marked({ text, query }) {
+  return markParts(text, query).map((part, i) =>
+    part.hit ? (
+      <mark key={i} style={styles.searchMark}>
+        {part.text}
+      </mark>
+    ) : (
+      <React.Fragment key={i}>{part.text}</React.Fragment>
+    )
+  );
+}
+
 function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
   const fileInputRef = useRef(null);
   const reminderMode = hw.reminderDays === "always" ? "always" : !hw.reminderDays || hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
 
   return (
-    <div style={styles.homeworkItemBlock}>
+    <div style={styles.homeworkItemBlock} data-focus-id={"hw:" + hw.id}>
       <div style={styles.homeworkItemRow}>
         <input type="checkbox" checked={!!hw.done} onChange={onToggleDone} />
         <span style={hw.done ? { ...styles.homeworkText, ...styles.topicDone } : styles.homeworkText}>{hw.text}</span>
@@ -5946,18 +6023,27 @@ const styles = {
     fontSize: 12.5, lineHeight: 1.5, color: "var(--mute)", background: "var(--panel)",
     border: "1px solid var(--line)", borderRadius: 10, padding: "8px 10px", margin: "10px 0",
   },
-  searchGroup: { marginBottom: 16 },
+  searchGroup: { marginBottom: 22 },
   searchGroupTitle: {
     display: "flex",
-    alignItems: "baseline",
+    alignItems: "center",
     gap: 8,
-    fontSize: 11.5,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    color: "var(--mute)",
-    marginBottom: 6,
+    fontFamily: "var(--serif)",
+    fontSize: 17,
+    color: "var(--ink)",
+    margin: "4px 0 10px",
   },
-  searchGroupCount: { fontSize: 11.5, color: "var(--ink3)" },
+  searchGroupIcon: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, flexShrink: 0,
+    borderRadius: 8, background: "var(--accentSoft)", color: "var(--accent)",
+  },
+  searchGroupCount: {
+    fontFamily: "var(--sans)", fontSize: 11.5, fontWeight: 700, color: "var(--accentInk)", background: "var(--accent)",
+    borderRadius: 999, padding: "1px 8px", lineHeight: 1.5,
+  },
+  searchGroupLine: { flex: 1, height: 1, background: "var(--line)", marginLeft: 4 },
+  searchRowMarked: { borderLeft: "3px solid", alignItems: "center" },
+  searchMark: { background: "var(--accentSoft)", color: "inherit", borderRadius: 3, padding: "0 1px", boxShadow: "0 1px 0 var(--accent)" },
   searchRow: {
     display: "flex",
     alignItems: "flex-start",

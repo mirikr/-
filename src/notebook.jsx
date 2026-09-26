@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import { attachFile, attachmentUrl, removeAttachment, formatSize } from "./files.js";
@@ -23,9 +23,16 @@ function branchFiles(branch) {
   return branch.files || [];
 }
 
-export default function Notebook({ blocks, onChange, onUndo, prefix }) {
+export default function Notebook({ blocks, onChange, onUndo, prefix, focus }) {
   const [openBlocks, setOpenBlocks] = useState({});
   const [openBranches, setOpenBranches] = useState({});
+
+  // Пришли из поиска — раскрываем найденный блок и ветку.
+  useEffect(() => {
+    if (!focus) return;
+    if (focus.blockId) setOpenBlocks((p) => ({ ...p, [focus.blockId]: true }));
+    if (focus.branchId) setOpenBranches((p) => ({ ...p, [focus.branchId]: true }));
+  }, [focus]);
   const [title, setTitle] = useState("");
 
   const list = blocks || [];
@@ -146,7 +153,7 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
       {list.map((block) => {
         const open = openBlocks[block.id];
         return (
-          <div key={block.id} style={styles.block}>
+          <div key={block.id} style={styles.block} data-focus-id={"block:" + block.id}>
             <div style={styles.blockHead}>
               <button
                 onClick={() => setOpenBlocks((p) => ({ ...p, [block.id]: !open }))}
@@ -349,7 +356,7 @@ function Branch({ branch, open, onToggle, onPatch, onRemove, prefix, onUndo }) {
   const files = branch.files || [];
 
   return (
-    <div style={styles.branch}>
+    <div style={styles.branch} data-focus-id={"branch:" + branch.id}>
       <div style={styles.branchHead}>
         <button
           onClick={onToggle}
