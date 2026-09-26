@@ -2832,16 +2832,19 @@ export default function StudyPlanner() {
           .ap-notes-chips { display: flex !important; }
           .ap-notes-order { display: block; }
           .ap-rt-toolbar { flex-wrap: nowrap !important; }
-        }
-        @media (max-width: 560px) {
-          .ap-topic-mins { display: none; }
-        }
           /* minmax(0, 1fr), а не 1fr: иначе колонка тянется под самый широкий
              элемент внутри карточки и уезжает за край экрана. */
           .ap-grid2 { grid-template-columns: minmax(0, 1fr) !important; }
           /* Подзаголовок экрана на телефоне пересказывает название вкладки,
              которое и так подсвечено внизу, и занимает две строки. */
           .ap-head-note { display: none; }
+        }
+        /* Отдельным блоком после телефонного: в 1.2.0 он встал внутрь, закрыл
+           телефонный раньше времени, и правила «одна колонка» и «без
+           подзаголовка» заработали на любом экране — «Дневник» и «События»
+           вытянулись в одну колонку и на компьютере. */
+        @media (max-width: 560px) {
+          .ap-topic-mins { display: none; }
         }
       `}</style>
 
@@ -5097,7 +5100,7 @@ function TopicItem({
           size={34}
           items={[
             { label: notesOpen ? "Скрыть заметки" : notes.length ? "Заметки" : "+ Заметка со временем", onSelect: onToggleNotes },
-            { label: linkOpen ? "Скрыть настройки" : topic.url ? "Ссылка и длительность" : "+ Ссылка, длительность", onSelect: onToggleLink },
+            { label: linkOpen ? "Скрыть настройки" : topic.url ? "Изменить ссылку и длительность" : "Добавить ссылку, изменить длительность", onSelect: onToggleLink },
             { label: "Удалить урок", danger: true, onSelect: onRemoveTopic },
           ]}
         />

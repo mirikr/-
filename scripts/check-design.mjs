@@ -629,6 +629,56 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   }
 }
 
+// 11. Раскладка. В 1.2.0 правило «одна колонка» для телефона выпало из
+// своего блока и растянуло «Дневник» и «События» на компьютере в одну
+// колонку, а подзаголовки экранов пропали. Меню «⋯» — непрозрачное даже на
+// живом фоне, где карточки полупрозрачные.
+{
+  for (const [w, tag, cols] of [[1280, "desktop", 2], [390, "phone", 1]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(5000);
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+      localStorage.setItem("planner-design-intro", "1.0.0");
+      localStorage.setItem("planner-theme-mode", "night");
+      localStorage.setItem("planner-screen", "journal");
+      localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify({
+        customSubjects: [{ id: "custom-1", name: "Право", color: "#8C7326" }],
+        data: { "custom-1": { topics: [], custom: [{ id: "t1", name: "Семейное право", duration: 40, done: false, url: "https://example.org" }] } },
+      }), updatedAt: Date.now() - 1000 }));
+    });
+    await page.goto(URL0);
+    await page.waitForTimeout(1600);
+    for (const screen of ["journal", "events"]) {
+      await page.evaluate((k) => localStorage.setItem("planner-screen", k), screen);
+      await page.reload();
+      await page.waitForTimeout(1000);
+      const n = await page.locator("main .ap-grid2").first().evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
+      want(`${tag}: «${screen === "journal" ? "Дневник" : "События"}» — колонок: ${cols}`, n === cols, "колонок " + n);
+    }
+    const note = await page.locator(".ap-head-note").first().evaluate((el) => getComputedStyle(el).display !== "none").catch(() => false);
+    want(`${tag}: подзаголовок экрана ${cols === 2 ? "виден" : "скрыт"}`, note === (cols === 2));
+    if (cols === 2) {
+      await page.evaluate(() => localStorage.setItem("planner-screen", "study"));
+      await page.reload();
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "Урок «Семейное право»" }).click();
+      const item = page.getByRole("menuitem", { name: "Изменить ссылку и длительность" });
+      want(`${tag}: в меню урока — «Изменить ссылку и длительность»`, (await item.count()) === 1);
+      const alpha = await page.locator('[role="menu"]').evaluate((el) => {
+        const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
+        const parts = m ? m[1].split(",").map((x) => parseFloat(x)) : [];
+        return parts.length === 4 ? parts[3] : 1;
+      });
+      want(`${tag}: меню «⋯» непрозрачное`, alpha === 1, "прозрачность " + alpha);
+    }
+    await ctx.close();
+  }
+}
+
 await browser.close(); server.close();
 console.log(bad ? `\nпровалов: ${bad}` : "\nновый дизайн работает, старого переключателя нет, записи целы");
 process.exit(bad ? 1 : 0);

@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 export const THEME_CSS = `
 html, body { background: var(--bg); color: var(--ink); }
 [data-theme]{
-  --bg:#F1ECE1;--panel:#FBF8F1;--panel2:#FFFDF8;--line:#DDD5C4;--line2:#E8E1D2;
+  --bg:#F1ECE1;--panel:#FBF8F1;--panel2:#FFFDF8;--menuBg:#FFFDF8;--line:#DDD5C4;--line2:#E8E1D2;
   --ink:#22201B;--ink2:#4A453B;--ink3:#6B6558;--mute:#7A7363;
   --rail:#24221D;--railInk:#EFE8D8;--railInk2:#A9A290;--railActive:#35322B;
   --accent:#8A6A1F;--accentInk:#FBF8F1;--accentSoft:#EDE2C6;--gold:#B8912A;--green:#2F6B4F;--greenSoft:#D9E6DC;--red:#A4452C;
@@ -25,7 +25,7 @@ html, body { background: var(--bg); color: var(--ink); }
   color-scheme:light;
 }
 [data-theme="night"]{
-  --bg:#171612;--panel:#211F1A;--panel2:#25231D;--line:#35322A;--line2:#2C2A23;
+  --bg:#171612;--panel:#211F1A;--panel2:#25231D;--menuBg:#25231D;--line:#35322A;--line2:#2C2A23;
   --ink:#EDE7D8;--ink2:#D6CFBD;--ink3:#A8A08F;--mute:#9A927F;
   --rail:#100F0C;--railInk:#EDE7D8;--railInk2:#9C9483;--railActive:#24221D;
   --accent:#D9B45A;--accentInk:#171612;--accentSoft:#332C1E;--gold:#D9B45A;--green:#74B08E;--greenSoft:#22332A;--red:#DC8466;
