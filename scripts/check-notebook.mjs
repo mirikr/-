@@ -93,11 +93,32 @@ want("после перезагрузки ветка на месте", (await pa
 // 5. Удаление файла — только того, что убрали.
 await page.locator('input[value="Признаки государства"]').locator("xpath=..").getByRole("button").first().click();
 await page.waitForTimeout(300);
+// Файл лежит в памяти браузера под своим ключом — по нему видно, стёрт ли он.
+const fileKept = (key) => page.evaluate((k) => localStorage.getItem("planner:" + k) !== null, key);
+const before = branchesIn(await stored()).find((b) => b.title === "Признаки государства");
+const schemaKey = ((before && before.files) || []).find((f) => f.name === "схема.txt").key;
+want("файл лежит в хранилище", await fileKept(schemaKey));
+
+// Убрали по ошибке — уведомление, «Вернуть», файл на месте, на том же месте списка.
 await page.locator('[title="Убрать файл"]').first().click();
+await page.waitForTimeout(300);
+want("после удаления файла — уведомление", (await page.getByText("Вы убрали файл «схема.txt»").count()) === 1);
+want("пока уведомление висит, файл не стёрт", await fileKept(schemaKey));
+await page.getByRole("button", { name: "Вернуть", exact: true }).first().click();
+await page.waitForTimeout(1500);
+const back = branchesIn(await stored()).find((b) => b.title === "Признаки государства");
+want("«Вернуть» возвращает файл на его место", back && (back.files || []).map((f) => f.name).join(",") === "схема.txt,таблица.txt", back && JSON.stringify((back.files || []).map((f) => f.name)));
+want("вернувшийся файл открывается", (await fileKept(schemaKey)) && (await page.getByRole("button", { name: "Скачать: схема.txt" }).count()) === 1);
+
+// Удалили всерьёз — файл уходит и из хранилища.
+await page.locator('[title="Убрать файл"]').first().click();
+await page.waitForTimeout(300);
+await page.getByRole("button", { name: "Да, удалить", exact: true }).first().click();
 await refocus();
 await page.waitForTimeout(1500);
 const after = branchesIn(await stored()).find((b) => b.title === "Признаки государства");
 want("убран ровно один файл", after && (after.files || []).length === 1, after && JSON.stringify((after.files || []).map((f) => f.name)));
+want("подтверждённое удаление стирает файл из хранилища", !(await fileKept(schemaKey)));
 
 want("ошибок нет", errors.length === 0, errors[0] || "");
 await ctx.close();
@@ -256,6 +277,13 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   await p.waitForTimeout(1800);
   const wideJ = await p.evaluate(() => document.documentElement.scrollWidth);
   want("телефон: файл у домашнего задания не шире экрана", wideJ <= 390 && (await p.getByRole("button", { name: "Скачать: " + longName }).count()) >= 1, wideJ + " px");
+  // Файл у домашнего задания тоже возвращается.
+  await p.getByRole("button", { name: "Убрать файл: " + longName }).first().tap();
+  await p.waitForTimeout(300);
+  want("телефон: у задания — уведомление об удалении файла", (await p.getByText("Вы убрали файл «" + longName + "»").count()) === 1);
+  await p.getByRole("button", { name: "Вернуть", exact: true }).first().tap();
+  await p.waitForTimeout(300);
+  want("телефон: «Вернуть» возвращает файл задания", (await p.getByRole("button", { name: "Скачать: " + longName }).count()) >= 1);
   await p.evaluate(() => localStorage.setItem("planner-screen", "today"));
   await p.reload();
   await p.waitForTimeout(1800);

@@ -179,6 +179,7 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
                     onToggle={() => setOpenBranches((p) => ({ ...p, [branch.id]: !p[branch.id] }))}
                     onPatch={(patch) => patchBranch(block.id, branch.id, patch)}
                     onRemove={() => dropBranch(block.id, branch.id)}
+                    onUndo={onUndo}
                   />
                 ))}
                 <AddRow placeholder="Название ветки — например: признаки государства" onAdd={(v) => addBranch(block.id, v)} />
@@ -204,7 +205,37 @@ export default function Notebook({ blocks, onChange, onUndo, prefix }) {
   );
 }
 
-export function Attachments({ files, onChange, prefix }) {
+// Один и тот же файл: у облачного — путь, у файла из памяти браузера — ключ.
+export function sameFile(a, b) {
+  if (!a || !b) return false;
+  if (a.path || b.path) return a.path === b.path;
+  if (a.key || b.key) return a.key === b.key;
+  return a === b;
+}
+
+// Убранный файл можно вернуть: он пропадает из списка сразу, а из хранилища
+// стирается, только когда уведомление об удалении закрылось без отмены.
+// Раньше он стирался сразу — нажали крестик по ошибке, и файла больше нет.
+export function withFileUndo(list, att, onChange, onUndo) {
+  const index = list.findIndex((f) => sameFile(f, att));
+  onChange((cur) => (cur || []).filter((f) => !sameFile(f, att)));
+  if (!onUndo) {
+    removeAttachment(att).catch(() => {});
+    return;
+  }
+  onUndo(
+    `Вы убрали файл «${att.name || "без названия"}»`,
+    () =>
+      onChange((cur) => {
+        const next = (cur || []).filter((f) => !sameFile(f, att));
+        next.splice(Math.max(0, Math.min(index, next.length)), 0, att);
+        return next;
+      }),
+    () => removeAttachment(att).catch(() => {})
+  );
+}
+
+export function Attachments({ files, onChange, prefix, onUndo }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -243,9 +274,7 @@ export function Attachments({ files, onChange, prefix }) {
   }
 
   function drop(att) {
-    removeAttachment(att).catch(() => {});
-    const same = (f) => (att.path ? f.path === att.path : att.key ? f.key === att.key : f === att);
-    onChange((cur) => (cur || []).filter((f) => !same(f)));
+    withFileUndo(list, att, onChange, onUndo);
   }
 
   return (
@@ -316,7 +345,7 @@ function DownloadIcon() {
   );
 }
 
-function Branch({ branch, open, onToggle, onPatch, onRemove, prefix }) {
+function Branch({ branch, open, onToggle, onPatch, onRemove, prefix, onUndo }) {
   const files = branch.files || [];
 
   return (
@@ -347,6 +376,7 @@ function Branch({ branch, open, onToggle, onPatch, onRemove, prefix }) {
               onPatch(typeof next === "function" ? (cur) => ({ files: next(cur.files || []) }) : { files: next })
             }
             prefix={prefix}
+            onUndo={onUndo}
           />
         </div>
       </Collapsible>
