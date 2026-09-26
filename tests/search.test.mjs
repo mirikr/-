@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { search, normalize, excerpt } from "../src/search.js";
+import { search, normalize, excerpt, humanDate, markParts } from "../src/search.js";
 
 let passed = 0;
 function check(name, fn) {
@@ -38,7 +38,9 @@ check("ищет во всех разделах сразу", () => {
   const res = search("прав", sources);
   assert.deepStrictEqual(
     res.groups.map((g) => g.id),
-    ["topics", "journal", "homework", "events", "schedule", "bank", "notes"]
+    // Своё — сверху, банк заданий — последним: он большой и не должен
+    // заслонять записи.
+    ["homework", "schedule", "events", "notes", "topics", "journal", "bank"]
   );
 });
 
@@ -128,6 +130,67 @@ check("кусок текста вокруг найденного", () => {
 check("пустые источники не роняют поиск", () => {
   assert.strictEqual(search("что-нибудь", {}).total, 0);
   assert.strictEqual(search("что-нибудь", undefined).total, 0);
+});
+
+check("несколько слов — каждое, в любом порядке", () => {
+  const bank = groupOf(search("сужде правов", sources), "bank");
+  assert.ok(bank && bank.shown.some((t) => t.id === "task:0810F0"), "«сужде правов» находит задание про суждения о правовом государстве");
+  assert.ok(groupOf(search("государств сужде", sources), "bank"), "порядок слов не важен");
+  assert.strictEqual(groupOf(search("сужде амперметр", sources), "bank"), undefined, "оба слова должны быть в одной записи");
+});
+
+check("слова ищутся по нескольким полям записи", () => {
+  const hw = groupOf(search("право конспект", sources), "homework");
+  assert.ok(hw && hw.total === 1, "предмет и текст задания вместе");
+});
+
+check("по названию предмета находится его тетрадь", () => {
+  const notes = groupOf(search("Прав", sources), "notes");
+  assert.ok(notes.shown.some((n) => n.id === "notebook:lyceum:Право" && n.notebook === "lyceum:Право"));
+});
+
+check("находка в тетради знает блок и ветку", () => {
+  const branch = groupOf(search("правопорядок", sources), "notes").shown.find((n) => n.id === "branch:br1");
+  assert.deepStrictEqual(branch.notebookFocus, { blockId: "b1", branchId: "br1" });
+});
+
+check("ищется и по именам файлов", () => {
+  const src = {
+    ...sources,
+    homework: [{ id: "h2", text: "Эссе", subjectName: "Право", date: "2026-09-20", attachments: [{ name: "черновик-эссе.docx", key: "k1" }] }],
+    notebooks: { "lyceum:Право": [{ id: "b2", title: "Блок", branches: [{ id: "br2", title: "Ветка", html: "", files: [{ name: "схема-судов.pdf", key: "k2" }] }] }] },
+  };
+  assert.strictEqual(groupOf(search("черновик", src), "homework").shown[0].body, "📎 черновик-эссе.docx");
+  assert.strictEqual(groupOf(search("схема-судов", src), "notes").shown[0].id, "branch:br2");
+});
+
+check("заметки к урокам в подготовке ищутся", () => {
+  const src = {
+    ...sources,
+    subjects: [{ id: "law", name: "Право", topics: [{ id: "t1", name: "Конституция", notes: [{ id: "n1", text: "выучил статьи", html: "<p>Статья 2: человек, его права и свободы</p>" }] }] }],
+  };
+  const found = groupOf(search("человек свобод", src), "topics").shown.find((t) => t.id === "topicnote:n1");
+  assert.ok(found && found.focus === "topic:t1" && found.subjectId === "law");
+});
+
+check("задание и запись дневника несут дату — дневник откроется на ней", () => {
+  assert.strictEqual(groupOf(search("правам", sources), "homework").shown[0].date, "2026-09-14");
+  assert.strictEqual(groupOf(search("правоотношения", sources), "journal").shown[0].date, "2026-09-01");
+  assert.strictEqual(humanDate("2026-10-01"), "1 октября");
+});
+
+check("урок и событие несут важность — для подсветки", () => {
+  const src = { ...sources, schedule: [{ id: "s9", subjectName: "Право", priority: 3 }], events: [{ id: "e9", name: "Право · ВсОШ", date: "2026-10-08", priority: 3 }] };
+  assert.strictEqual(groupOf(search("право", src), "schedule").shown[0].priority, 3);
+  assert.strictEqual(groupOf(search("всош", src), "events").shown[0].priority, 3);
+});
+
+check("совпадения размечаются для подсветки", () => {
+  const parts = markParts("Выберите верные Суждения о браке", "сужде брак");
+  assert.deepStrictEqual(parts.filter((p) => p.hit).map((p) => p.text), ["Сужде", "брак"]);
+  assert.strictEqual(parts.map((p) => p.text).join(""), "Выберите верные Суждения о браке", "текст не теряется");
+  assert.deepStrictEqual(markParts("Ёлка", "елк").filter((p) => p.hit).map((p) => p.text), ["Ёлк"]);
+  assert.strictEqual(markParts("текст", "т").length, 1, "одна буква — без подсветки");
 });
 
 console.log("\nвсе проверки поиска прошли (" + passed + ")");

@@ -557,6 +557,77 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   }
 }
 
+// 10. Поиск. Разделы — заметными заголовками, уроки и события подсвечены
+// важностью, найденное выделено маркером. Запрос из нескольких слов ищет
+// каждое. Задание открывает дневник на своей дате и подсвечивается; ветка
+// тетради раскрывается; по названию предмета находится его тетрадь.
+{
+  const inDays = (n) => { const d = new Date(Date.now() + n * 864e5); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const hwDate = inDays(40);
+  const state = {
+    lyceumSchedule: [{ id: "en1", day: "mon", kind: "lesson", subjectName: "Английский язык (гр. 1)", teacher: "Митяева Н.В.", room: "каб. 502", priority: 3, level: "prof", start: "12:20", end: "13:00" }],
+    homework: [{ id: "hw-en", date: hwDate, subjectName: "Английский язык (гр. 1)", text: "Найти 5 музеев и 5 художников на английском", minutes: 30, done: false, attachments: [] }],
+    events: [{ id: "ev-en", name: "Английский язык — высшая проба", date: inDays(8), priority: 3 }],
+    notebooks: { "lyceum:Английский язык (гр. 1)": [{ id: "nb-b", title: "Unit 1", branches: [{ id: "nb-r", title: "Времена", html: "<div>Present Perfect — опыт и результат</div>", files: [] }] }] },
+  };
+  for (const [w, h, tag] of [[1280, 900, "desktop"], [390, 844, "phone"]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.addInitScript((st) => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+      localStorage.setItem("planner-design-intro", "1.0.0");
+      localStorage.setItem("planner-screen", "search");
+      localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+    }, state);
+    await page.goto(URL0);
+    await page.waitForTimeout(1800);
+    const box = page.getByLabel("Поиск по записям");
+    await box.fill("Анг");
+    await page.waitForTimeout(400);
+    const groups = await page.locator("[data-search-group]").evaluateAll((els) => els.map((e) => e.dataset.searchGroup));
+    want(`${tag}: по «Анг» — задание, расписание, событие и тетрадь`, ["homework", "schedule", "events", "notes"].every((g) => groups.includes(g)), groups.join(","));
+    const head = await page.locator('[data-search-group="notes"] > div').first().evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), svg: !!el.querySelector("svg") }));
+    want(`${tag}: заголовок раздела крупный и со значком`, head.size >= 16 && head.svg, JSON.stringify(head));
+    const lesson = await page.locator('[data-search-group="schedule"] button').first().evaluate((el) => getComputedStyle(el).borderLeftWidth);
+    want(`${tag}: урок подсвечен полоской важности`, lesson === "3px", lesson);
+    const marks = await page.locator("main mark").allInnerTexts();
+    want(`${tag}: найденное выделено маркером`, marks.length >= 3 && marks.every((m) => /^анг$/i.test(m)), marks.slice(0, 4).join(","));
+    if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/search-${tag}.png`, fullPage: true });
+
+    // Несколько слов — каждое, в любом порядке.
+    await box.fill("опыт present");
+    await page.waitForTimeout(400);
+    want(`${tag}: «опыт present» находит ветку тетради`, (await page.locator('[data-search-group="notes"] button').count()) >= 1);
+    await page.locator('[data-search-group="notes"] button').first().click();
+    await page.waitForTimeout(1200);
+    want(`${tag}: ветка тетради раскрыта`, await page.locator('[data-focus-id="branch:nb-r"] [contenteditable]').isVisible());
+
+    // Задание — дневник на своей дате, задание подсвечено.
+    await page.evaluate(() => localStorage.setItem("planner-screen", "search"));
+    await page.reload();
+    await page.waitForTimeout(1500);
+    await page.getByLabel("Поиск по записям").fill("музеев");
+    await page.waitForTimeout(400);
+    await page.locator('[data-search-group="homework"] button').first().click();
+    await page.waitForTimeout(400);
+    const hw = page.locator('[data-focus-id="hw:hw-en"]');
+    want(`${tag}: задание открылось в дневнике на своей дате`, await hw.isVisible());
+    want(`${tag}: и подсвечено`, await hw.evaluate((el) => el.classList.contains("ap-flash")));
+    const inView = await hw.evaluate((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; });
+    await page.waitForTimeout(900);
+    want(`${tag}: и прокручено на экран`, inView || (await hw.evaluate((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; })));
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    want(`${tag}: ничего не едет вбок`, wide <= 0, wide + " px");
+    want(`${tag}: поиск без ошибок`, errors.length === 0, errors[0] || "");
+    await ctx.close();
+  }
+}
+
 await browser.close(); server.close();
 console.log(bad ? `\nпровалов: ${bad}` : "\nновый дизайн работает, старого переключателя нет, записи целы");
 process.exit(bad ? 1 : 0);
