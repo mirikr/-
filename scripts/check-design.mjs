@@ -605,7 +605,8 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
     want(`${tag}: «опыт present» находит ветку тетради`, (await page.locator('[data-search-group="notes"] button').count()) >= 1);
     await page.locator('[data-search-group="notes"] button').first().click();
     await page.waitForTimeout(1200);
-    want(`${tag}: ветка тетради раскрыта`, await page.locator('[data-focus-id="branch:nb-r"] [contenteditable]').isVisible());
+    // Тетрадь — оглавление и редактор рядом (1.2.0): найденная ветка открыта в редакторе.
+    want(`${tag}: ветка тетради открыта в редакторе`, (await page.getByLabel("Название ветки").inputValue()) === "Времена" && /Present Perfect/.test(await page.locator(".ap-rt-editor").first().innerText()));
 
     // Задание — дневник на своей дате, задание подсвечено.
     await page.evaluate(() => localStorage.setItem("planner-screen", "search"));

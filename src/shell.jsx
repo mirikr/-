@@ -102,7 +102,8 @@ export function Icon({ name, size = 18, strokeWidth = 1.7 }) {
 // настройки — в подвале: это не разделы, куда ходят, а инструменты.
 const RAIL_GROUPS = [
   { label: null, keys: ["today", "events", "journal"] },
-  { label: "Учёба", keys: ["study", "trainer", "notes"] },
+  // Тетради — сразу за «Подготовкой»: это одна работа, конспект к пройденному уроку.
+  { label: "Учёба", keys: ["study", "notes", "trainer"] },
   { label: "Лицей и план", keys: ["school", "budget"] },
 ];
 const RAIL_APART = ["search", "settings", "prefs"];
