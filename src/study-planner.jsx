@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
 import { stampState, mergeStates, mergeSerialized } from "./sync-state.js";
-import Notebook, { Attachments, FileGrid } from "./notebook.jsx";
+import Notebook, { Attachments, FileGrid, sameFile } from "./notebook.jsx";
 import NotebookSubjects from "./notebook-subjects.jsx";
 import { orderOwners, togglePin, moveOwner } from "./notebook-order.js";
 import RichText from "./rich-text.jsx";
@@ -2166,10 +2166,26 @@ export default function StudyPlanner() {
     document.body.removeChild(a);
   }
 
+  // Файл у задания убирается с возможностью вернуть: из хранилища он
+  // стирается, только когда уведомление закрылось без отмены.
   function removeAttachment(hwId, att) {
-    deleteAttachment(att).catch(() => {});
+    const hw = homework.find((h) => h.id === hwId);
+    const index = hw ? (hw.attachments || []).findIndex((a) => sameFile(a, att)) : -1;
     setHomework((prev) =>
-      prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => a !== att) } : h))
+      prev.map((h) => (h.id === hwId ? { ...h, attachments: (h.attachments || []).filter((a) => !sameFile(a, att)) } : h))
+    );
+    showUndo(
+      `Вы убрали файл «${att.name || "без названия"}»`,
+      () =>
+        setHomework((prev) =>
+          prev.map((h) => {
+            if (h.id !== hwId) return h;
+            const next = (h.attachments || []).filter((a) => !sameFile(a, att));
+            next.splice(Math.max(0, Math.min(index, next.length)), 0, att);
+            return { ...h, attachments: next };
+          })
+        ),
+      () => deleteAttachment(att).catch(() => {})
     );
   }
 
@@ -3675,6 +3691,7 @@ export default function StudyPlanner() {
                             onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
                             onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
                             onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
+                            onUndo={showUndo}
                           />
                         ))}
                         <AddTopicForm onAdd={(name, url) => addCustomTopic(s.id, name, url)} color={s.color} />
@@ -4758,6 +4775,7 @@ function TopicItem({
   onUpdateNote,
   onRemoveNote,
   onRemoveTopic,
+  onUndo,
 }) {
   const [noteText, setNoteText] = useState("");
   const [noteMins, setNoteMins] = useState("15");
@@ -4878,6 +4896,7 @@ function TopicItem({
                         )
                       }
                       prefix={"note-" + n.id}
+                      onUndo={onUndo}
                     />
                   </div>
                 </Collapsible>
