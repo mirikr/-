@@ -622,6 +622,7 @@ export default function StudyPlanner() {
   const [openSubject, setOpenSubject] = useState(null);
   // «Подготовка» на телефоне — два шага: список предметов, потом предмет.
   const [studyView, setStudyView] = useState("list");
+  const studyGridRef = useRef(null);
   // Скрыть пройденные уроки — удобство этого устройства, в облако не едет.
   const [hideDone, setHideDone] = useState(() => {
     try {
@@ -2542,6 +2543,40 @@ export default function StudyPlanner() {
     goScreen(item.screen);
   }
 
+  // «Подготовка» на компьютере — высотой ровно до низа окна: от места, где
+  // начинается сетка, минус нижний отступ. Выше сетки — заголовок экрана и,
+  // бывает, плашка «Скоро сдавать», поэтому высота считается по факту, а не
+  // константой, и пересчитывается при изменении окна и содержимого над ней.
+  useEffect(() => {
+    if (screen !== "study") return undefined;
+    let frame = 0;
+    function fit() {
+      const el = studyGridRef.current;
+      if (!el) return;
+      if (window.innerWidth <= 900) {
+        el.style.height = "";
+        return;
+      }
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const height = Math.max(440, Math.round(window.innerHeight - top - 24));
+      if (el.style.height !== height + "px") el.style.height = height + "px";
+    }
+    const later = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    };
+    later();
+    window.addEventListener("resize", later);
+    const main = document.querySelector(".ap-main");
+    const ro = typeof ResizeObserver !== "undefined" && main ? new ResizeObserver(later) : null;
+    if (ro) ro.observe(main);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", later);
+      if (ro) ro.disconnect();
+    };
+  }, [screen, ALL_SUBJECTS.length]);
+
   // Найденное прокручивается в середину экрана и коротко подсвечивается.
   // Экран и свёрнутые блоки открываются не мгновенно, поэтому ждём элемент
   // до полутора секунд.
@@ -2848,7 +2883,9 @@ export default function StudyPlanner() {
           .ap-study { grid-template-columns: minmax(0, 1fr) !important; }
           .ap-study[data-view="list"] .ap-study-detail { display: none !important; }
           .ap-study[data-view="subject"] .ap-study-list { display: none !important; }
-          .ap-study-list { position: static !important; }
+          .ap-study-list { position: static !important; overflow: visible !important; }
+          .ap-study { height: auto !important; }
+          .ap-main section.ap-card.ap-study-detail { overflow: visible !important; }
           .ap-study-row { min-height: 60px; }
           .ap-main section.ap-card.ap-study-detail { padding: 14px 16px 18px !important; }
           .ap-study-detail .ap-note-panel { margin-left: 0 !important; }
@@ -3771,7 +3808,7 @@ export default function StudyPlanner() {
               };
               const setTab = (key) => setSubjectTab((prev) => ({ ...prev, [s.id]: key }));
               return (
-                <div className="ap-study" data-view={studyView} style={styles.studyGrid}>
+                <div className="ap-study" data-view={studyView} ref={studyGridRef} style={styles.studyGrid}>
                   <div className="ap-study-list" style={styles.studyLeft}>
                     <nav aria-label="Предметы" className="ap-card" style={styles.studyList}>
                       {ALL_SUBJECTS.map((x) => {
@@ -6257,8 +6294,12 @@ const NEW_MOBILE_CSS = `
 
 const styles = {
   // «Подготовка», вариант A.
-  studyGrid: { display: "grid", gridTemplateColumns: "288px minmax(0, 1fr)", gap: 22, alignItems: "start" },
-  studyLeft: { display: "flex", flexDirection: "column", gap: 14, position: "sticky", top: 16 },
+  // На компьютере «Подготовка» — рабочее место высотой в окно: список
+  // предметов и открытый предмет листаются каждый сам по себе (высоту ставит
+  // эффект у studyGridRef). Раньше левая колонка была «липкой», а правая
+  // ехала вместе со страницей — и при длинном списке липкость срывалась.
+  studyGrid: { display: "grid", gridTemplateColumns: "288px minmax(0, 1fr)", gap: 22, alignItems: "stretch", minHeight: 0 },
+  studyLeft: { display: "flex", flexDirection: "column", gap: 14, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "thin", paddingBottom: 4 },
   studyList: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 8, display: "flex", flexDirection: "column", gap: 2 },
   studyRow: { display: "block", width: "100%", padding: "11px 12px 12px", border: "none", borderRadius: 12, textAlign: "left", color: "var(--ink)", cursor: "pointer" },
   studyRowTop: { display: "flex", alignItems: "center", gap: 10 },
@@ -6270,7 +6311,7 @@ const styles = {
   studyReviewHead: { fontSize: 13, fontWeight: 600, color: "var(--warmInk)" },
   studyReviewRow: { display: "flex", alignItems: "center", gap: 10 },
   studyReviewBtn: { flexShrink: 0, minHeight: 34, padding: "0 12px", border: "none", borderRadius: 9, background: "var(--btnBg)", color: "var(--btnInk)", fontSize: 12.5, fontWeight: 600 },
-  studyDetail: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "24px 28px 26px", display: "flex", flexDirection: "column", gap: 16, minWidth: 0 },
+  studyDetail: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "24px 28px 26px", display: "flex", flexDirection: "column", gap: 16, minWidth: 0, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "thin" },
   studyBack: { alignSelf: "flex-start", alignItems: "center", gap: 4, minHeight: 40, padding: "0 6px 0 0", border: "none", background: "none", color: "var(--ink3)", fontSize: 15 },
   studyHead: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
   studyTitle: { margin: 0, flex: 1, minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 30, lineHeight: 1.15 },
