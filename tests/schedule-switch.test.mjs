@@ -100,6 +100,24 @@ check("повторный перенос ничего не меняет", () => 
   assert.equal(twice.moves.length, 0);
 });
 
+check("на урок, куда не ходят (skip), задание не переезжает", () => {
+  const withSkip = newLessons.map((e) => (e.id === "n-eng-fri" ? { ...e, skip: true } : e));
+  const hw = [{ id: "h1", lessonId: "o-eng-tue", date: "2026-09-29", text: "Упр. 5" }];
+  const moved = moveHomework(hw, oldLessons, withSkip, today).homework[0];
+  // Пятничный английский помечен «не хожу» — остаётся понедельник той же недели
+  // (позже в неделе урока нет, раньше срока — но не раньше сегодня).
+  assert.equal(moved.lessonId, "n-eng-mon");
+  assert.equal(moved.date, "2026-09-28");
+});
+
+check("выбор среди одновременных переносится, только если урок на своём месте", () => {
+  const old = [L("a", "tue", "14:05", "Социология", { skip: true }), L("b", "wed", "14:05", "Право", { skip: true })];
+  const fresh = [L("a2", "tue", "14:05", "Социология"), L("b2", "thu", "14:05", "Право")];
+  const out = carryLessonSettings(fresh, old);
+  assert.equal(out[0].skip, true);
+  assert.ok(!out[1].skip);
+});
+
 check("день недели по дате", () => {
   assert.equal(weekdayOf("2026-09-28"), "mon");
   assert.equal(weekdayOf("2026-10-04"), "sun");

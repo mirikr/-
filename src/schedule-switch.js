@@ -42,7 +42,8 @@ export function weekdayOf(isoDate) {
 
 const key = (e) => e.day + "|" + e.start + "|" + e.subjectName;
 
-// Важность, роль, свёрнутость и описание — с прежних уроков на новые: сперва
+// Важность, роль, свёрнутость, выбор среди одновременных уроков и описание —
+// с прежних уроков на новые: сперва
 // с того же урока (день, час, предмет), иначе с любого урока того же предмета.
 export function carryLessonSettings(fresh, old) {
   const exact = new Map((old || []).map((e) => [key(e), e]));
@@ -60,6 +61,9 @@ export function carryLessonSettings(fresh, old) {
       priority: like.priority,
       level: like.level,
       ...(same && same.folded ? { folded: true } : null),
+      // Выбор между одновременными уроками — про этот час, а не про предмет:
+      // переносим, только если урок остался на своём месте.
+      ...(same && same.skip ? { skip: true } : null),
       ...(like.note ? { note: like.note } : null),
     };
   });
@@ -69,7 +73,9 @@ export function carryLessonSettings(fresh, old) {
 // предмета в ту же неделю не раньше срока; если в неделе позже нет — самый
 // поздний до срока, но не раньше сегодняшнего; иначе — первый на следующей.
 function targetFor(subject, date, lessons, today) {
-  const own = lessons.filter((e) => e.kind !== "exam" && e.subjectName === subject);
+  // Урок, на который не ходят (выбран другой из одновременных, skip), —
+  // не место для задания.
+  const own = lessons.filter((e) => e.kind !== "exam" && !e.skip && e.subjectName === subject);
   if (!own.length) return null;
   const at = (weekDate) =>
     own
@@ -113,8 +119,8 @@ export function moveHomework(homework, oldLessons, newLessons, today) {
     // тот день урок предмета был, а теперь его нет.
     if (!h.subjectName) return h;
     const day = weekdayOf(h.date);
-    const had = (oldLessons || []).some((e) => e.kind !== "exam" && e.subjectName === h.subjectName && e.day === day);
-    const has = (newLessons || []).some((e) => e.kind !== "exam" && e.subjectName === h.subjectName && e.day === day);
+    const had = (oldLessons || []).some((e) => e.kind !== "exam" && !e.skip && e.subjectName === h.subjectName && e.day === day);
+    const has = (newLessons || []).some((e) => e.kind !== "exam" && !e.skip && e.subjectName === h.subjectName && e.day === day);
     if (!had || has) return h;
     const target = targetFor(h.subjectName, h.date, newLessons, today);
     if (!target || target.date === h.date) return h;

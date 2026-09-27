@@ -19,7 +19,7 @@ import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./des
 import { CardHead } from "./card-head.jsx";
 import MoreMenu from "./more-menu.jsx";
 import NotebookWorkspace from "./notebook-workspace.jsx";
-import BalanceChart from "./balance-chart.jsx";
+import BudgetScreen, { BUDGET_CSS, BUDGET_MOBILE_CSS } from "./budget-screen.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
 import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js";
@@ -33,6 +33,8 @@ import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
 import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
 import NowCard from "./now-card.jsx";
+import SchoolDay, { SchoolSheet, SCHOOL_CSS, SCHOOL_MOBILE_CSS } from "./school-day.jsx";
+import { buildDay } from "./school-timeline.js";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
@@ -45,7 +47,7 @@ import { search as searchAll, markParts } from "./search.js";
 import SchedulePreset from "./lyceum-preset.jsx";
 import { KT_PRESET_ID, DEFAULT_KT, buildExams } from "./lyceum-exams-10.js";
 import { VOSH_PRESET_ID, DEFAULT_VOSH, buildOlympiads } from "./lyceum-olympiads.js";
-import { LYCEUM_REVISION, PRESET_ID, buildSchedule } from "./lyceum-schedule-10.js";
+import { LYCEUM_REVISION, PRESET_ID, SCHOOLS, buildSchedule } from "./lyceum-schedule-10.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -618,7 +620,6 @@ export default function StudyPlanner() {
   // На телефоне: открыт ли список предметов для закрепления и перестановки.
   const [notesOrderOpen, setNotesOrderOpen] = useState(false);
   const [subjectTab, setSubjectTab] = useState({});
-  const [openLyceumNotebook, setOpenLyceumNotebook] = useState(null);
   const [openSubject, setOpenSubject] = useState(null);
   // «Подготовка» на телефоне — два шага: список предметов, потом предмет.
   const [studyView, setStudyView] = useState("list");
@@ -669,6 +670,8 @@ export default function StudyPlanner() {
     }
   });
   const [presetOpenRequest, setPresetOpenRequest] = useState(0);
+  // Какое окно «Лицея» открыто: настройка расписания или предметы.
+  const [schoolSheet, setSchoolSheet] = useState(null);
   function showScheduleNews(news) {
     setScheduleNews(news);
     try {
@@ -1753,7 +1756,7 @@ export default function StudyPlanner() {
       if (!h.subjectName || !h.date || h.date < today) return;
       const day = weekdayKeyFromDate(h.date);
       const lesson = lyceumSchedule
-        .filter((e) => e.kind !== "exam" && e.day === day && e.subjectName === h.subjectName)
+        .filter((e) => e.kind !== "exam" && !e.skip && e.day === day && e.subjectName === h.subjectName)
         .sort((a, b) => String(a.start).localeCompare(String(b.start)))[0];
       if (!lesson) return;
       if (!loose.has(lesson.id)) loose.set(lesson.id, []);
@@ -1775,10 +1778,12 @@ export default function StudyPlanner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homework, lyceumSchedule, taskFolds]);
 
+  // Уроки, на которые человек не ходит (выбрал другой из одновременных), в
+  // «Сегодня» не считаются: в 14:05 у него один урок, а не три.
   const dayEntries = useCallback(
     (day) =>
       lyceumSchedule
-        .filter((e) => e.day === day && (e.kind !== "exam" || examVisibleInSchedule(e)))
+        .filter((e) => e.day === day && !e.skip && (e.kind !== "exam" || examVisibleInSchedule(e)))
         .sort(byExamFirst),
     [lyceumSchedule]
   );
@@ -1962,7 +1967,12 @@ export default function StudyPlanner() {
 
   function applyPreset(entries) {
     if (!entries.length) return;
-    setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== PRESET_ID), ...entries]);
+    // Важность предметов и выбор среди одновременных уроков переживают
+    // повторное «Применить» — как и обновление сетки лицея.
+    setLyceumSchedule((prev) => [
+      ...prev.filter((e) => e.preset !== PRESET_ID),
+      ...carryLessonSettings(entries, prev.filter((e) => e.preset === PRESET_ID)),
+    ]);
     if (entries.some((e) => e.day === "sun")) setShowSunday(true);
   }
 
@@ -2129,6 +2139,28 @@ export default function StudyPlanner() {
     });
     // Экзамен, переехавший на воскресенье, не должен пропасть вместе со скрытым днём.
     if (patch.date !== undefined && weekdayKeyFromDate(patch.date) === "sun") setShowSunday(true);
+  }
+
+  // Одновременные уроки: оставляем тот, куда человек ходит. Остальные не
+  // удаляются, а помечаются — передумал, и они вернутся одной кнопкой.
+  function pickParallel(keepIds, allIds) {
+    const keep = new Set(keepIds);
+    const all = new Set(allIds);
+    setLyceumSchedule((prev) =>
+      prev.map((e) => {
+        if (!all.has(e.id)) return e;
+        if (keep.has(e.id)) {
+          if (!e.skip) return e;
+          const { skip, ...rest } = e;
+          return rest;
+        }
+        return e.skip ? e : { ...e, skip: true };
+      })
+    );
+  }
+
+  function unpickParallel(allIds) {
+    pickParallel([...allIds], allIds);
   }
 
   function removeScheduleEntry(id) {
@@ -2438,6 +2470,14 @@ export default function StudyPlanner() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Тетрадь предмета лицея открывается в «Тетрадях»: раньше она раскрывалась
+  // прямо над расписанием и отодвигала уроки вниз.
+  function openLyceumNotebook(name) {
+    setSchoolSheet(null);
+    setNotebookOwner("lyceum:" + name);
+    goScreen("notes");
+  }
+
   // Уроки на сегодня: те же правила, что и в расписании, включая экзамены,
   // которые показываются только за неделю до даты.
   const todayKey = DOW_TO_KEY[new Date().getDay()];
@@ -2445,10 +2485,13 @@ export default function StudyPlanner() {
   const todayLessons = useMemo(
     () =>
       activeSchedule
-        .filter((e) => e.day === todayKey && (e.kind !== "exam" || examVisibleInSchedule(e)))
+        .filter((e) => e.day === todayKey && !e.skip && (e.kind !== "exam" || examVisibleInSchedule(e)))
         .sort((a, b) => String(a.start).localeCompare(String(b.start))),
     [activeSchedule, todayKey]
   );
+  // Сколько уроков человек отсидит сегодня: три одновременных, из которых
+  // ещё не выбран один, — это один урок, а не три.
+  const todayLessonCount = useMemo(() => buildDay(todayLessons).count, [todayLessons]);
 
   // Дела на виду: несделанные, с ближайшим сроком сверху.
   const upcomingHomework = useMemo(
@@ -2532,8 +2575,8 @@ export default function StudyPlanner() {
       const d = new Date(item.date + "T00:00:00");
       setCalMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
-    // Урок может стоять только в свёрнутой «Всей неделе» — раскрываем её.
-    if (item.screen === "school") setOpenSections((prev) => ({ ...prev, scheduleWeek: true }));
+    // Урок в «Лицее» может стоять в другом дне — лента сама откроет его день
+    // по focusTarget (см. SchoolDay).
     const focus = item.focus === undefined ? item.id : item.focus;
     setFocusTarget(focus ? { id: focus, at: Date.now() } : null);
     // Найденное задание открывается само, а не «где-то там в тренажёре».
@@ -2650,7 +2693,7 @@ export default function StudyPlanner() {
     {
       key: "today",
       label: "Сегодня",
-      hint: todayLessons.length ? todayLessons.length + " " + lessonsWord(todayLessons.length) : "",
+      hint: todayLessonCount ? todayLessonCount + " " + lessonsWord(todayLessonCount) : "",
     },
     {
       key: "events",
@@ -2679,7 +2722,7 @@ export default function StudyPlanner() {
   const SCREEN_TEXT = {
     today: ["Сегодня", "Что сегодня в лицее, сколько времени уже записано и что горит по срокам"],
     events: ["События", "Приоритет решает, до какого события считается план"],
-    budget: ["Распределение времени (КПВ)", "Сначала бюджет дня, потом предметы"],
+    budget: ["Распределение времени (КПВ)", "Слева — что вы задаёте, справа — что из этого получается"],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
     trainer: ["Тренажёр по банку ФИПИ", "Обществознание, физика и информатика из открытого банка"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
@@ -2690,6 +2733,14 @@ export default function StudyPlanner() {
     prefs: ["Настройки", "Оформление, установка на устройство и версия приложения"],
   };
   const screenInfo = { title: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[0], note: (SCREEN_TEXT[screen] || SCREEN_TEXT.today)[1] };
+  // Под «Лицеем КЭО» — не описание раздела, а чьё это расписание: школа и
+  // сколько уроков в неделю (без тех, на которые не ходят).
+  const schoolNote = (() => {
+    const school = SCHOOLS.find((s) => s.id === presetChoices.school);
+    const n = activeSchedule.filter((e) => e.kind !== "exam" && !e.skip).length;
+    const parts = [school ? school.name : "", n ? n + " " + lessonsWord(n) + " в неделю" : ""].filter(Boolean);
+    return parts.length ? parts.join(" · ") : screenInfo.note;
+  })();
 
   const todayLabel = new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
   // Над заголовком экрана — строка «Среда, 23 сентября»: день недели первым,
@@ -2816,6 +2867,8 @@ export default function StudyPlanner() {
         .ap-screen > .ap-card:nth-child(3), .ap-screen > * > .ap-card:nth-child(3) { animation-delay: .08s; }
         .ap-screen > .ap-card:nth-child(4), .ap-screen > * > .ap-card:nth-child(4) { animation-delay: .12s; }
         ${NEW_CSS}
+        ${SCHOOL_CSS}
+        ${BUDGET_CSS}
         .ap-pill { background: transparent; color: var(--railInk2); transition: background .22s ease, color .22s ease; }
         .ap-pill:hover { background: var(--railActive); color: var(--railInk); }
         .ap-pill.is-on { background: var(--accent); color: var(--accentInk); }
@@ -2877,6 +2930,8 @@ export default function StudyPlanner() {
           .ap-rail { display: none !important; }
           .ap-tabbar, .ap-only-mobile { display: block; }
           ${NEW_MOBILE_CSS}
+          ${SCHOOL_MOBILE_CSS}
+          ${BUDGET_MOBILE_CSS}
           /* Телефон: и «Подготовка», и тетрадь — два шага вместо двух колонок.
              Список → предмет, оглавление → ветка; назад — кнопкой сверху. */
           .ap-mobile-only { display: inline-flex !important; }
@@ -2983,7 +3038,7 @@ export default function StudyPlanner() {
           title={screenInfo.title}
           // На «Сегодня» подзаголовок пересказывал карточки под ним — дата над
           // названием говорит о том же короче.
-          note={screen === "today" ? null : screenInfo.note}
+          note={screen === "today" ? null : screen === "school" ? schoolNote : screenInfo.note}
           badge={screen === "trainer" ? "ALPHA" : null}
           date={screen === "today" ? todayHeadLabel : null}
         >
@@ -3000,6 +3055,41 @@ export default function StudyPlanner() {
               <Icon name="plus" size={17} strokeWidth={2} />
               Записать занятие
             </button>
+          )}
+          {/* Настройка расписания и предметы — окнами по кнопкам: раньше они
+              стояли над уроками, и до сегодняшнего дня надо было листать. */}
+          {screen === "school" && (
+            <>
+              <button
+                type="button"
+                onClick={() => setSchoolSheet("subjects")}
+                className="ap-row ap-sd-headbtn"
+                style={styles.schoolHeadBtn}
+                aria-label="Предметы и тетради"
+                title="Предметы и тетради"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4z" />
+                  <path d="M5 17a3 3 0 0 1 3-3h11M9 8h6" />
+                </svg>
+                <span className="lbl">Предметы и тетради</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSchoolSheet("setup")}
+                className="ap-row ap-sd-headbtn"
+                style={styles.schoolHeadBtn}
+                aria-label="Настроить расписание"
+                title="Настроить расписание"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+                  <circle cx="16" cy="7" r="2" />
+                  <circle cx="10" cy="17" r="2" />
+                </svg>
+                <span className="lbl">Настроить расписание</span>
+              </button>
+            </>
           )}
         </ScreenHead>
 
@@ -3151,13 +3241,15 @@ export default function StudyPlanner() {
             </section>
             )}
 
-            {/* Что идёт прямо сейчас — и у тебя, и у всей параллели. */}
+            {/* Уроки дня одной карточкой: что идёт сейчас и весь день лентой, как
+                в «Лицее». Вечером — про завтра. */}
             <NowCard
               entriesFor={dayEntries}
               tasksFor={lessonTasks.forLesson}
               homeworkOn={homeworkOnDate}
               colorOf={lyceumColorOf}
-              markOf={priorityInfo}
+              kit={SCHOOL_KIT}
+              onOpen={() => goScreen("school")}
               styles={styles}
             />
 
@@ -3193,50 +3285,9 @@ export default function StudyPlanner() {
               </section>
             )}
 
-          {/* Уроки дня и запись занятия — рядом: записывают обычно как раз то,
-              что было сегодня в лицее. Раньше форма пряталась в конце карточки
-              с расписанием, под списком уроков. */}
+          {/* Список «Сегодня в лицее» был вторым пересказом того же дня, что и
+              карточка выше, — теперь день целиком в ней, лентой. */}
           <div className="ap-grid2" style={styles.gridToday}>
-            <section className="ap-card" style={styles.card}>
-              <CardHead
-                id="today-school"
-                title="Сегодня в лицее"
-                empty={todayLessons.length === 0}
-                note="Важность — полосой слева, роль урока — подписью"
-              >
-                {todayLessons.length > 0 && (
-                  <span style={styles.cardMeta}>
-                    {todayLessons.length} {lessonsWord(todayLessons.length)}
-                    {todayLessons[0].start ? " · с " + todayLessons[0].start : ""}
-                  </span>
-                )}
-              </CardHead>
-              {todayLessons.length === 0 ? (
-                <p style={styles.muted}>На сегодня уроков в расписании нет.</p>
-              ) : (
-                <div style={styles.todayList}>
-                  {todayLessons.map((e) => (
-                    <div
-                      key={e.id}
-                      style={{
-                        ...styles.todayRow,
-                        borderLeftColor: priorityInfo(e.priority).strong,
-                        background: priorityInfo(e.priority).tint,
-                      }}
-                    >
-                      <span style={styles.todayTime}>{e.start}</span>
-                      <span style={styles.todayName}>{e.subjectName}</span>
-                      <span style={styles.todayMeta}>
-                        {e.kind === "exam"
-                          ? examKindLabel(e.examKind) + (e.place ? " · " + e.place : "")
-                          : levelInfo(e.level).label + (e.room ? " · " + e.room : "") + (e.teacher ? " · " + e.teacher : "")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
             {!homeworkEmpty && (
             <section className="ap-card" style={styles.card}>
               <CardHead
@@ -3594,146 +3645,20 @@ export default function StudyPlanner() {
           </>
         )}
 
+        {/* «Распределение времени (КПВ)»: слева шаги ① дни и ② предметы, справа —
+            что получается, с графиком КПВ (src/budget-screen.jsx). */}
         {screen === "budget" && (
-          <section className="ap-card" style={styles.card}>
-            <CardHead
-              id="budget"
-              title="Бюджет времени"
-              note={
-                "Время — ограниченный ресурс, и его количество разное в разные дни недели. Укажите, сколько минут " +
-                "в день вы реально можете заниматься; ниже — сколько часов в неделю вы распределяете по предметам " +
-                "и проверка, хватит ли этого ресурса на оставшиеся уроки." +
-                (mainEvent ? ` Отсчёт идёт до самого приоритетного события — «${mainEvent.name}».` : "")
-              }
-            />
-
-            <div style={styles.dailyGoalsBlock}>
-              <label style={styles.label}>Сколько минут в день вы можете заниматься</label>
-              <div style={styles.dailyGoalsRow}>
-                {WEEKDAY_KEYS.map((k) => (
-                  <div key={k} style={styles.dailyGoalCell}>
-                    <div style={styles.dailyGoalLabel}>{WEEKDAY_LABELS[k]}</div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="5"
-                      value={budget.daily[k]}
-                      onChange={(e) => setDailyGoal(k, e.target.value)}
-                      style={styles.dailyGoalInput}
-                    />
-                    <div style={styles.dailyGoalHours}>{Math.round((Number(budget.daily[k]) / 60) * 10) / 10} ч</div>
-                  </div>
-                ))}
-              </div>
-              <p style={styles.muted}>Итого за неделю: {capacity.weeklyBudget} ч.</p>
-            </div>
-
-            <div style={styles.allocGrid}>
-              {ALL_SUBJECTS.map((s) => {
-                const plan = Number(budget.alloc[s.id]) || 0;
-                const rec = recommendedHours[s.id] || 0;
-                const scale = (v) => Math.min(100, (v / 20) * 100);
-                return (
-                  <div key={s.id} style={styles.allocBlock}>
-                    <div style={styles.allocRow}>
-                      <span style={{ ...styles.dot, background: s.color }} />
-                      <span style={styles.allocName}>{s.name}</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="20"
-                        value={budget.alloc[s.id]}
-                        onChange={(e) => setAlloc(s.id, e.target.value)}
-                        className="ap-range ap-range-fill"
-                        aria-label={"Часов в неделю: " + s.name}
-                        style={{
-                          "--fill": s.color,
-                          "--pct": Math.min(100, (Number(budget.alloc[s.id]) || 0) / 20 * 100) + "%",
-                          flex: 1,
-                          minWidth: 0,
-                        }}
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={budget.alloc[s.id]}
-                        onChange={(e) => setAlloc(s.id, e.target.value)}
-                        style={styles.smallNumInput}
-                      />
-                      <span style={styles.hUnit}>ч/нед</span>
-                    </div>
-                    {/* Вторая полоска — рекомендация: сколько вышло бы, раздели мы
-                        недельный ресурс по остатку работы на каждом предмете. */}
-                    <div style={styles.recTrack}>
-                      <div className="ap-fill" style={{ ...styles.recPlan, width: scale(plan) + "%", background: s.color }} />
-                      <div style={{ ...styles.recMark, left: scale(rec) + "%" }} />
-                    </div>
-                    <div style={styles.recLabels}>
-                      <span>план {plan} ч</span>
-                      <span style={{ color: Math.abs(plan - rec) >= 1 ? "var(--gold)" : "var(--ink3)" }}>
-                        рекомендую {String(rec).replace(".", ",")} ч
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ ...styles.capacityBox, borderColor: capacity.overBudget ? "var(--red)" : "var(--green)" }}>
-              <div>
-                Распределено по предметам: <b>{capacity.weeklyTotal}</b> ч/нед из доступных {capacity.weeklyBudget} ч/нед
-                {capacity.overBudget && <span style={styles.warn}> — превышен бюджет</span>}
-              </div>
-              <div>
-                Осталось непройденных уроков: <b>{capacity.remainingTopics}</b> · суммарно по их длительности:{" "}
-                <b>{capacity.neededHours} ч</b>
-              </div>
-              {mainEvent ? (
-                <div>
-                  Доступно времени до «{mainEvent.name}» ({formatEventDate(mainEvent.date)}) с учётом расписания по дням
-                  недели: <b>{capacity.totalCapacityHours} ч</b>
-                </div>
-              ) : (
-                <div>Событие не выбрано — считать не от чего.</div>
-              )}
-              <div
-                style={{
-                  fontWeight: 600,
-                  color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
-                }}
-              >
-                {capacity.feasible === null
-                  ? "Добавьте событие наверху страницы — тогда посчитаю, хватит ли времени."
-                  : capacity.feasible
-                  ? "При таком темпе времени должно хватить."
-                  : "При текущем темпе времени может не хватить — стоит увеличить часы или пересмотреть приоритеты."}
-              </div>
-
-            </div>
-
-            {capacity.skew && (
-              <div style={styles.skewWarning}>
-                Слишком сильный уклон в «{capacity.skew.name}» ({capacity.skew.sharePct}% времени) — не забывайте и про
-                остальные сферы.
-              </div>
-            )}
-
-            <div style={styles.ppfSection}>
-              <div style={styles.balanceHead}>
-                <CardHead
-                  id="balance"
-                  title="Баланс предметов"
-                  empty={balanceItems.length === 0}
-                  note={
-                    "По горизонтали — план на неделю, по вертикали — записанное в дневнике за последние семь дней. " +
-                    "Диагональ — линия баланса: точка на ней значит, что план и факт сошлись. Выше — предмет забирает " +
-                    "больше времени, чем ему отведено, ниже — недобирает. Размер точки — сколько тем по нему пройдено."
-                  }
-                />
-              </div>
-              <BalanceChart items={balanceItems} />
-            </div>
-          </section>
+          <BudgetScreen
+            subjects={ALL_SUBJECTS}
+            budget={budget}
+            onDaily={setDailyGoal}
+            onAlloc={setAlloc}
+            capacity={capacity}
+            mainEvent={mainEvent}
+            balance={balanceItems}
+            formatDate={formatEventDate}
+            onEvents={() => goScreen("events")}
+          />
         )}
 
         {screen === "study" && (
@@ -4045,174 +3970,40 @@ export default function StudyPlanner() {
           </Suspense>
         )}
 
+        {/* «Лицей КЭО», вариант A: дни недели сверху, открыт сегодняшний, ниже —
+            день лентой по времени. Настройка расписания и предметы — окнами
+            (см. schoolSheet ниже, рядом с другими окнами). */}
         {screen === "school" && (
-          <section style={styles.plainBlock}>
-            <p style={styles.muted}>
-              Отдельно от самостоятельного изучения. Сверху — предметы лицея с тетрадями и цветом, ниже — расписание
-              с реальными звонками: время, кабинет, преподаватель и роль урока.
-            </p>
-
-            {/* Предметов набирается полтора десятка, и списком они занимали
-                пол-экрана над расписанием — ради которого сюда и заходят. */}
-            <div style={styles.foldCard}>
-              <button onClick={() => toggleSection("lyceumSubjects")} style={styles.foldCardHead}>
-                <span style={styles.sectionChevron}>{openSections.lyceumSubjects ? "▾" : "▸"}</span>
-                <span style={styles.foldCardTitle}>Предметы</span>
-                <span style={styles.mutedSmall}>
-                  {lyceumSubjectNames.length > 0
-                    ? lyceumSubjectNames.length + " — тетради и цвет"
-                    : "появятся из расписания"}
-                </span>
-              </button>
-              <Collapsible open={!!openSections.lyceumSubjects}>
-                {lyceumSubjectNames.length === 0 ? (
-                  <p style={styles.foldCardEmpty}>Предметы появятся здесь, как только вы впишете их в расписание ниже.</p>
-                ) : (
-              <div style={styles.lyceumNotebooks}>
-                {lyceumSubjectNames.map((name) => {
-                  const key = "lyceum:" + name;
-                  const isOpen = openLyceumNotebook === name;
-                  const blocks = notebooks[key] || [];
-                  return (
-                    <div key={name} style={styles.lyceumNotebookBlock}>
-                      <div style={styles.lyceumSubjectRow}>
-                        <button
-                          onClick={() => setOpenLyceumNotebook(isOpen ? null : name)}
-                          style={{ ...styles.lyceumNotebookHead, color: lyceumColorOf(name) }}
-                        >
-                          <span style={styles.sectionChevron}>{isOpen ? "▾" : "▸"}</span>
-                          {name}
-                          <span style={styles.mutedSmall}>
-                            {blocks.length ? blocks.length + " блок." : "тетрадь пуста"}
-                          </span>
-                        </button>
-                        <input
-                          type="color"
-                          value={hexOf(lyceumColorOf(name))}
-                          onChange={(e) => setSubjectColor("lyceum:" + name, e.target.value)}
-                          style={styles.colorPick}
-                          title="Цвет предмета"
-                        />
-                      </div>
-                      <Collapsible open={isOpen}>
-                        <div style={styles.lyceumNotebookBody}>
-                          <Notebook blocks={blocks} onChange={(b) => setNotebook(key, b)} onUndo={showUndo} prefix={"lyceum-" + name} />
-                        </div>
-                      </Collapsible>
-                    </div>
-                  );
-                })}
-              </div>
-                )}
-              </Collapsible>
-            </div>
-
-            <h3 style={styles.subHead}>Расписание</h3>
-            <div data-focus-id="preset">
-            <SchedulePreset
-              choices={presetChoices}
-              onChoices={setPresetChoices}
-              onApply={applyPreset}
-              onClear={clearPreset}
-              appliedCount={presetLessons}
-              locked={presetLocked}
-              onSignIn={() => goScreen("settings")}
-              openRequest={presetOpenRequest}
-            />
-            </div>
-            {/* Блок «Контрольные тесты КТ1» убран: тесты прошли 17–23 сентября.
-                Уже добавленные КТ1 остаются в записях как прошедшие экзамены — из
-                недели они скрыты сами, а в «Событиях» их убирает очистка
-                прошедших. Пересборка готовых данных ниже по-прежнему их узнаёт
-                (KT_PRESET_ID), чтобы не потерять важность, выставленную руками. */}
-            <OlympiadPreset
-              picked={voshPicks}
-              onPicked={setVoshPicks}
-              onApply={applyOlympiads}
-              onClear={clearOlympiads}
-              appliedCount={presetOlympiads}
-              locked={presetLocked}
-              onSignIn={() => goScreen("settings")}
-            />
-            <div style={styles.sundayRow}>
-              <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
-                {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
-              </button>
-              {!showSunday && sundayLessons > 0 && (
-                <span style={styles.mutedSmall}>уроки воскресенья сохранены ({sundayLessons})</span>
-              )}
-            </div>
-
-            <div style={styles.priorityLegend}>
-              Важность урока — значками рядом с предметом:{" "}
-              {EVENT_PRIORITIES.map((p, i) => (
-                <span key={p.value}>
-                  {i > 0 && " · "}
-                  <PriorityMark value={p.value} height={10} /> {p.label}
-                </span>
-              ))}
-              <br />
-              Важность и роль — свойства предмета: меняете в одной карточке — меняются во всех его уроках.
-            </div>
-
-            {/* Чаще всего от расписания нужен один день — сегодняшний. Он и
-                стоит первым, отдельной карточкой; неделя целиком разворачивается
-                по кнопке, когда нужно что-то переставить или посмотреть вперёд. */}
-            {scheduleDays.includes(todayKey) ? (
-              <div style={styles.todayDayWrap}>
-                <ScheduleDay
-                  day={todayKey}
-                  label={WEEKDAY_LABELS[todayKey]}
-                  today
-                  wide
-                  entries={weekEntries(todayKey)}
-                  onAdd={(entry) => addScheduleEntry(todayKey, entry)}
-                  onUpdate={updateScheduleEntry}
-                  onRemove={removeScheduleEntry}
-                  tasks={lessonTasks}
-                  onMoveDate={moveExamDate}
-                  reopen={examReopen && examReopen.day === todayKey ? examReopen : null}
-                  onReopenDone={() => setExamReopen(null)}
-                  onEditDone={() => setExamEdit(null)}
-                  editRequest={examEdit}
-                />
-              </div>
-            ) : (
-              <p style={styles.mutedSmall}>
-                Сегодня воскресенье — день скрыт. Включите его кнопкой выше, если занятия есть и в воскресенье.
-              </p>
-            )}
-
-            <div style={styles.foldCard}>
-              <button onClick={() => toggleSection("scheduleWeek")} style={styles.foldCardHead}>
-                <span style={styles.sectionChevron}>{openSections.scheduleWeek ? "▾" : "▸"}</span>
-                <span style={styles.foldCardTitle}>Вся неделя</span>
-                <span style={styles.mutedSmall}>{scheduleDays.length} дней</span>
-              </button>
-              <Collapsible open={!!openSections.scheduleWeek}>
-              <div style={styles.scheduleGrid}>
-                {scheduleDays.map((day) => (
-                  <ScheduleDay
-                    key={day}
-                    day={day}
-                    label={WEEKDAY_LABELS[day]}
-                    today={day === todayKey}
-                    entries={weekEntries(day)}
-                    onAdd={(entry) => addScheduleEntry(day, entry)}
-                    onUpdate={updateScheduleEntry}
-                    onRemove={removeScheduleEntry}
-                    tasks={lessonTasks}
-                    onMoveDate={moveExamDate}
-                    reopen={examReopen && examReopen.day === day ? examReopen : null}
-                    onReopenDone={() => setExamReopen(null)}
-                    onEditDone={() => setExamEdit(null)}
-                    editRequest={examEdit}
-                  />
-                ))}
-              </div>
-              </Collapsible>
-            </div>
-          </section>
+          <SchoolDay
+            days={scheduleDays}
+            todayKey={todayKey}
+            entriesOf={weekEntries}
+            hasSchedule={lyceumSchedule.length > 0}
+            kit={SCHOOL_KIT}
+            colorOf={lyceumColorOf}
+            tasks={lessonTasks}
+            handlers={{
+              onUpdate: updateScheduleEntry,
+              onRemove: removeScheduleEntry,
+              onMoveDate: moveExamDate,
+              onAdd: addScheduleEntry,
+              onPick: pickParallel,
+              onUnpick: unpickParallel,
+              editRequest: examEdit,
+              onEditDone: () => setExamEdit(null),
+              onNotebook: openLyceumNotebook,
+            }}
+            soon={upcomingHomework.filter((h) => !h.done).slice(0, 4)}
+            onToggleTask={(id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done })}
+            dueLabel={relativeDayLabel}
+            homeworkOn={homeworkOnDate}
+            onSetup={() => setSchoolSheet("setup")}
+            onJournal={() => goScreen("journal")}
+            focus={focusTarget}
+            findEntry={(id) => lyceumSchedule.find((e) => e.id === id)}
+            reopen={examReopen}
+            onReopenDone={() => setExamReopen(null)}
+          />
         )}
 
         {screen === "journal" && (
@@ -4858,6 +4649,97 @@ export default function StudyPlanner() {
         </div>
       </main>
 
+      {/* Окна «Лицея» — вне экрана, рядом с остальными окнами: внутри экрана
+          нижняя полоса разделов на телефоне ложилась бы поверх листа. */}
+      {screen === "school" && schoolSheet === "setup" && (
+        <SchoolSheet title="Настроить расписание" onClose={() => setSchoolSheet(null)}>
+          <div data-focus-id="preset">
+            <SchedulePreset
+              choices={presetChoices}
+              onChoices={setPresetChoices}
+              onApply={applyPreset}
+              onClear={clearPreset}
+              appliedCount={presetLessons}
+              locked={presetLocked}
+              onSignIn={() => {
+                setSchoolSheet(null);
+                goScreen("settings");
+              }}
+              // В окне настройки выбор школы и групп — главное, поэтому он
+              // раскрыт сразу, а не свёрнутой строкой.
+              openRequest={presetOpenRequest || 1}
+            />
+          </div>
+          {/* Блок «Контрольные тесты КТ1» убран: тесты прошли 17–23 сентября.
+              Уже добавленные КТ1 остаются в записях как прошедшие экзамены —
+              из недели они скрыты сами. Пересборка готовых данных по-прежнему
+              их узнаёт (KT_PRESET_ID), чтобы не потерять важность. */}
+          <OlympiadPreset
+            picked={voshPicks}
+            onPicked={setVoshPicks}
+            onApply={applyOlympiads}
+            onClear={clearOlympiads}
+            appliedCount={presetOlympiads}
+            locked={presetLocked}
+            onSignIn={() => {
+              setSchoolSheet(null);
+              goScreen("settings");
+            }}
+          />
+          <div style={styles.sundayRow}>
+            <button onClick={() => setShowSunday(!showSunday)} style={styles.sundayBtn}>
+              {showSunday ? "Убрать воскресенье" : "Добавить воскресенье"}
+            </button>
+            {!showSunday && sundayLessons > 0 && (
+              <span style={styles.mutedSmall}>уроки воскресенья сохранены ({sundayLessons})</span>
+            )}
+          </div>
+        </SchoolSheet>
+      )}
+      {screen === "school" && schoolSheet === "subjects" && (
+        <SchoolSheet title="Предметы и тетради" onClose={() => setSchoolSheet(null)}>
+          <p style={styles.muted}>
+            Цвет предмета — полоска у его уроков в расписании. Важность меняется в «⋯» у любого урока — сразу для всего
+            предмета. Конспекты — в тетради предмета.
+          </p>
+          {lyceumSubjectNames.length === 0 ? (
+            <p style={styles.mutedSmall}>Предметы появятся здесь, как только в расписании будут уроки.</p>
+          ) : (
+            <div style={styles.sdSubjects}>
+              {lyceumSubjectNames.map((name) => {
+                const n = activeSchedule.filter((e) => e.kind !== "exam" && !e.skip && e.subjectName === name).length;
+                const blocks = (notebooks["lyceum:" + name] || []).length;
+                const lesson = activeSchedule.find((e) => e.kind !== "exam" && e.subjectName === name);
+                return (
+                  <div key={name} style={styles.sdSubjRow}>
+                    <input
+                      type="color"
+                      value={hexOf(lyceumColorOf(name))}
+                      onChange={(e) => setSubjectColor("lyceum:" + name, e.target.value)}
+                      style={styles.colorPick}
+                      title="Цвет предмета"
+                      aria-label={"Цвет предмета «" + name + "»"}
+                    />
+                    <span style={styles.sdSubjText}>
+                      <span style={styles.sdSubjName}>{name}</span>
+                      <span style={styles.mutedSmall}>
+                        {n ? n + " " + lessonsWord(n) + " в неделю" : "нет в расписании"}
+                        {" · "}
+                        {blocks ? blocks + " блок." : "тетрадь пуста"}
+                      </span>
+                    </span>
+                    {lesson && <PriorityMark value={lesson.priority || 1} height={12} />}
+                    <button type="button" onClick={() => openLyceumNotebook(name)} className="ap-row" style={styles.sdSubjGo}>
+                      Тетрадь →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </SchoolSheet>
+      )}
+
       <ScheduleNews
         news={scheduleNews}
         onClose={closeScheduleNews}
@@ -4866,6 +4748,7 @@ export default function StudyPlanner() {
             ? () => {
                 closeScheduleNews();
                 goScreen("school");
+                setSchoolSheet("setup");
                 setPresetOpenRequest(Date.now());
                 setFocusTarget({ id: "preset", at: Date.now() });
               }
@@ -5485,139 +5368,21 @@ function LessonTasks({ list, due, folded, onFold, onToggle }) {
   );
 }
 
-// wide — отдельная карточка сегодняшнего дня во всю ширину: уроки в ней
-// строками. В сетке недели сегодняшний день только подсвечен, а уроки —
-// карточками, как у остальных дней: строка в узкой колонке разваливалась.
-function ScheduleDay({ day, label, entries, today, wide, onAdd, onUpdate, onRemove, tasks, onMoveDate, reopen, onReopenDone, editRequest, onEditDone }) {
-  const [examOpen, setExamOpen] = useState(false);
-  // С чем открыть форму экзамена: запрос из уведомления живёт только до того,
-  // как форма открылась, а значения держим здесь, пока форму не отправят.
-  const [formSeed, setFormSeed] = useState(null);
-  // Форма урока — шесть полей; развёрнутая в каждом дне, она делала неделю
-  // стеной из полей, поэтому раскрывается по кнопке.
-  const [addOpen, setAddOpen] = useState(false);
-  // Какому уроку сейчас пишут задание и что успели написать.
-  const [taskFor, setTaskFor] = useState(null);
-  const [taskText, setTaskText] = useState("");
-  const [taskMinutes, setTaskMinutes] = useState("30");
-  const due = tasks ? tasks.dueDate(day) : "";
-
-  // Крестик в уведомлении о переносе только что добавленного экзамена: форма
-  // этого дня открывается снова, с тем, что было введено.
-  useEffect(() => {
-    if (!reopen) return;
-    setFormSeed(reopen);
-    setExamOpen(true);
-    if (onReopenDone) onReopenDone();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reopen]);
-
-  return (
-    <div className="ap-card" style={{ ...styles.scheduleDayBlock, ...(today ? styles.scheduleDayToday : null) }}>
-      <div style={styles.scheduleDayTop}>
-        <div style={styles.scheduleDayHeader}>
-          {label}
-          {today && <span style={styles.todayMark}>сегодня</span>}
-        </div>
-        <div style={styles.scheduleDayActions}>
-          <button onClick={() => setAddOpen(!addOpen)} style={styles.examToggle}>
-            {addOpen ? "Скрыть урок" : "+ Урок"}
-          </button>
-          <button onClick={() => setExamOpen(!examOpen)} style={styles.examToggle}>
-            {examOpen ? "Скрыть" : "+ Экзамен"}
-          </button>
-        </div>
-      </div>
-
-      <Collapsible open={examOpen}>
-        <AddExamForm
-          key={formSeed ? formSeed.at : "new"}
-          initial={formSeed ? formSeed.values : null}
-          onAdd={(entry) => {
-            onAdd({ ...entry, kind: "exam" });
-            setExamOpen(false);
-            setFormSeed(null);
-          }}
-        />
-      </Collapsible>
-
-      {entries.length === 0 && <div style={styles.mutedSmall}>Уроков нет</div>}
-      {/* Один день — столбцом: сетка раскладывала уроки по строкам и колонкам, и
-          порядок дня по ней читался хуже, чем простым списком сверху вниз.
-          Строка при этом однострочная, поэтому столбец выходит короткий. */}
-      <div style={wide ? styles.dayEntriesList : undefined}>
-        {entries.map((e) => {
-          const list = tasks ? tasks.forLesson(e) : [];
-          return (
-            <div key={e.id} data-focus-id={"lesson:" + e.id}>
-              <ScheduleEntryRow
-                entry={e}
-                onUpdate={onUpdate}
-                onMoveDate={onMoveDate}
-                editRequest={editRequest}
-                onEditDone={onEditDone}
-                onRemove={() => onRemove(e.id)}
-                compact={wide}
-                onAddTask={tasks ? () => setTaskFor(taskFor === e.id ? null : e.id) : null}
-              />
-              {list.length > 0 && (
-                <LessonTasks
-                  list={list}
-                  due={due}
-                  folded={tasks.folded(e.id, due)}
-                  onFold={(v) => tasks.setFolded(e.id, due, v)}
-                  onToggle={(id) => tasks.toggle(id)}
-                />
-              )}
-              {taskFor === e.id && (
-                <div style={styles.lessonTaskForm}>
-                  <AutoGrow
-                    placeholder="Что задали?"
-                    value={taskText}
-                    onChange={(ev) => setTaskText(ev.target.value)}
-                    onEnter={() => {
-                      tasks.add(e, taskText, taskMinutes);
-                      setTaskText("");
-                      setTaskFor(null);
-                    }}
-                    style={styles.lessonTaskInput}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
-                    value={taskMinutes}
-                    onChange={(ev) => setTaskMinutes(ev.target.value)}
-                    style={styles.lessonTaskMinutes}
-                    title="Сколько минут займёт"
-                  />
-                  <button
-                    onClick={() => {
-                      tasks.add(e, taskText, taskMinutes);
-                      setTaskText("");
-                      setTaskFor(null);
-                    }}
-                    style={styles.rowDone}
-                  >
-                    К {due.slice(8)}.{due.slice(5, 7)}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <Collapsible open={addOpen}>
-        <AddScheduleForm
-          onAdd={(entry) => {
-            onAdd(entry);
-            setAddOpen(false);
-          }}
-        />
-      </Collapsible>
-    </div>
-  );
-}
+// Что ленте «Лицея» (src/school-day.jsx) нужно отсюда: карточки правки,
+// формы добавления и то, как здесь выглядят важность, роль и экзамены.
+// Передаётся объектом, а не импортом: этот файл сам импортирует ленту.
+const SCHOOL_KIT = {
+  ScheduleEntryRow,
+  LessonTasks,
+  AddScheduleForm,
+  AddExamForm,
+  EVENT_PRIORITIES,
+  priorityInfo,
+  levelInfo,
+  examKindLabel,
+  examPlace,
+  formatEventDate,
+};
 
 // Серия занятий — огонёк вместо восклицательного знака. Смайлик рядом с
 // шрифтовой засечкой смотрелся чужеродно, поэтому пламя нарисовано теми же
@@ -5792,12 +5557,14 @@ function FoldIcon({ open }) {
   );
 }
 
-function ScheduleEntryRow({ entry, onUpdate, onMoveDate, editRequest, onEditDone, onRemove, compact, onAddTask }) {
+// autoEdit — сразу поля правки: лента «Лицея» открывает их из «⋯» у урока, а
+// onClose возвращает её к карточке по «Готово».
+function ScheduleEntryRow({ entry, onUpdate, onMoveDate, editRequest, onEditDone, onRemove, compact, onAddTask, autoEdit, onClose }) {
   const isExam = entry.kind === "exam";
   // Урок читают куда чаще, чем правят, поэтому обычный вид — три короткие
   // строки, а поля появляются по «изменить». Раньше каждый урок был формой из
   // шести полей, и день из восьми уроков не помещался на экран.
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!autoEdit);
   const rowRef = useRef(null);
   // Экзамен, до которого больше недели, стоит полупрозрачно внизу дня, и его
   // можно свернуть в строку. За неделю до даты он встаёт наверх как обычно —
@@ -6025,7 +5792,13 @@ function ScheduleEntryRow({ entry, onUpdate, onMoveDate, editRequest, onEditDone
         </>
       )}
       <div style={styles.rowBottom}>
-        <button onClick={() => setEditing(false)} style={styles.rowDone}>
+        <button
+          onClick={() => {
+            setEditing(false);
+            if (onClose) onClose();
+          }}
+          style={styles.rowDone}
+        >
           Готово
         </button>
         <button onClick={onRemove} style={styles.rowDelete}>
@@ -6464,7 +6237,20 @@ const styles = {
   nowMineTag: { fontSize: 10.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--accent)", flexShrink: 0 },
   nowMineName: { fontWeight: 600, color: "var(--ink)" },
   nowMineMeta: { color: "var(--ink3)", fontSize: 12.5 },
-  nowAll: { borderTop: "1px solid var(--line2)", paddingTop: 10 },
+  nowAll: { display: "flex", flexDirection: "column", gap: 6, marginTop: 10 },
+  nowLater: { marginTop: 2 },
+  // Низ карточки: свёрнутая «вся параллель» слева, переход в «Лицей» справа.
+  nowFoot: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+    marginTop: 12,
+    paddingTop: 10,
+    borderTop: "1px solid var(--line2)",
+  },
+  nowAllToggle: { border: "none", background: "none", padding: "6px 0", fontSize: 13, color: "var(--ink3)", textAlign: "left" },
   nowAllTitle: { fontSize: 11.5, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--mute)", marginBottom: 8 },
   nowAllRow: { display: "flex", flexDirection: "column", gap: 2 },
   // Та же полоска, что у уроков в расписании: урок узнают по ней, и на
@@ -6908,6 +6694,30 @@ const styles = {
   card: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "22px 24px", marginBottom: 20 },
   // Подпись справа от заголовка карточки: «6 уроков · с 8:30».
   cardMeta: { fontSize: 13, color: "var(--ink3)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" },
+  schoolHeadBtn: {
+    minHeight: 44,
+    padding: "0 16px",
+    border: "1px solid var(--line)",
+    borderRadius: 12,
+    background: "var(--panel)",
+    color: "var(--ink)",
+    fontSize: 14,
+    fontWeight: 600,
+  },
+  // Окно «Предметы и тетради» в «Лицее».
+  sdSubjects: { display: "flex", flexDirection: "column" },
+  sdSubjRow: { display: "flex", alignItems: "center", gap: 12, minHeight: 58, padding: "6px 0", borderTop: "1px solid var(--line2)" },
+  sdSubjText: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 },
+  sdSubjName: { fontSize: 15, fontWeight: 600 },
+  sdSubjGo: {
+    minHeight: 38,
+    padding: "0 12px",
+    border: "1px solid var(--line)",
+    borderRadius: 10,
+    background: "transparent",
+    fontSize: 13.5,
+    whiteSpace: "nowrap",
+  },
   headAction: {
     display: "inline-flex",
     alignItems: "center",
