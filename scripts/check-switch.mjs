@@ -128,6 +128,80 @@ const after = await page.locator(".ap-notes-subject").allInnerTexts();
 want("предмета нет в сетке — тетрадь с записями всё равно в списке", after.some((s) => s.includes("Логика")));
 
 want("ошибок нет", errors.length === 0, errors[0] || "");
+await ctx.close();
+
+// Обновление вида (1.3 → 1.5: новая лента «Лицея», «Распределение») на записях,
+// какими их сохраняет 1.3: ни урок, ни задание, ни тетрадь, ни запись дневника
+// не меняются и не пропадают. Выбор среди одновременных уроков только ставит
+// пометку skip и снимается обратно.
+{
+  const { buildSchedule } = await import(resolve(process.cwd(), "src/lyceum-schedule-10.js"));
+  const choices = { school: "law", groups: { eng: "ivanova", math: "andropova", rus: "timoshkova", pe: "g2m" }, tiers: { eng: "base", math: "base" }, specs: ["soc", "law"] };
+  const schedule = buildSchedule(choices).map((e) => (e.subjectName === "Обществознание" ? { ...e, priority: 3 } : e));
+  const soc = schedule.find((e) => e.subjectName === "Обществознание");
+  const st13 = {
+    lyceumRevision: 3,
+    presetChoices: choices,
+    lyceumSchedule: [...schedule, manual],
+    homework: [{ id: "hw-1", lessonId: soc.id, date: TUE, subjectName: "Обществознание", text: "Эссе", minutes: 40, done: false, attachments: [] }],
+    notebooks,
+    journal: [{ id: "j1", date: yesterday, subjectId: "law", hours: 1.5, note: "Конспект" }],
+    events: [{ id: "ev1", name: "Олимпиада по праву", date: THU, priority: 3 }],
+  };
+  const c2 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const p2 = await c2.newPage();
+  p2.setDefaultTimeout(5000);
+  const errs = [];
+  p2.on("pageerror", (e) => errs.push(e.message));
+  await p2.addInitScript((st) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "school");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, st13);
+  await p2.goto(URL0);
+  await p2.waitForTimeout(1500);
+  // Пройтись по всем дням и разделам, как человек после обновления.
+  for (const tab of await p2.getByRole("tab").all()) { await tab.click(); await p2.waitForTimeout(150); }
+  for (const scr of ["today", "budget", "study", "notes", "journal", "events", "school"]) {
+    await p2.evaluate((k) => localStorage.setItem("planner-screen", k), scr);
+    await p2.reload();
+    await p2.waitForTimeout(700);
+  }
+  const noStamp = (list) => JSON.stringify((list || []).map(({ __u, ...rest }) => rest));
+  const got = await p2.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value));
+  want("1.3 → 1.5: уроки расписания те же, все на месте", noStamp(got.lyceumSchedule) === noStamp(st13.lyceumSchedule), (got.lyceumSchedule || []).length + " из " + st13.lyceumSchedule.length);
+  want("1.3 → 1.5: задания не тронуты", noStamp(got.homework) === noStamp(st13.homework));
+  want("1.3 → 1.5: записи дневника и события не тронуты", noStamp(got.journal) === noStamp(st13.journal) && noStamp(got.events) === noStamp(st13.events));
+  want("1.3 → 1.5: тетради не тронуты", Object.keys(notebooks).every((k) => strip(got.notebooks[k]) === strip(notebooks[k])));
+  want("1.3 → 1.5: пересборки сетки не было (окна о смене нет)", got.lyceumRevision === 3 && !(await p2.getByRole("dialog", { name: "Расписание лицея изменилось" }).isVisible()));
+
+  // Одновременные уроки: выбор — пометка, а не удаление.
+  let picked = null;
+  for (const tab of await p2.getByRole("tab").all()) {
+    await tab.click();
+    await p2.waitForTimeout(200);
+    if (await p2.locator(".ap-sd-opt").count()) { picked = tab; break; }
+  }
+  if (picked) {
+    await p2.locator(".ap-sd-opt").first().click();
+    await p2.waitForTimeout(1500);
+    const after = await p2.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).lyceumSchedule);
+    want("выбор среди одновременных: ни один урок не удалён", after.length === st13.lyceumSchedule.length, after.length + " из " + st13.lyceumSchedule.length);
+    want("остальные варианты только помечены", after.filter((e) => e.skip).length > 0);
+    await p2.getByRole("button", { name: "Изменить выбор" }).first().click();
+    await p2.waitForTimeout(1500);
+    const back = await p2.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).lyceumSchedule);
+    want("«Изменить выбор» снимает пометки", back.filter((e) => e.skip).length === 0 && noStamp(back) === noStamp(st13.lyceumSchedule));
+  } else {
+    want("в неделе есть одновременные уроки для проверки выбора", false);
+  }
+  want("1.3 → 1.5: ошибок нет", errs.length === 0, errs[0] || "");
+  await c2.close();
+}
+
 await browser.close();
 server.close();
 console.log(bad ? `\nпровалено: ${bad}` : "\nпереход на новую сетку проходит без потерь");

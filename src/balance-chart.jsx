@@ -22,24 +22,40 @@ const X1 = 442;
 const Y0 = 310;
 const Y1 = 22;
 
-export default function BalanceChart({ items }) {
+// labeled — вид для «Распределения»: подписи прямо у точек, без таблицы
+// справа (числа по предметам стоят в плитках рядом), без своей рамки.
+export default function BalanceChart({ items, labeled }) {
   const [active, setActive] = useState(null);
   const max = Math.max(2, ...items.map((s) => Math.max(s.plan, s.fact, s.recommended || 0))) * 1.1;
   const px = (v) => X0 + (Math.min(v, max) / max) * (X1 - X0);
   const py = (v) => Y0 - (Math.min(v, max) / max) * (Y0 - Y1);
   const current = items.find((s) => s.id === active) || null;
+  // Куда ставить подпись у точки: справа, если там свободно, иначе слева.
+  // История и Социология с одинаковым фактом стоят на одной высоте, и подпись
+  // первой ложилась прямо на точку второй.
+  const LABEL = 15;
+  const sideOf = (s) => {
+    const x = px(s.plan);
+    const y = py(s.fact);
+    const width = s.name.length * LABEL * 0.56;
+    if (x + width + 20 > X1 + 12) return "left";
+    const blocked = items.some((o) => o.id !== s.id && Math.abs(py(o.fact) - y) < LABEL && px(o.plan) > x && px(o.plan) < x + width + 26);
+    return blocked ? "left" : "right";
+  };
 
   return (
     <div style={styles.wrap}>
-      <div style={styles.plot} onMouseLeave={() => setActive(null)}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={styles.svg} role="img" aria-label="План и факт по предметам">
+      <div style={labeled ? styles.plotWide : styles.plot} onMouseLeave={() => setActive(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={labeled ? styles.svgBare : styles.svg} role="img" aria-label="План и факт по предметам">
           <line x1={X0} y1={Y0} x2={X1} y2={Y0} stroke="var(--line)" strokeWidth="1" />
           <line x1={X0} y1={Y0} x2={X0} y2={Y1} stroke="var(--line)" strokeWidth="1" />
           <line x1={X0} y1={Y0} x2={px(max)} y2={py(max)} stroke="var(--ink3)" strokeWidth="1.5" strokeDasharray="5 4" />
           {/* Подпись слева вверху: у диагонали она наезжала на саму линию. */}
-          <text x={X0 + 8} y={Y1 + 8} fontSize="11" fill="var(--ink3)">
-            диагональ — баланс, кольцо — рекомендация
-          </text>
+          {!labeled && (
+            <text x={X0 + 8} y={Y1 + 8} fontSize="11" fill="var(--ink3)">
+              диагональ — баланс, кольцо — рекомендация
+            </text>
+          )}
           <text x={X0} y={Y0 + 20} fontSize="11" fill="var(--mute)">
             0
           </text>
@@ -85,6 +101,20 @@ export default function BalanceChart({ items }) {
                   // На телефоне навести нечем, поэтому касание работает как наведение.
                   onClick={() => setActive(on ? null : s.id)}
                 />
+                {/* Подпись у точки. График в узкой панели ужат почти вдвое,
+                    поэтому шрифт крупнее, чем у остальных подписей. */}
+                {labeled && (
+                  <text
+                    x={sideOf(s) === "left" ? x - r - 6 : x + r + 6}
+                    y={y + 5}
+                    fontSize={LABEL}
+                    fill="var(--ink2)"
+                    textAnchor={sideOf(s) === "left" ? "end" : "start"}
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {s.name}
+                  </text>
+                )}
               </g>
             );
           })}
@@ -93,7 +123,7 @@ export default function BalanceChart({ items }) {
         {current && <Explain item={current} x={px(current.plan)} y={py(current.fact)} onClose={() => setActive(null)} />}
       </div>
 
-      <div style={styles.legend}>
+      {!labeled && <div style={styles.legend}>
         {items.map((s) => (
           <button
             key={s.id}
@@ -111,7 +141,7 @@ export default function BalanceChart({ items }) {
             <span style={{ ...styles.drift, color: driftColor(s.fact - s.plan) }}>{driftLabel(s.fact - s.plan)}</span>
           </button>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -183,6 +213,8 @@ const styles = {
   wrap: { display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" },
   plot: { position: "relative", flex: "1 1 min(460px, 100%)", minWidth: 0, maxWidth: 560 },
   svg: { display: "block", width: "100%", background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 10 },
+  plotWide: { position: "relative", flex: "1 1 100%", minWidth: 0 },
+  svgBare: { display: "block", width: "100%" },
   legend: { flex: "1 1 220px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0 },
   legendRow: {
     display: "flex",
