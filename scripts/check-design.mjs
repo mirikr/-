@@ -139,6 +139,95 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 3в. «Распределение» (1.5.1): часы дня — не только кнопками: число вписывается,
+// столбик тянется мышью, на телефоне — ползунок. Метка «ваш бюджет» не
+// вылезает за карточку, подписи на графике КПВ не наслаиваются.
+{
+  const names = ["Решение вариантов", "История", "Право", "Всероссийская олимпиада ВсОШ", "Экономика", "Социология", "Философия", "Практика в группе"];
+  const state = {
+    customSubjects: names.map((n, i) => ({ id: "c" + i, name: n, color: ["#7A5233", "#A4452C", "#3F6E5A", "#5B5F9A", "#8A6D2F", "#4E7A8C", "#9A7CC0", "#4F8F85"][i], topics: [] })),
+    budget: { daily: { mon: 90, tue: 90, wed: 120, thu: 90, fri: 60, sat: 120, sun: 150 }, alloc: { c6: 10.5, c7: 1.5 } },
+  };
+  for (const [w, tag] of [[1280, "desktop"], [390, "phone"]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.addInitScript((st) => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+      localStorage.setItem("planner-design-intro", "1.0.0");
+      localStorage.setItem("planner-theme-mode", "night");
+      localStorage.setItem("planner-screen", "budget");
+      localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+    }, state);
+    await page.goto(URL0);
+    await page.waitForTimeout(2200);
+    const daily = () => page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).budget.daily);
+
+    const mark = await page.evaluate(() => {
+      const m = document.querySelector(".ap-bud-mark").getBoundingClientRect();
+      const card = document.querySelector(".ap-bud-mark").closest("section").getBoundingClientRect();
+      return Math.round(Math.max(m.right - card.right, card.left - m.left));
+    });
+    want(`${tag}: метка бюджета не вылезает за карточку`, mark <= 0, "на " + mark + " px");
+
+    const labels = await page.evaluate(() => {
+      const svg = document.querySelector(".ap-bud-out svg");
+      const box = svg.getBoundingClientRect();
+      const texts = [...svg.querySelectorAll("text")].map((t) => t.getBoundingClientRect());
+      let cross = 0;
+      for (let i = 0; i < texts.length; i += 1)
+        for (let j = i + 1; j < texts.length; j += 1) {
+          const a = texts[i], b = texts[j];
+          if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) cross += 1;
+        }
+      const out = texts.filter((t) => t.left < box.left - 1 || t.right > box.right + 1).length;
+      return { cross, out, n: texts.length };
+    });
+    want(`${tag}: подписи графика не наслаиваются`, labels.cross === 0, labels.cross + " пересечений из " + labels.n + " подписей");
+    want(`${tag}: подписи графика не уходят за край`, labels.out === 0, labels.out + " за краем");
+
+    if (tag === "desktop") {
+      const field = page.getByRole("textbox", { name: "Часов: Понедельник" });
+      await field.click();
+      await field.fill("2,25");
+      await field.press("Enter");
+      await page.waitForTimeout(1300);
+      want("день: часы вписываются числом", (await daily()).mon === 135, "mon=" + (await daily()).mon);
+      const bar = page.locator(".ap-bud-daybar").nth(1);
+      const b = await bar.boundingBox();
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height - 2);
+      await page.mouse.down();
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 5 });
+      await page.mouse.move(b.x + b.width / 2, b.y - 30, { steps: 5 });
+      await page.mouse.up();
+      await page.waitForTimeout(1300);
+      const tue = (await daily()).tue;
+      want("день: столбик тянется мышью вверх", tue > 120 && tue % 15 === 0, "tue=" + tue);
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height + 40, { steps: 5 });
+      await page.mouse.up();
+      await page.waitForTimeout(1300);
+      want("день: и вниз до нуля", (await daily()).tue === 0, "tue=" + (await daily()).tue);
+    } else {
+      await page.locator(".ap-bud-day").nth(2).click();
+      const slider = page.getByRole("slider", { name: "Ползунок: Среда" });
+      want("телефон: у дня есть ползунок", (await slider.count()) === 1);
+      await slider.fill("195");
+      await page.waitForTimeout(1300);
+      want("телефон: ползунок меняет часы дня", (await daily()).wed === 195, "wed=" + (await daily()).wed);
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      want("телефон: ничего не едет вбок", wide <= 1, wide + " px");
+    }
+    want(`${tag}: распределение без ошибок`, errors.length === 0, errors[0] || "");
+    await ctx.close();
+  }
+}
+
 // 4. Карточки уроков в «Лицее» (1.4.0): два урока одного предмета подряд —
 // одна карточка «2 урока»; всё редкое — в «⋯»; ничего не вылезает за край; а
 // важность — свойство предмета и меняется во всех его уроках, кроме экзаменов.
