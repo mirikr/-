@@ -679,6 +679,59 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   }
 }
 
+// 12. «Подготовка» на компьютере: список предметов и открытый предмет
+// листаются каждый сам по себе, а не вместе со страницей. На телефоне —
+// обычная прокрутка страницы.
+{
+  const topics = Array.from({ length: 40 }, (_, i) => ({ id: "t" + i, name: "Урок " + (i + 1), duration: 40, done: i < 3 }));
+  const subs = ["Право", "История", "Экономика", "Социология", "Политология", "Философия", "Английский", "Литература", "Математика", "Биология", "Химия", "Физика"].map((name, i) => ({ id: "c" + i, name, color: "#8C7326" }));
+  const data = Object.fromEntries(subs.map((x, i) => [x.id, { topics: [], custom: i === 0 ? topics : [] }]));
+  for (const [w, h, tag] of [[1280, 720, "desktop"], [390, 844, "phone"]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.addInitScript((st) => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+      localStorage.setItem("planner-design-intro", "1.0.0");
+      localStorage.setItem("planner-screen", "study");
+      localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+    }, { customSubjects: subs, data });
+    await page.goto(URL0);
+    await page.waitForTimeout(1600);
+    if (tag === "desktop") {
+      const grid = await page.locator(".ap-study").boundingBox();
+      want(`${tag}: «Подготовка» — высотой в окно`, grid.y + grid.height <= h, Math.round(grid.y + grid.height) + " из " + h);
+      const listTop = (await page.locator(".ap-study-list").boundingBox()).y;
+      await page.locator(".ap-study-detail").hover();
+      await page.mouse.wheel(0, 800);
+      await page.waitForTimeout(400);
+      const detailScroll = await page.locator(".ap-study-detail").evaluate((el) => el.scrollTop);
+      const listTopAfter = (await page.locator(".ap-study-list").boundingBox()).y;
+      want(`${tag}: уроки листаются сами, список предметов стоит`, detailScroll > 300 && Math.abs(listTopAfter - listTop) < 2, "уроки " + detailScroll + ", список " + Math.round(listTop) + "→" + Math.round(listTopAfter));
+      await page.locator(".ap-study-list").hover();
+      await page.mouse.wheel(0, 600);
+      await page.waitForTimeout(400);
+      const listScroll = await page.locator(".ap-study-list").evaluate((el) => el.scrollTop);
+      const detailAfter = await page.locator(".ap-study-detail").evaluate((el) => el.scrollTop);
+      want(`${tag}: список предметов листается сам, уроки стоят`, listScroll > 0 && detailAfter === detailScroll, "список " + listScroll + ", уроки " + detailScroll + "→" + detailAfter);
+      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/study-scroll-${tag}.png` });
+    } else {
+      const auto = await page.locator(".ap-study").evaluate((el) => getComputedStyle(el).height);
+      await page.mouse.wheel(0, 600);
+      await page.waitForTimeout(400);
+      want(`${tag}: на телефоне — обычная прокрутка страницы`, (await page.evaluate(() => window.scrollY)) > 0, "высота сетки " + auto);
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      want(`${tag}: ничего не едет вбок`, wide <= 0, wide + " px");
+    }
+    want(`${tag}: «Подготовка» без ошибок`, errors.length === 0, errors[0] || "");
+    await ctx.close();
+  }
+}
+
 await browser.close(); server.close();
 console.log(bad ? `\nпровалов: ${bad}` : "\nновый дизайн работает, старого переключателя нет, записи целы");
 process.exit(bad ? 1 : 0);
