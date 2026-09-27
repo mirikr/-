@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { estimateWidth, placeLabels } from "./chart-labels.js";
 
 // Баланс предметов: план против факта сразу по всем предметам.
 //
@@ -30,18 +31,33 @@ export default function BalanceChart({ items, labeled }) {
   const px = (v) => X0 + (Math.min(v, max) / max) * (X1 - X0);
   const py = (v) => Y0 - (Math.min(v, max) / max) * (Y0 - Y1);
   const current = items.find((s) => s.id === active) || null;
-  // Куда ставить подпись у точки: справа, если там свободно, иначе слева.
-  // История и Социология с одинаковым фактом стоят на одной высоте, и подпись
-  // первой ложилась прямо на точку второй.
+  // Подписи у точек (вид «Распределения») расставляются так, чтобы не
+  // наезжать друг на друга, на точки и на подписи осей — см. chart-labels.js.
+  // График в узкой панели ужат почти вдвое, поэтому шрифт крупнее остальных.
   const LABEL = 15;
-  const sideOf = (s) => {
-    const x = px(s.plan);
-    const y = py(s.fact);
-    const width = s.name.length * LABEL * 0.56;
-    if (x + width + 20 > X1 + 12) return "left";
-    const blocked = items.some((o) => o.id !== s.id && Math.abs(py(o.fact) - y) < LABEL && px(o.plan) > x && px(o.plan) < x + width + 26);
-    return blocked ? "left" : "right";
-  };
+  const axisRight = "план, ч/нед → " + Math.round(max);
+  const labels = useMemo(() => {
+    if (!labeled) return {};
+    const measure = textWidth;
+    const radius = (s) => 6 + Math.min(s.done, 12) * 1.1;
+    return placeLabels(
+      items.map((s) => ({ id: s.id, x: px(s.plan), y: py(s.fact), r: radius(s), text: s.name })),
+      {
+        width: W,
+        height: H,
+        size: LABEL,
+        measure,
+        maxWidth: 200,
+        circles: items.map((s) => ({ x: px(s.recommended || 0), y: py(s.recommended || 0), r: 6.5 })),
+        obstacles: [
+          { x: X0 - 2, y: Y0 + 8, w: 12, h: 15 },
+          { x: X1 - measure(axisRight, 11) - 2, y: Y0 + 8, w: measure(axisRight, 11) + 4, h: 15 },
+          { x: 2, y: Y1 - 8, w: measure("факт, ч", 11) + 4, h: 15 },
+        ],
+      }
+    );
+    // px и py зависят только от max, а он — от items.
+  }, [items, labeled, max]);
 
   return (
     <div style={styles.wrap}>
@@ -60,11 +76,18 @@ export default function BalanceChart({ items, labeled }) {
             0
           </text>
           <text x={X1} y={Y0 + 20} fontSize="11" fill="var(--mute)" textAnchor="end">
-            план, ч/нед → {Math.round(max)}
+            {axisRight}
           </text>
           <text x={4} y={Y1 + 4} fontSize="11" fill="var(--mute)">
             факт, ч
           </text>
+
+          {labeled &&
+            items.map((s) =>
+              labels[s.id] && labels[s.id].lead ? (
+                <line key={"lead-" + s.id} {...labels[s.id].lead} stroke="var(--mute)" strokeWidth="1" opacity="0.7" />
+              ) : null
+            )}
 
           {items.map((s, i) => {
             const x = px(s.plan);
@@ -101,23 +124,22 @@ export default function BalanceChart({ items, labeled }) {
                   // На телефоне навести нечем, поэтому касание работает как наведение.
                   onClick={() => setActive(on ? null : s.id)}
                 />
-                {/* Подпись у точки. График в узкой панели ужат почти вдвое,
-                    поэтому шрифт крупнее, чем у остальных подписей. */}
-                {labeled && (
-                  <text
-                    x={sideOf(s) === "left" ? x - r - 6 : x + r + 6}
-                    y={y + 5}
-                    fontSize={LABEL}
-                    fill="var(--ink2)"
-                    textAnchor={sideOf(s) === "left" ? "end" : "start"}
-                    style={{ pointerEvents: "none" }}
-                  >
-                    {s.name}
-                  </text>
-                )}
               </g>
             );
           })}
+
+          {/* Подписи — поверх всех точек: иначе точка соседа закрывала бы текст. */}
+          {labeled &&
+            items.map((s) => {
+              const l = labels[s.id];
+              if (!l) return null;
+              return (
+                <text key={"label-" + s.id} x={l.x} y={l.y} fontSize={LABEL} fill="var(--ink2)" textAnchor={l.anchor} style={{ pointerEvents: "none" }}>
+                  {l.text !== s.name && <title>{s.name}</title>}
+                  {l.text}
+                </text>
+              );
+            })}
         </svg>
 
         {current && <Explain item={current} x={px(current.plan)} y={py(current.fact)} onClose={() => setActive(null)} />}
@@ -144,6 +166,21 @@ export default function BalanceChart({ items, labeled }) {
       </div>}
     </div>
   );
+}
+
+// Ширина подписи в единицах графика. Холст меряет тем же шрифтом, что у
+// приложения; без него (или до загрузки шрифта) — оценка по числу букв.
+let canvas = null;
+function textWidth(text, size) {
+  try {
+    if (typeof document === "undefined") return estimateWidth(text, size);
+    canvas = canvas || document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.font = size + "px 'Golos Text', system-ui, sans-serif";
+    return Math.max(ctx.measureText(String(text)).width, estimateWidth(text, size) * 0.8);
+  } catch (e) {
+    return estimateWidth(text, size);
+  }
 }
 
 // Разбор по предмету. Держится рядом с точкой, но не вылезает за график: у

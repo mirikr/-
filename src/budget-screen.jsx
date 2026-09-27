@@ -18,6 +18,8 @@ const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 // Шаг кнопок: у дня — четверть часа, у предмета — полчаса. Точнее можно
 // вписать руками в само число.
 const DAY_STEP = 15;
+// Ползунок дня на телефоне: до 6 часов, а если записано больше — до этого.
+const SLIDER_MAX = 360;
 const ALLOC_STEP = 0.5;
 
 const round1 = (n) => Math.round(n * 10) / 10;
@@ -99,6 +101,31 @@ export default function BudgetScreen({ subjects, budget, onDaily, onAlloc, capac
 
   const minutesOf = (k) => Number(budget.daily[k]) || 0;
   const maxDay = Math.max(60, ...DAYS.map(minutesOf));
+  // Столбик дня можно тянуть мышью вверх-вниз. Пока тянут, масштаб столбиков
+  // замирает с запасом сверху: иначе верх колонки уезжал бы вместе с курсором
+  // и столбик нельзя было бы вытянуть выше самого длинного дня.
+  const [drag, setDrag] = useState(null);
+  const barTop = drag ? drag.top : maxDay;
+  const dragTo = (e, k, top) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (box.bottom - e.clientY) / box.height));
+    const m = Math.round((frac * top) / DAY_STEP) * DAY_STEP;
+    if (m !== minutesOf(k)) onDaily(k, m);
+  };
+  const dragStart = (e, k) => {
+    // Пальцем столбик не тянется: на телефоне касание открывает правку дня
+    // с ползунком, а движение пальца — это прокрутка страницы.
+    if (e.pointerType === "touch" || e.button !== 0) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {
+      /* без захвата тянется, пока курсор над столбиком */
+    }
+    const top = Math.ceil(Math.max(maxDay * 1.5, 180) / 60) * 60;
+    setDrag({ k, top });
+    dragTo(e, k, top);
+  };
   const weekBudget = capacity.weeklyBudget;
   const plan = round1(capacity.weeklyTotal);
   const byId = Object.fromEntries(balance.map((b) => [b.id, b]));
@@ -107,6 +134,10 @@ export default function BudgetScreen({ subjects, budget, onDaily, onAlloc, capac
   // Полоса недели: во всю ширину — большее из плана и бюджета.
   const scale = Math.max(plan, weekBudget, 1);
   const budgetAt = Math.min(100, (weekBudget / scale) * 100);
+  // Метка бюджета стрелкой ровно над своим местом, а текст — в сторону
+  // середины полосы. Раньше текст стоял по центру, и у правого края
+  // «— ваш бюджет» вылезало за карточку на соседнюю панель.
+  const markEnd = budgetAt > 50;
   const over = round1(plan - weekBudget);
   const free = round1(weekBudget - plan);
 
@@ -221,10 +252,28 @@ export default function BudgetScreen({ subjects, budget, onDaily, onAlloc, capac
                   className={"ap-bud-day" + (today ? " is-today" : "") + (on ? " is-on" : "")}
                   onClick={() => setEditDay(on ? null : k)}
                 >
-                  <div className="ap-bud-daybar">
-                    <div style={{ ...S.dayBar, height: Math.max(3, (m / maxDay) * 100) + "%", background: today ? "var(--accent)" : "var(--ink2)" }} />
+                  <div
+                    className={"ap-bud-daybar" + (drag && drag.k === k ? " is-drag" : "")}
+                    title="Потяните вверх или вниз"
+                    onPointerDown={(e) => dragStart(e, k)}
+                    onPointerMove={(e) => drag && drag.k === k && dragTo(e, k, drag.top)}
+                    onPointerUp={() => setDrag(null)}
+                    onPointerCancel={() => setDrag(null)}
+                  >
+                    <div style={{ ...S.dayBar, height: Math.max(3, Math.min(100, (m / barTop) * 100)) + "%", background: today ? "var(--accent)" : "var(--ink2)" }} />
                   </div>
-                  <span className="ap-bud-dayh">{dayHours(m)}</span>
+                  <span className="ap-bud-dayh ap-bud-dayh-txt">{dayHours(m)}</span>
+                  <span className="ap-bud-dayh-in" onClick={(e) => e.stopPropagation()}>
+                    <NumField
+                      value={m / 60}
+                      onCommit={(h) => onDaily(k, Math.round(h * 60))}
+                      label={"Часов: " + DAY_NAME[k]}
+                      exact
+                      className="ap-bud-num"
+                      style={S.dayInput}
+                    />
+                    <span style={S.unit}>ч</span>
+                  </span>
                   <div className="ap-bud-dayctl" onClick={(e) => e.stopPropagation()}>
                     <Stepper small what={DAY_NAME[k]} onMinus={() => onDaily(k, Math.max(0, m - DAY_STEP))} onPlus={() => onDaily(k, m + DAY_STEP)} />
                   </div>
@@ -255,6 +304,21 @@ export default function BudgetScreen({ subjects, budget, onDaily, onAlloc, capac
               <button type="button" onClick={() => setEditDay(null)} style={S.dayEditDone}>
                 Готово
               </button>
+              <input
+                type="range"
+                className="ap-range ap-range-fill"
+                min="0"
+                max={Math.max(SLIDER_MAX, Math.ceil(minutesOf(editDay) / 60) * 60)}
+                step={DAY_STEP}
+                value={minutesOf(editDay)}
+                onChange={(e) => onDaily(editDay, Number(e.target.value))}
+                aria-label={"Ползунок: " + DAY_NAME[editDay]}
+                style={{
+                  ...S.daySlider,
+                  "--fill": "var(--accent)",
+                  "--pct": (minutesOf(editDay) / Math.max(SLIDER_MAX, Math.ceil(minutesOf(editDay) / 60) * 60)) * 100 + "%",
+                }}
+              />
             </div>
           )}
         </section>
@@ -277,8 +341,18 @@ export default function BudgetScreen({ subjects, budget, onDaily, onAlloc, capac
           ) : (
             <>
               <div style={S.weekWrap}>
-                <div style={{ ...S.weekMark, left: budgetAt + "%" }} className="ap-bud-mark">
-                  ▼ {hours(weekBudget)} <span className="ap-bud-marklong">— ваш бюджет</span>
+                <div style={{ ...S.weekMark, left: budgetAt + "%", transform: markEnd ? "translateX(calc(-100% + 5px))" : "translateX(-5px)" }} className="ap-bud-mark">
+                  {markEnd ? (
+                    <>
+                      <span className="ap-bud-marklong">ваш бюджет — </span>
+                      {hours(weekBudget)} ▼
+                    </>
+                  ) : (
+                    <>
+                      ▼ {hours(weekBudget)}
+                      <span className="ap-bud-marklong"> — ваш бюджет</span>
+                    </>
+                  )}
                 </div>
                 <div style={S.week} role="img" aria-label={`План ${hours(plan)} из ${hours(weekBudget)}`}>
                   {items
@@ -390,8 +464,11 @@ export const BUDGET_CSS = `
   border-radius: 12px; background: var(--neutralBg); border: 1px solid var(--line2);
 }
 .ap-bud-day.is-today { background: var(--warmBg); border-color: var(--warmLine); }
-.ap-bud-daybar { height: 54px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.ap-bud-daybar { height: 54px; width: 100%; display: flex; align-items: flex-end; justify-content: center; cursor: ns-resize; touch-action: pan-y; user-select: none; }
+.ap-bud-daybar.is-drag > div { box-shadow: 0 0 0 2px var(--corridorLine); }
 .ap-bud-dayh { font-size: 14.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ap-bud-dayh-txt { display: none; }
+.ap-bud-dayh-in { display: flex; align-items: baseline; justify-content: center; gap: 2px; width: 100%; }
 .ap-bud-dayctl { display: flex; gap: 4px; }
 .ap-bud-dayname { font-size: 12.5px; color: var(--ink2); }
 .ap-bud-dayedit { display: none; }
@@ -414,9 +491,12 @@ export const BUDGET_MOBILE_CSS = `
 .ap-bud-day.is-on { border-color: var(--ink); }
 .ap-bud-daybar { height: 34px; }
 .ap-bud-dayh { font-size: 13px; }
+.ap-bud-dayh-txt { display: inline; }
+.ap-bud-dayh-in { display: none; }
+.ap-bud-daybar { cursor: pointer; }
 .ap-bud-dayctl { display: none; }
 .ap-bud-dayname { font-size: 11px; }
-.ap-bud-dayedit { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line2); }
+.ap-bud-dayedit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line2); }
 .ap-bud-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
 /* Узкая плитка: рекомендация под названием, иначе «Экономика» рвалась посреди слова. */
 .ap-bud-tilehead { flex-direction: column; align-items: flex-start !important; gap: 4px !important; }
@@ -454,6 +534,8 @@ const S = {
   dayToday: { fontWeight: 700, color: "var(--accent)" },
   dayEditName: { flex: 1, fontSize: 14.5, fontWeight: 600 },
   dayEditInput: { width: 64, height: 36, textAlign: "center", fontSize: 15, fontWeight: 600 },
+  dayInput: { width: "100%", maxWidth: 52, height: 28, padding: "0 2px", textAlign: "right", fontSize: 14.5, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
+  daySlider: { flex: "1 1 100%", width: "100%", margin: "4px 0 0" },
   dayEditDone: { height: 36, padding: "0 12px", border: "none", borderRadius: 9, background: "var(--btnBg)", color: "var(--btnInk)", fontSize: 13.5, fontWeight: 600 },
   unit: { fontSize: 13, color: "var(--ink3)", marginLeft: -4 },
   unitBig: { fontFamily: "var(--serif)", fontSize: 20, marginLeft: -6 },
