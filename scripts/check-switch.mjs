@@ -78,7 +78,7 @@ want("после обновления — окно «Расписание лиц
 const text = (await dialog.innerText()).replace(/\s+/g, " ");
 want("в окне — сколько заданий переехало", /Перенесено 3 задания/.test(text), text.slice(0, 160));
 want("в окне — задание по обществознанию и куда оно переехало", (await dialog.locator('[data-news-move="hw-soc"]').count()) === 1);
-want("в окне — просьба выбрать группу физкультуры", /Группу физкультуры/.test(text));
+want("в окне — просьба выбрать дни физкультуры", /Дни физкультуры/.test(text));
 if (SHOT_DIR) await page.screenshot({ path: SHOT_DIR + "/switch-dialog.png" });
 
 await page.waitForTimeout(1200);

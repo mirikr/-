@@ -47,7 +47,7 @@ import { search as searchAll, markParts } from "./search.js";
 import SchedulePreset from "./lyceum-preset.jsx";
 import { KT_PRESET_ID, DEFAULT_KT, buildExams } from "./lyceum-exams-10.js";
 import { VOSH_PRESET_ID, DEFAULT_VOSH, buildOlympiads } from "./lyceum-olympiads.js";
-import { LYCEUM_REVISION, PRESET_ID, SCHOOLS, buildSchedule } from "./lyceum-schedule-10.js";
+import { LYCEUM_REVISION, PRESET_ID, SCHOOLS, buildSchedule, peChoice } from "./lyceum-schedule-10.js";
 
 // Duration is stored in minutes for each lesson.
 const D = 60;
@@ -1968,11 +1968,14 @@ export default function StudyPlanner() {
   function applyPreset(entries) {
     if (!entries.length) return;
     // Важность предметов и выбор среди одновременных уроков переживают
-    // повторное «Применить» — как и обновление сетки лицея.
-    setLyceumSchedule((prev) => [
-      ...prev.filter((e) => e.preset !== PRESET_ID),
-      ...carryLessonSettings(entries, prev.filter((e) => e.preset === PRESET_ID)),
-    ]);
+    // повторное «Применить» — как и обновление сетки лицея. Задания уходят
+    // вслед за уроком: перенесли физкультуру со вторника на четверг — и задание
+    // к ней переезжает на четверг той же недели (src/schedule-switch.js).
+    const old = lyceumSchedule.filter((e) => e.preset === PRESET_ID);
+    const next = carryLessonSettings(entries, old);
+    const today = todayStr();
+    setLyceumSchedule((prev) => [...prev.filter((e) => e.preset !== PRESET_ID), ...next]);
+    if (old.length) setHomework((prev) => moveHomework(prev, old, next, today).homework);
     if (entries.some((e) => e.day === "sun")) setShowSunday(true);
   }
 
@@ -2032,10 +2035,11 @@ export default function StudyPlanner() {
     const now = new Set(next.map(key));
     const changed = next.some((e) => !was.has(key(e))) || mine.some((e) => !now.has(key(e)));
     if (!changed && !moves.length) return;
-    // Физкультура с 28 сентября — по группам: этот выбор новый, его и просим.
+    // Физкультура с 28 сентября — седьмым-восьмым уроком со вторника по
+    // пятницу, дни выбирает сам ученик: этот выбор новый, его и просим.
     const need = [];
-    if (presetChoices.school && has(PRESET_ID) && !(presetChoices.groups || {}).pe) {
-      need.push("Группу физкультуры — теперь она по академическим группам, у девочек и мальчиков свои преподаватели.");
+    if (presetChoices.school && has(PRESET_ID) && !peChoice(presetChoices).at.length) {
+      need.push("Дни физкультуры — два дня по уроку или один день двумя уроками.");
     }
     showScheduleNews({
       lessons: next.filter((e) => e.preset === PRESET_ID).length,

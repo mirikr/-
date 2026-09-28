@@ -90,24 +90,61 @@ export const VARIANTS = [
       { id: "timoshkova", label: "Тимошкова Н.И." },
     ],
   },
-  {
-    // С 28 сентября физкультура — по академическим группам, у девочек и
-    // мальчиков свои преподаватели. Раньше она стояла у всех в понедельник и
-    // пятницу, поэтому этот выбор — единственный новый.
-    id: "pe",
-    name: "Физкультура",
-    options: [
-      { id: "g1f", label: "гр. 1 · девочки · Лайша А.О." },
-      { id: "g1m", label: "гр. 1 · мальчики · Вовк В.С." },
-      { id: "g2f", label: "гр. 2 · девочки · Сакович Е.С." },
-      { id: "g2m", label: "гр. 2 · мальчики · Вовк В.С." },
-      { id: "g3f", label: "гр. 3 · девочки · Дьяченко Д.Д." },
-      { id: "g3m", label: "гр. 3 · мальчики · Вовк В.С." },
-      { id: "g4f", label: "гр. 4 · девочки · Дьяченко Д.Д." },
-      { id: "g4m", label: "гр. 4 · мальчики · Вовк В.С." },
-    ],
-  },
 ];
+
+// Физкультура с 28 сентября идёт седьмым-восьмым уроком со вторника по
+// пятницу, и ходят на неё не строго своей группой: человек отмечает, когда
+// занимается сам, — два дня по уроку или один день двумя уроками, всего не
+// больше двух часов в неделю. Выбор — клетки «день#урок» в presetChoices.pe:
+// { at: ["tue#7", "wed#8"], group: "f" | "m" | "" }. Группа (девочки или
+// мальчики) нужна только чтобы подставить преподавателя.
+//
+// Раньше выбиралась группа (groups.pe = "g2f"), и у каждой был свой день. Такой
+// выбор читается как оба урока своего дня — уроки выходят те же самые, с теми
+// же идентификаторами, и привязанные задания остаются на месте.
+export const PE_DAYS = ["tue", "wed", "thu", "fri"];
+export const PE_LESSONS = [7, 8];
+export const PE_MAX = 2;
+const PE_GROUP_DAY = { 1: "tue", 2: "wed", 3: "thu", 4: "fri" };
+
+export function peChoice(choices) {
+  const c = choices || {};
+  if (c.pe && Array.isArray(c.pe.at)) {
+    const at = c.pe.at.filter((cell) => PE_DAYS.includes(cell.split("#")[0]) && PE_LESSONS.includes(Number(cell.split("#")[1])));
+    return { at: [...new Set(at)].slice(-PE_MAX), group: c.pe.group === "f" || c.pe.group === "m" ? c.pe.group : "" };
+  }
+  const old = /^g([1-4])([fm])$/.exec(((c.groups || {}).pe) || "");
+  if (old) return { at: PE_LESSONS.map((n) => PE_GROUP_DAY[old[1]] + "#" + n), group: old[2] };
+  return { at: [], group: "" };
+}
+
+// Отметить или снять клетку. Третья отметка снимает самую раннюю: больше двух
+// часов в неделю не бывает, а снимать руками, чтобы переставить, неудобно.
+export function togglePeCell(pe, cell) {
+  const at = pe.at.includes(cell) ? pe.at.filter((c) => c !== cell) : [...pe.at, cell].slice(-PE_MAX);
+  return { ...pe, at };
+}
+
+// Сколько и как: «один день, два урока» или «два дня по уроку».
+export function peSummary(pe) {
+  const days = new Set(pe.at.map((c) => c.split("#")[0]));
+  if (!pe.at.length) return "";
+  if (pe.at.length === 1) return "один урок в неделю";
+  return days.size === 1 ? "один день, два урока" : "два дня по уроку";
+}
+
+function peSlots(choices) {
+  const pe = peChoice(choices);
+  const out = [];
+  for (const cell of pe.at) {
+    const [day, n] = cell.split("#");
+    const here = SLOTS.filter((x) => x.who.v === "pe" && x.day === day && x.n === Number(n));
+    const own = here.find((x) => x.who.o.endsWith(pe.group));
+    if (pe.group && own) out.push(own);
+    else if (here.length) out.push({ ...here[0], teacher: "", who: { v: "pe" } });
+  }
+  return out;
+}
 
 // Олимпиадные треки (раньше — «спецкурсы»). Идентификаторы прежние, поэтому
 // отмеченные галочки переносятся в новую сетку сами.
@@ -398,6 +435,8 @@ function rankOf(slot) {
 function fits(slot, school, groups, specs, tiers) {
   const w = slot.who;
   if (w.spec) return [].concat(w.spec).some((id) => specs.includes(id));
+  // Физкультура выбирается днями, а не группой — см. peSlots.
+  if (w.v === "pe") return false;
   if (w.sch && !w.sch.includes(school)) return false;
   if (w.v && groups[w.v] !== w.o) return false;
   if (w.tier && Object.keys(w.tier).some((v) => tierOf(v, groups, tiers) !== w.tier[v])) return false;
@@ -467,8 +506,10 @@ export function buildSchedule(choices) {
     else if (rank === cur.rank) cur.slots.push(slot);
   }
 
+  for (const slot of peSlots(choices)) extra.add(slot);
+
   const out = [];
-  for (const slot of SLOTS) {
+  for (const slot of [...SLOTS, ...[...extra].filter((x) => !SLOTS.includes(x))]) {
     const cell = best.get(slot.day + "#" + slot.n);
     if (!extra.has(slot) && (!cell || !cell.slots.includes(slot))) continue;
     const bell = BELLS[slot.n] || ["08:30", "09:10"];
