@@ -1,5 +1,6 @@
 import assert from "node:assert";
-import { buildSchedule, SLOTS, BELLS, VARIANTS, SPECS, tierOfOption } from "../src/lyceum-schedule-10.js";
+import { buildSchedule, SLOTS, BELLS, VARIANTS, SPECS, tierOfOption, peChoice, togglePeCell, peSummary } from "../src/lyceum-schedule-10.js";
+import { moveHomework } from "../src/schedule-switch.js";
 
 // Сетка с 28 сентября 2026 (таблица «по кабинетам»). Каждое утверждение ниже
 // сверено с таблицей: если лицей поменяет сетку, правится SLOTS и эти числа.
@@ -67,6 +68,62 @@ check("физкультура — по группе: два урока в сво
   assert.deepEqual(at(both, "tue", "14:05").map((e) => e.subjectName).sort(), ["Литературный практикум: эссе, рецензии, тестовые задания", "Физическая культура"]);
 });
 
+check("физкультура днями: два дня по уроку или один день двумя уроками", () => {
+  const pe = (choice) => buildSchedule({ school: "hum", groups: {}, specs: [], pe: choice }).filter((e) => e.subjectName === "Физическая культура");
+  const two = pe({ at: ["tue#7", "thu#8"], group: "f" });
+  assert.deepEqual(two.map((e) => e.day + " " + e.start + " " + e.teacher).sort(), ["thu 14:50 Дьяченко Д.Д.", "tue 14:05 Лайша А.О."]);
+  const one = pe({ at: ["wed#7", "wed#8"], group: "m" });
+  assert.deepEqual(one.map((e) => e.day + " " + e.start + " " + e.teacher), ["wed 14:05 Вовк В.С.", "wed 14:50 Вовк В.С."]);
+  // Без группы — урок на месте, просто без преподавателя.
+  const nobody = pe({ at: ["fri#8"], group: "" });
+  assert.equal(nobody.length, 1);
+  assert.equal(nobody[0].teacher, "");
+  assert.equal(nobody[0].room, "Спортзал СОШ 47");
+  // Больше двух часов не бывает, даже если в записи оказалось больше.
+  assert.equal(pe({ at: ["tue#7", "wed#7", "thu#7"], group: "f" }).length, 2);
+  // Чужие клетки (понедельник, первый урок) — не физкультура.
+  assert.equal(pe({ at: ["mon#7", "tue#1"], group: "f" }).length, 0);
+});
+
+check("физкультура: третья отметка снимает самую раннюю", () => {
+  let pe = { at: [], group: "" };
+  pe = togglePeCell(pe, "tue#7");
+  pe = togglePeCell(pe, "tue#8");
+  assert.equal(peSummary(pe), "один день, два урока");
+  pe = togglePeCell(pe, "thu#7");
+  assert.deepEqual(pe.at, ["tue#8", "thu#7"]);
+  assert.equal(peSummary(pe), "два дня по уроку");
+  pe = togglePeCell(pe, "thu#7");
+  assert.deepEqual(pe.at, ["tue#8"]);
+  assert.equal(peSummary(pe), "один урок в неделю");
+});
+
+check("прежний выбор группы физкультуры — те же уроки, что и раньше", () => {
+  for (const g of ["g1f", "g1m", "g2f", "g2m", "g3f", "g3m", "g4f", "g4m"]) {
+    const choice = peChoice({ groups: { pe: g } });
+    assert.equal(choice.at.length, 2);
+    assert.equal(choice.group, g[2]);
+    const old = buildSchedule({ school: "hum", groups: { pe: g }, specs: [] });
+    const now = buildSchedule({ school: "hum", groups: {}, specs: [], pe: choice });
+    assert.deepEqual(old.map((e) => e.id), now.map((e) => e.id), g);
+  }
+  // Новая запись важнее прежней.
+  assert.deepEqual(peChoice({ groups: { pe: "g1f" }, pe: { at: ["fri#7"], group: "m" } }).at, ["fri#7"]);
+});
+
+check("физкультуру перенесли на другой день — задание к ней переезжает", () => {
+  const old = buildSchedule({ school: "hum", groups: { pe: "g1f" }, specs: [] });
+  const next = buildSchedule({ school: "hum", groups: {}, specs: [], pe: { at: ["thu#7", "thu#8"], group: "f" } });
+  const tueLesson = old.find((e) => e.subjectName === "Физическая культура" && e.day === "tue");
+  // Понедельник 28.09.2026: задание на вторник 29.09 → четверг 01.10.
+  const hw = [{ id: "h1", lessonId: tueLesson.id, date: "2026-09-29", text: "форма" }];
+  const { homework, moves } = moveHomework(hw, old, next, "2026-09-28");
+  const target = next.find((e) => e.id === homework[0].lessonId);
+  assert.ok(target && target.day === "thu" && target.subjectName === "Физическая культура");
+  assert.equal(homework[0].date, "2026-10-01");
+  assert.equal(moves.length, 1);
+});
+
 check("треки приходят только к тем, кто их отметил", () => {
   const without = buildSchedule({ ...mathStudent, specs: [] });
   assert.equal(without.filter((e) => e.day === "sat").length, 0);
@@ -97,7 +154,11 @@ check("у каждой строки сетки есть звонок и кому
     assert.ok(BELLS[slot.n], `нет звонка для ${slot.day} ${slot.n}`);
     assert.ok(slot.subject && slot.teacher && slot.room, `${slot.day} ${slot.n}`);
     [].concat(slot.who.spec || []).forEach((id) => assert.ok(SPECS.some((s) => s.id === id), "нет трека " + id));
-    if (slot.who.v) {
+    // Физкультура выбирается днями, а не из списка групп: клетка — вт–пт, 7–8 урок.
+    if (slot.who.v === "pe") {
+      assert.ok(["tue", "wed", "thu", "fri"].includes(slot.day) && [7, 8].includes(slot.n), "физкультура " + slot.day + " " + slot.n);
+      assert.ok(/^g[1-4][fm]$/.test(slot.who.o));
+    } else if (slot.who.v) {
       const v = VARIANTS.find((x) => x.id === slot.who.v);
       assert.ok(v && v.options.some((o) => o.id === slot.who.o), slot.who.v + "/" + slot.who.o);
     }

@@ -8,7 +8,15 @@ import {
   tierOfOption,
   tiersForSchool,
   variantVisible,
+  BELLS,
+  PE_DAYS,
+  PE_LESSONS,
+  peChoice,
+  peSummary,
+  togglePeCell,
 } from "./lyceum-schedule-10.js";
+
+const PE_DAY_NAME = { tue: "Вт", wed: "Ср", thu: "Чт", fri: "Пт" };
 
 // Готовое расписание лицея вместо ручного ввода сорока уроков.
 //
@@ -30,13 +38,22 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
   const specs = choices.specs || [];
 
   const tiers = choices.tiers || {};
+  const pe = peChoice(choices);
+  // Каждое изменение выбора сохраняет физкультуру уже днями: прежняя запись
+  // группой (groups.pe) переводится в дни один раз и больше не нужна. Иначе
+  // смена школы, которая пересобирает группы, потеряла бы её.
+  const save = (next) => {
+    const { pe: _old, ...restGroups } = next.groups || {};
+    onChoices({ ...next, groups: restGroups, pe: next.pe || pe });
+  };
   const variants = useMemo(
     () => variantsForSchool(school).filter((v) => variantVisible(v, tiers)),
     [school, tiers]
   );
   const preview = useMemo(
-    () => (school ? buildSchedule({ school, groups, specs, tiers }) : []),
-    [school, groups, specs, tiers]
+    () => (school ? buildSchedule({ school, groups, specs, tiers, pe }) : []),
+    // pe пересобирается на каждой отрисовке — сравниваем по содержимому.
+    [school, groups, specs, tiers, pe.at.join(","), pe.group]
   );
 
   // Группу, которой у школы нет, спрашивать незачем — но и хранить тоже:
@@ -56,14 +73,14 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     variantsForSchool(id).forEach((v) => {
       if (!variantVisible(v, nextTiers)) delete kept[v.id];
     });
-    onChoices({ ...choices, school: id, groups: kept, tiers: nextTiers });
+    save({ ...choices, school: id, groups: kept, tiers: nextTiers });
   }
 
   function pickGroup(variantId, optionId) {
     const next = { ...groups };
     if (next[variantId] === optionId) delete next[variantId];
     else next[variantId] = optionId;
-    onChoices({ ...choices, groups: next });
+    save({ ...choices, groups: next });
   }
 
   // Уровень английского запоминается отдельно: он выбирается раньше
@@ -84,12 +101,20 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
     variantsForSchool(school).forEach((v) => {
       if (!variantVisible(v, next)) delete groupsNext[v.id];
     });
-    onChoices({ ...choices, tiers: next, groups: groupsNext });
+    save({ ...choices, tiers: next, groups: groupsNext });
   }
 
   function toggleSpec(id) {
     const next = specs.includes(id) ? specs.filter((s) => s !== id) : [...specs, id];
-    onChoices({ ...choices, specs: next });
+    save({ ...choices, specs: next });
+  }
+
+  function pickPeCell(cell) {
+    save({ ...choices, pe: togglePeCell(pe, cell) });
+  }
+
+  function pickPeGroup(group) {
+    save({ ...choices, pe: { ...pe, group: pe.group === group ? "" : group } });
   }
 
   // Уровень без своих групп (профильная математика) закрывается алгеброй и
@@ -101,7 +126,8 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
       const tier = tiers[v.id];
       return !tier || (v.tiers.find((t) => t.id === tier) || { options: [] }).options.length > 0;
     })
-    .map((v) => v.name);
+    .map((v) => v.name)
+    .concat(pe.at.length ? [] : ["Физкультура"]);
 
   return (
     <div style={styles.wrap}>
@@ -195,6 +221,60 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
                 );
               })}
 
+              <div style={styles.field} role="group" aria-label="Физкультура">
+                <div style={styles.label}>
+                  Физкультура
+                  {pe.at.length > 0 && <span style={styles.labelNote}> · {peSummary(pe)}</span>}
+                </div>
+                <div style={styles.hint}>
+                  Отметьте, когда занимаетесь: два дня по уроку или один день двумя уроками — не больше двух часов в неделю.
+                  Третья отметка снимает самую раннюю.
+                </div>
+                <div style={styles.peGrid}>
+                  <span />
+                  {PE_DAYS.map((d) => (
+                    <span key={d} style={styles.peHead}>
+                      {PE_DAY_NAME[d]}
+                    </span>
+                  ))}
+                  {PE_LESSONS.map((n) => (
+                    <React.Fragment key={n}>
+                      <span style={styles.peRow}>
+                        {n} урок
+                        <span style={styles.peTime}>{BELLS[n][0]}</span>
+                      </span>
+                      {PE_DAYS.map((d) => {
+                        const cell = d + "#" + n;
+                        const on = pe.at.includes(cell);
+                        return (
+                          <button
+                            key={cell}
+                            type="button"
+                            onClick={() => pickPeCell(cell)}
+                            aria-pressed={on}
+                            aria-label={`Физкультура: ${PE_DAY_NAME[d]}, ${n} урок`}
+                            style={on ? styles.peCellOn : styles.peCell}
+                          >
+                            {on ? "✓" : ""}
+                          </button>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
+                <div style={styles.pills}>
+                  <span style={styles.hint} title="Нужно только чтобы подставить преподавателя">Преподаватель:</span>
+                  {[
+                    ["f", "девочки"],
+                    ["m", "мальчики"],
+                  ].map(([id, label]) => (
+                    <button key={id} type="button" onClick={() => pickPeGroup(id)} style={pe.group === id ? styles.pillOn : styles.pill}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div style={styles.field}>
                 <div style={styles.label}>Олимпиадные треки</div>
                 <div style={styles.hint}>Отмечайте те, на которые ходите: они встанут седьмым-восьмым уроком, вечером и в субботу, а если трек идёт в учебные часы — рядом с уроком.</div>
@@ -213,7 +293,7 @@ export default function SchedulePreset({ choices, onChoices, onApply, onClear, a
 
               <div style={styles.summary}>
                 {preview.length} уроков в неделю
-                {missing.length > 0 && <span style={styles.warn}> · не выбрана группа: {missing.join(", ")}</span>}
+                {missing.length > 0 && <span style={styles.warn}> · не выбрано: {missing.join(", ")}</span>}
               </div>
 
               <div style={styles.actions}>
@@ -272,7 +352,14 @@ const styles = {
   mutedSmall: { fontSize: 12, color: "var(--mute)" },
   field: { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 },
   label: { fontSize: 12, fontWeight: 700, color: "var(--ink2)" },
-  hint: { fontSize: 11.5, color: "var(--mute)", lineHeight: 1.45 },
+  hint: { fontSize: 11.5, color: "var(--mute)", lineHeight: 1.45, alignSelf: "center" },
+  labelNote: { fontWeight: 600, color: "var(--mute)" },
+  peGrid: { display: "grid", gridTemplateColumns: "max-content repeat(4, minmax(0, 56px))", justifyContent: "start", gap: 6, alignItems: "center" },
+  peHead: { fontSize: 12, fontWeight: 700, color: "var(--ink2)", textAlign: "center" },
+  peRow: { fontSize: 12, color: "var(--ink2)", fontWeight: 600, display: "flex", flexDirection: "column", lineHeight: 1.25, paddingRight: 4 },
+  peTime: { fontSize: 11, color: "var(--mute)", fontWeight: 400 },
+  peCell: { height: 36, border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--btnInk)", borderRadius: 9, fontSize: 15, fontWeight: 700 },
+  peCellOn: { height: 36, border: "1px solid var(--btnBg)", background: "var(--btnBg)", color: "var(--btnInk)", borderRadius: 9, fontSize: 15, fontWeight: 700 },
   pills: { display: "flex", flexWrap: "wrap", gap: 6 },
   pill: pillBase,
   pillOn: { ...pillBase, background: "var(--btnBg)", color: "var(--btnInk)", borderColor: "var(--btnBg)" },
