@@ -152,6 +152,38 @@ async function answerByKey(page, t) {
   await page.getByRole("button", { name: "Решать вперемешку" }).click();
   want("«вперемешку» даёт нерешённое задание", (await page.locator('[data-vosh-task="2324-sch-9-1"]').count()) === 1);
   await page.getByRole("button", { name: "К списку олимпиад" }).click();
+
+  // По типам: «да / нет» — одно нерешённое, соответствия — все решены; без
+  // галочки «Только нерешённые» идут все соответствия подряд, и только они.
+  const types = page.getByRole("group", { name: "Тип задания" });
+  const mixBox = page.locator("[data-vosh-mix]");
+  await types.getByRole("button", { name: /^Да \/ нет/ }).click();
+  await mixBox.getByRole("button", { name: /^Решать/ }).click();
+  want("тип «да / нет»: нерешённое задание этого типа", (await page.locator('[data-vosh-task="2324-sch-9-1"][data-kind="yesno"]').count()) === 1);
+  await page.getByRole("button", { name: "К списку олимпиад" }).click();
+  await types.getByRole("button", { name: /^Соответствия/ }).click();
+  want("тип «соответствия»: всё решено — решать нечего", await mixBox.getByRole("button", { name: /^Решать/ }).isDisabled());
+  await mixBox.getByRole("checkbox", { name: "Только нерешённые" }).uncheck();
+  const matches = OLYMPIADS.flatMap((o) => o.tasks).filter((t) => t.kind === "match" || t.kind === "matchmany");
+  const chipText = await types.getByRole("button", { name: /^Соответствия/ }).innerText();
+  want("на кнопке типа — число заданий", chipText.includes(String(matches.length)), chipText.replace(/\s+/g, " "));
+  await mixBox.getByRole("button", { name: "Решать: соответствия" }).click();
+  let seen = 0;
+  let foreign = 0;
+  for (let i = 0; i < matches.length; i += 1) {
+    const boxNow = page.locator("[data-vosh-task]");
+    const k = await boxNow.getAttribute("data-kind");
+    if (k !== "match" && k !== "matchmany") foreign += 1;
+    seen += 1;
+    await boxNow.getByRole("button", { name: /^(Следующее|Закончить)$/ }).click().catch(async () => {
+      await boxNow.getByRole("button", { name: "Пропустить" }).click();
+    });
+  }
+  want("все подряд: только соответствия, все " + matches.length, seen === matches.length && foreign === 0, seen + " показано, чужих " + foreign);
+  want("после последнего — конец набора", /Задания закончились/.test(await page.locator("body").innerText()));
+  await page.getByRole("button", { name: "К списку олимпиад" }).click();
+  await mixBox.getByRole("checkbox", { name: "Только нерешённые" }).check();
+  await types.getByRole("button", { name: /^Все типы/ }).click();
   await page.getByRole("button", { name: "К выбору предмета" }).click();
   want("обратно к предметам ФИПИ", (await page.locator("[data-vosh-card]").count()) === 1);
   want("картинки заданий на месте", missing.length === 0, missing[0] || "");
@@ -163,9 +195,12 @@ async function answerByKey(page, t) {
 {
   const { ctx, page, errors } = await fresh({ width: 390, height: 844 });
   await page.locator("[data-vosh-card]").getByRole("button", { name: "Открыть олимпиады" }).click();
-  await page.locator('[data-vosh="2425-sch-11"]').getByRole("button", { name: "Начать" }).click();
   const wide = async () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  await page.locator("[data-vosh-mix]").waitFor();
   let worst = await wide();
+  if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/vosh-phone-list.png`, fullPage: true });
+  await page.locator('[data-vosh="2425-sch-11"]').getByRole("button", { name: "Начать" }).click();
+  worst = Math.max(worst, await wide());
   for (const no of ["2", "4", "6.1"]) {
     await page.locator('nav[aria-label="Задания олимпиады"]').getByRole("button", { name: no, exact: true }).click();
     await page.waitForTimeout(300);

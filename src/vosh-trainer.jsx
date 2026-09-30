@@ -34,6 +34,22 @@ const STAGES = [
 ];
 const GRADES = [0, 9, 10, 11];
 
+// Тренировка по одному виду заданий: только «да / нет», только соответствия и
+// так далее. Соответствия с несколькими вариантами на позицию идут вместе с
+// обычными — для решающего это одно и то же умение.
+const TYPES = [
+  { id: "", name: "Все типы", kinds: null },
+  { id: "yesno", name: "Да / нет", kinds: ["yesno"] },
+  { id: "multi", name: "Выбор нескольких", kinds: ["multi"] },
+  { id: "one", name: "Выбор одного", kinds: ["one"] },
+  { id: "match", name: "Соответствия", kinds: ["match", "matchmany"] },
+  { id: "groups", name: "Классификация картинок", kinds: ["groups"] },
+  { id: "gaps", name: "Пропуски в тексте", kinds: ["gaps"] },
+  { id: "short", name: "Краткий ответ", kinds: ["short"] },
+];
+const typeOf = (id) => TYPES.find((x) => x.id === id) || TYPES[0];
+const ofType = (t, type) => !type.kinds || type.kinds.includes(t.kind);
+
 function taskWord(n) {
   const last = n % 10;
   const tens = n % 100;
@@ -117,9 +133,13 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
   const [stage, setStage] = useState(st.stage || "");
   const [grade, setGrade] = useState(Number(st.grade) || 0);
   const [seed, setSeed] = useState(st.seed || 1);
+  const [kind, setKind] = useState(TYPES.some((x) => x.id === st.kind) ? st.kind : "");
+  // «Только нерешённые» — по умолчанию: тренировка идёт по тому, что не далось.
+  const [fresh, setFresh] = useState(st.fresh !== false);
+  const type = typeOf(kind);
 
   const save = (patch) => {
-    const next = { olymp, taskId, stage, grade, seed, ...patch };
+    const next = { olymp, taskId, stage, grade, seed, kind, fresh, ...patch };
     onState(next);
   };
 
@@ -131,20 +151,20 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
   const shown = OLYMPIADS.filter((o) => (!stage || o.stage === stage) && (!grade || o.grade === grade));
   const shownIds = new Set(shown.map((o) => o.id));
 
-  // Порядок заданий открытого набора. Вперемешку — все задания выбранных
-  // олимпиад, решённые верно пропускаются.
+  // Порядок заданий открытого набора. Вперемешку — задания выбранного типа
+  // из выбранных олимпиад; с «только нерешённые» верно решённые пропускаются.
   const order = useMemo(() => {
-    if (olymp === MIX) return shuffle(ALL.filter((t) => shownIds.has(t.olymp.id)), seed);
+    if (olymp === MIX) return shuffle(ALL.filter((t) => shownIds.has(t.olymp.id) && ofType(t, type)), seed);
     const o = OLYMP.get(olymp);
     return o ? o.tasks.map((t) => BY_ID.get(t.id)) : [];
-    // shownIds выводится из stage и grade
+    // shownIds и type выводятся из stage, grade и kind
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [olymp, seed, stage, grade]);
+  }, [olymp, seed, stage, grade, kind]);
   const solvedOk = (t) => {
     const a = last.get(t.id);
     return !!(a && a.ok);
   };
-  const mixLeft = olymp === MIX ? order.filter((t) => !solvedOk(t)) : [];
+  const mixLeft = olymp === MIX ? (fresh ? order.filter((t) => !solvedOk(t)) : order) : [];
 
   // Какое задание на экране. Пока не выбрано — первое без ответа.
   const current = (() => {
@@ -195,7 +215,7 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
   function next() {
     if (!current) return;
     const i = order.findIndex((t) => t.id === current.id);
-    if (olymp === MIX) {
+    if (olymp === MIX && fresh) {
       const after = order.slice(i + 1).concat(order.slice(0, Math.max(0, i))).find((t) => !solvedOk(t) && t.id !== current.id);
       go(after ? after.id : DONE);
       return;
@@ -211,11 +231,22 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
     setGrade(g);
     save({ grade: g });
   }
+  function pickKind(id) {
+    setKind(id);
+    save({ kind: id });
+  }
+  function pickFresh(on) {
+    setFresh(on);
+    save({ fresh: on });
+  }
 
   // --- список олимпиад ---------------------------------------------------
   if (!olymp) {
     const solvedAll = ALL.filter(solvedOk).length;
-    const leftShown = ALL.filter((t) => shownIds.has(t.olymp.id) && !solvedOk(t)).length;
+    // Сколько заданий каждого типа в выбранных олимпиадах — с учётом галочки.
+    const inPool = (t, x) => shownIds.has(t.olymp.id) && ofType(t, x) && (!fresh || !solvedOk(t));
+    const countOf = (x) => ALL.filter((t) => inPool(t, x)).length;
+    const leftShown = countOf(type);
     return (
       <section className="ap-card" style={styles.card}>
         <div style={S.head0}>
@@ -249,18 +280,43 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
           ))}
         </div>
 
-        <div style={S.mix}>
-          <div>
-            <div style={S.mixTitle}>Вперемешку</div>
-            <div style={S.pickLine}>
-              {leftShown
-                ? leftShown + " " + taskWord(leftShown) + " ещё не решено верно из выбранных олимпиад"
-                : "Все задания выбранных олимпиад решены верно"}
-            </div>
+        <div style={S.mix} data-vosh-mix>
+          <div style={S.mixTitle}>Тренировка по типам заданий</div>
+          <div style={S.pickLine}>Задания выбранных олимпиад вперемешку — все подряд или только одного вида.</div>
+          <div style={{ ...S.chips, margin: "10px 0 8px" }} role="group" aria-label="Тип задания">
+            {TYPES.map((x) => {
+              const n = countOf(x);
+              const on = kind === x.id;
+              return (
+                <button
+                  key={x.id || "all"}
+                  onClick={() => pickKind(x.id)}
+                  className="ap-row"
+                  style={{ ...S.chip, ...(on ? S.chipOn : null), ...(n || on ? null : S.chipEmpty) }}
+                  aria-pressed={on}
+                >
+                  {x.name}
+                  <span style={S.chipCount}>{n}</span>
+                </button>
+              );
+            })}
           </div>
-          <button onClick={openMix} disabled={!leftShown} className="ap-btn" style={{ ...S.primary, ...(leftShown ? null : S.off) }}>
-            Решать вперемешку
-          </button>
+          <div style={S.mixRow}>
+            <label style={S.fresh}>
+              <input type="checkbox" checked={fresh} onChange={(e) => pickFresh(e.target.checked)} />
+              Только нерешённые
+            </label>
+            <span style={S.mixCount}>
+              {leftShown
+                ? leftShown + " " + taskWord(leftShown)
+                : fresh
+                  ? "всё решено верно — снимите галочку, чтобы пройти заново"
+                  : "таких заданий в выбранных олимпиадах нет"}
+            </span>
+            <button onClick={openMix} disabled={!leftShown} className="ap-btn" style={{ ...S.primary, ...(leftShown ? null : S.off) }}>
+              {kind ? "Решать: " + type.name.toLowerCase() : "Решать вперемешку"}
+            </button>
+          </div>
         </div>
 
         {!shown.length && <p style={styles.muted}>Таких олимпиад пока нет.</p>}
@@ -313,7 +369,7 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
   }
 
   const o = OLYMP.get(olymp);
-  const title = olymp === MIX ? "ВсОШ вперемешку" : o ? olympName(o) : "ВсОШ";
+  const title = olymp === MIX ? (kind ? "ВсОШ · " + type.name : "ВсОШ вперемешку") : o ? olympName(o) : "ВсОШ";
 
   // --- итог олимпиады или конец набора -------------------------------------
   if (!current) {
@@ -324,7 +380,11 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
             <div style={styles.cardTitle}>{title}</div>
             <button onClick={toList} className="ap-row" style={S.back}>К списку олимпиад</button>
           </div>
-          <p style={styles.muted}>Все задания выбранных олимпиад решены верно. Можно выбрать другие этапы и классы.</p>
+          <p style={styles.muted}>
+            {fresh
+              ? "Все такие задания выбранных олимпиад решены верно. Можно выбрать другой тип, этап или класс — или снять «Только нерешённые» и пройти их заново."
+              : "Задания закончились — это был весь набор. Можно начать заново или выбрать другой тип."}
+          </p>
         </section>
       );
     }
@@ -398,7 +458,10 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
 
       {olymp === MIX ? (
         <div style={S.navNote}>
-          Осталось {mixLeft.length} {taskWord(mixLeft.length)} · задание из олимпиады «{olympName(current.olymp)}, {current.olymp.year}»
+          {fresh
+            ? "Осталось " + mixLeft.length + " " + taskWord(mixLeft.length)
+            : "Задание " + (index + 1) + " из " + order.length}
+          {" · из олимпиады «" + olympName(current.olymp) + ", " + current.olymp.year + "»"}
         </div>
       ) : (
         <nav style={S.nav} aria-label="Задания олимпиады">
@@ -428,7 +491,7 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
         prev={last.get(current.id)}
         onAttempt={attempt}
         onNext={next}
-        isLast={olymp !== MIX && index === order.length - 1}
+        lastLabel={index !== order.length - 1 ? "" : olymp !== MIX ? "К итогам" : fresh ? "" : "Закончить"}
       />
     </section>
   );
@@ -436,7 +499,7 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
 
 // --- одно задание --------------------------------------------------------
 
-function TaskCard({ task, prev, onAttempt, onNext, isLast }) {
+function TaskCard({ task, prev, onAttempt, onNext, lastLabel }) {
   // Уже решённое задание открывается с прошлым ответом и разбором. «Решить
   // заново» — чистый лист и новый отсчёт времени.
   const [round, setRound] = useState(prev && prev.resp ? 0 : 1);
@@ -464,7 +527,7 @@ function TaskCard({ task, prev, onAttempt, onNext, isLast }) {
   const props = { task, resp, setResp: done ? () => {} : setResp, done, result };
 
   return (
-    <div style={S.task} data-vosh-task={task.id}>
+    <div style={S.task} data-vosh-task={task.id} data-kind={task.kind}>
       <div style={S.head}>
         <span style={S.code}>№ {task.no}</span>
         <span style={S.headKind}>{KIND_NAMES[task.kind]} · {task.max} {pointWord(task.max)}</span>
@@ -516,7 +579,7 @@ function TaskCard({ task, prev, onAttempt, onNext, isLast }) {
           </>
         ) : (
           <>
-            <button onClick={onNext} className="ap-btn" style={S.primary}>{isLast ? "К итогам" : "Следующее"}</button>
+            <button onClick={onNext} className="ap-btn" style={S.primary}>{lastLabel || "Следующее"}</button>
             <button onClick={again} className="ap-row" style={S.keyBtn}>Решить заново</button>
           </>
         )}
@@ -849,10 +912,12 @@ const S = {
     font: "inherit", fontSize: 13, cursor: "pointer",
   },
   chipOn: { background: "var(--ink)", color: "var(--bg)", borderColor: "var(--ink)", fontWeight: 600 },
-  mix: {
-    display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "space-between",
-    border: "1px solid var(--line2)", borderRadius: 12, padding: "12px 14px", background: "var(--panel)", margin: "4px 0 12px",
-  },
+  mix: { border: "1px solid var(--line2)", borderRadius: 12, padding: "12px 14px", background: "var(--panel)", margin: "4px 0 12px" },
+  mixRow: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  fresh: { display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, color: "var(--ink2)" },
+  mixCount: { flex: "1 1 160px", fontSize: 12.5, color: "var(--mute)" },
+  chipCount: { fontSize: 11.5, opacity: 0.7, fontVariantNumeric: "tabular-nums" },
+  chipEmpty: { opacity: 0.5 },
   mixTitle: { fontSize: 15.5, fontWeight: 600 },
   year: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 17, margin: "6px 0 8px" },
   picker: { display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: 14 },
