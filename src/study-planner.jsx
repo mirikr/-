@@ -39,6 +39,7 @@ import { buildDay } from "./school-timeline.js";
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
 import { BANK_SUBJECTS } from "./fipi-index.js";
+import { VOSH_SUBJECTS } from "./vosh-index.js";
 import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
@@ -1491,7 +1492,8 @@ export default function StudyPlanner() {
   // Тренажёр — тоже занятие. Время его секундомера идёт в часы, а решённые
   // задания продлевают серию; и то и другое выводится из журнала попыток, а не
   // хранится отдельно — иначе эти две записи о том же самом разъезжались бы.
-  const taskSubject = useMemo(() => subjectsByTask(BANK_SUBJECTS), []);
+  // Задания ВсОШ идут в часы и серию обществознания наравне с банком ФИПИ.
+  const taskSubject = useMemo(() => subjectsByTask([...BANK_SUBJECTS, ...VOSH_SUBJECTS]), []);
   const trainerByDay = useMemo(() => trainerDays(trainerLog, taskSubject), [trainerLog, taskSubject]);
   const subjectIdByName = useCallback(
     (name) => (ALL_SUBJECTS.find((x) => x.name === name) || {}).id || "",
@@ -2728,7 +2730,7 @@ export default function StudyPlanner() {
     events: ["События", "Приоритет решает, до какого события считается план"],
     budget: ["Распределение времени (КПВ)", "Слева — что вы задаёте, справа — что из этого получается"],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
-    trainer: ["Тренажёр по банку ФИПИ", "Обществознание, физика и информатика из открытого банка"],
+    trainer: ["Тренажёр", "Банк ФИПИ по обществознанию, физике и информатике и тесты ВсОШ по обществознанию"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
@@ -3966,7 +3968,9 @@ export default function StudyPlanner() {
               log={trainerLog}
               marks={bankMarks}
               state={trainerState}
-              onState={setTrainerState}
+              // Тренажёр ФИПИ пишет своё состояние целиком и о разделе ВсОШ не
+              // знает: его место (открытая олимпиада, фильтры) сохраняем отдельно.
+              onState={(next) => setTrainerState((prev) => ({ ...next, vosh: next && "vosh" in next ? next.vosh : prev && prev.vosh }))}
               onAttempt={addAttempt}
               onMark={addMark}
               styles={styles}
