@@ -1,10 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
 import { loadBank, withBase } from "./bank-load.js";
 import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
 import { ORDERS, newSeed, orderTasks } from "./trainer-order.js";
 import { CardHead } from "./card-head.jsx";
 import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer, votesTakeName } from "./bank-votes.js";
+import { useStopwatch } from "./stopwatch.js";
+import { VOSH_INDEX } from "./vosh-index.js";
+
+// Тесты ВсОШ — отдельный раздел со своим видом заданий. Грузится, только когда
+// его открыли: набор олимпиад с текстами весит как целый предмет банка.
+const VoshTrainer = lazy(() => import("./vosh-trainer.jsx"));
+const VOSH_OPEN = "vosh";
+const VOSH_IDS = VOSH_INDEX.flatMap((o) => o.ids);
 
 // Тренажёр по открытому банку ФИПИ.
 //
@@ -24,42 +32,6 @@ function peopleWord(n) {
   if (last === 1) return "человека";
   if (last >= 2 && last <= 4) return "человек";
   return "человек";
-}
-
-function useStopwatch(taskId) {
-  const [shown, setShown] = useState(0);
-  const started = useRef(Date.now());
-  const hiddenAt = useRef(0);
-  const lost = useRef(0);
-
-  function elapsed() {
-    const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
-    return Math.max(0, (Date.now() - started.current - lost.current - away) / 1000);
-  }
-
-  useEffect(() => {
-    started.current = Date.now();
-    lost.current = 0;
-    hiddenAt.current = 0;
-    setShown(0);
-    const timer = setInterval(() => setShown(elapsed()), 500);
-    function onVisibility() {
-      if (document.visibilityState === "hidden") {
-        hiddenAt.current = Date.now();
-      } else if (hiddenAt.current) {
-        lost.current += Date.now() - hiddenAt.current;
-        hiddenAt.current = 0;
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
-
-  return { seconds: shown, read: elapsed };
 }
 
 export default function Trainer({ log, marks, state, onState, onAttempt, onMark, styles }) {
@@ -103,7 +75,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // Набор грузится, когда предмет открыли, и остаётся в памяти: переключаться
   // между предметами после этого мгновенно.
   useEffect(() => {
-    if (!open) { setTasks(null); setFailed(false); return undefined; }
+    if (!open || open === VOSH_OPEN) { setTasks(null); setFailed(false); return undefined; }
     let alive = true;
     setFailed(false);
     const card = BANK_SUBJECTS.find((s) => s.name === open);
@@ -416,8 +388,25 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
 
   if (!BANK_SUBJECTS.length) return null;
 
+  // --- ВсОШ ------------------------------------------------------------------
+  if (open === VOSH_OPEN) {
+    return (
+      <Suspense fallback={<section className="ap-card" style={styles.card}><p style={styles.cardNote}>Задания олимпиад загружаются…</p></section>}>
+        <VoshTrainer
+          log={log}
+          state={(state && state.vosh) || {}}
+          onState={(v) => onState({ ...(state || {}), vosh: v })}
+          onAttempt={onAttempt}
+          onLeave={leave}
+          styles={styles}
+        />
+      </Suspense>
+    );
+  }
+
   // --- выбор предмета ------------------------------------------------------
   if (!open) {
+    const voshDone = doneIn(VOSH_IDS);
     return (
       <section className="ap-card" style={styles.card}>
         <CardHead
@@ -483,6 +472,26 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
               </div>
             );
           })}
+          <div style={S.pick} data-vosh-card>
+            <div style={S.pickTop}>
+              <span style={S.pickName}>ВсОШ · Обществознание</span>
+              {voshDone ? null : <span style={S.pickCount}>{VOSH_IDS.length} {taskWord(VOSH_IDS.length)}</span>}
+            </div>
+            <div style={S.pickWhole}>
+              тесты школьного и муниципального этапов, {VOSH_INDEX.length} олимпиад 2023–2026 с официальными ключами
+            </div>
+            <div style={S.pickLine}>
+              {voshDone ? "Решено верно " + voshDone + " из " + VOSH_IDS.length : "Ещё не начинали"}
+            </div>
+            {voshDone ? (
+              <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(2, (voshDone / VOSH_IDS.length) * 100) + "%" }} /></div>
+            ) : null}
+            <div style={S.pickButtons}>
+              <button onClick={() => start(VOSH_OPEN, "", false)} className="ap-btn" style={S.primary}>
+                {voshDone ? "Продолжить" : "Открыть олимпиады"}
+              </button>
+            </div>
+          </div>
         </div>
 
         <CardHead

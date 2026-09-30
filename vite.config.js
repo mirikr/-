@@ -57,8 +57,9 @@ export default defineConfig(({ mode }) => ({
         // В офлайн-запас они не кладутся: приложение должно ставиться быстро и
         // на мобильном интернете. Открытое хоть раз попадает в кэш и дальше
         // работает без сети.
+        // Задания ВсОШ с картинками к ним — так же: раздел открывают не все.
         globIgnores: ["**/versions/*.png", "**/society-*.js", "**/physics-*.js", "**/informatics-*.js",
-          "**/bank-find-*.js", "**/fipi/*"],
+          "**/bank-find-*.js", "**/fipi/*", "**/vosh-trainer-*.js", "**/vosh/*"],
         // The planner must open with no network at all; Supabase calls are never cached,
         // they either reach the server or fall back to the local copy in storage.js.
         navigateFallback: base + "index.html",
@@ -66,7 +67,7 @@ export default defineConfig(({ mode }) => ({
           {
             // Имя куска меняется вместе с содержимым, поэтому старый набор
             // подсунуть нельзя: адрес у новой сборки другой.
-            urlPattern: /\/assets\/(society|physics|informatics|bank-find)-[^/]+\.js$/,
+            urlPattern: /\/assets\/(society|physics|informatics|bank-find|vosh-trainer)-[^/]+\.js$/,
             handler: "CacheFirst",
             options: {
               cacheName: "trainer-bank",
@@ -82,6 +83,16 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: "trainer-pics",
               expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Картинки к заданиям ВсОШ: инфографика, изображения, схемы.
+            urlPattern: /\/vosh\/[^/]+\.webp$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "vosh-pics",
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
