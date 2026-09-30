@@ -123,7 +123,9 @@ async function answerByKey(page, t) {
 
   // Неверный ответ: частичный балл и ключ.
   await page.locator('[data-vosh="2324-sch-9"]').getByRole("button", { name: "Итоги" }).click();
-  await page.locator('nav[aria-label="Задания олимпиады"]').getByRole("button", { name: "1", exact: true }).click();
+  // Пройденная олимпиада открывается на итогах; к заданию — строкой итогов.
+  want("пройденная олимпиада открывается на итогах", (await page.locator("[data-vosh-total]").count()) === 1);
+  await page.getByRole("button", { name: /^№ 1 / }).first().click();
   const box = page.locator('[data-vosh-task="2324-sch-9-1"]');
   want("решённое задание открывается с прошлым ответом", /Это ваш прошлый ответ/.test(await box.innerText()));
   await box.getByRole("button", { name: "Решить заново" }).click();

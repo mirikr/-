@@ -980,10 +980,12 @@ const S = {
     border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--ink2)", borderRadius: 7,
     padding: "5px 9px", font: "inherit", fontSize: 13, cursor: "pointer", minWidth: 34,
   },
-  groupGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 10 },
+  // На телефоне — по две картинки в ряд: в один столбец восемь изображений
+  // уходили на пять экранов.
+  groupGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))", gap: 8 },
   groupTile: { display: "flex", flexDirection: "column", gap: 7, border: "1px solid var(--line2)", borderRadius: 10, padding: 8, background: "var(--panel)" },
   groupKey: { fontWeight: 700, fontSize: 13.5 },
-  groupImg: { display: "block", width: "100%", height: 130, objectFit: "contain", background: "#fff", borderRadius: 6 },
+  groupImg: { display: "block", width: "100%", height: 118, objectFit: "contain", background: "#fff", borderRadius: 6 },
   gapText: { fontSize: 14.5, lineHeight: 2, margin: "0 0 12px" },
   gap: { display: "inline-flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", verticalAlign: "baseline" },
   gapSelect: {
