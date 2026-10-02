@@ -40,6 +40,7 @@ import { buildDay } from "./school-timeline.js";
 const Trainer = lazy(() => import("./trainer.jsx"));
 import { BANK_SUBJECTS } from "./fipi-index.js";
 import { VOSH_SUBJECTS } from "./vosh-index.js";
+import { goalMinutesFor, withDaily } from "./budget-history.js";
 import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
@@ -535,9 +536,10 @@ function weeklyBudgetHours(budget) {
   return WEEKDAY_KEYS.reduce((sum, k) => sum + (Number(budget.daily[k]) || 0), 0) / 60;
 }
 
+// Норма дня — та, что действовала в этот день: правка в «Распределении»
+// меняет её с сегодняшнего дня, а прошлые дни меряются прежней (budget-history.js).
 function goalHoursForDate(budget, date) {
-  const key = DOW_TO_KEY[date.getDay()];
-  return (Number(budget.daily[key]) || 0) / 60;
+  return goalMinutesFor(budget, date) / 60;
 }
 
 // Часы в строке дневника. Полчаса — это «0,5 ч», а четыре минуты тренажёра
@@ -1423,7 +1425,7 @@ export default function StudyPlanner() {
   }
 
   function setDailyGoal(key, minutes) {
-    setBudget((prev) => ({ ...prev, daily: { ...prev.daily, [key]: Math.max(0, Number(minutes) || 0) } }));
+    setBudget((prev) => withDaily(prev, key, minutes));
     markWeekPlanned();
   }
 

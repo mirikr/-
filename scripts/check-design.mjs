@@ -228,6 +228,53 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   }
 }
 
+// 3г. Норма дня меняется с сегодняшнего дня (1.6.2): правка часов в
+// «Распределении» не переписывает прошлые дни на графике «Сегодня» — они
+// меряются нормой, которая тогда действовала.
+{
+  const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const DAY_RU = { sun: "Воскресенье", mon: "Понедельник", tue: "Вторник", wed: "Среда", thu: "Четверг", fri: "Пятница", sat: "Суббота" };
+  const now = new Date();
+  const today = iso(now);
+  const weekAgo = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
+  const dk = DOW[now.getDay()];
+  const daily = { mon: 120, tue: 120, wed: 120, thu: 120, fri: 120, sat: 120, sun: 120 };
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(6000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(([st]) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "budget");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, [{ budget: { daily, alloc: {} }, journal: [{ id: "j-old", date: weekAgo, subject: "Право", hours: 2, note: "" }] }]);
+  await page.goto(URL0);
+  await page.waitForTimeout(2000);
+  const field = page.getByRole("textbox", { name: "Часов: " + DAY_RU[dk] });
+  await field.click();
+  await field.fill("1");
+  await field.press("Enter");
+  await page.waitForTimeout(1300);
+  const budget = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).budget);
+  want("норма: прежняя запомнилась до сегодняшнего дня", Array.isArray(budget.past) && budget.past.length === 1 && budget.past[0].until === today && budget.past[0].daily[dk] === 120, JSON.stringify(budget.past));
+  want("норма: новая — в текущих настройках", budget.daily[dk] === 60);
+  await page.evaluate(() => localStorage.setItem("planner-screen", "today"));
+  await page.reload();
+  await page.waitForTimeout(2200);
+  const goalOf = (key) => page.locator(`[data-bucket="${key}"]`).first().getAttribute("data-goal");
+  const old = await goalOf(weekAgo);
+  const now2 = await goalOf(today);
+  want("график: неделю назад — по старой норме (2 ч)", old === "2", old);
+  want("график: сегодня — по новой (1 ч)", now2 === "1", now2);
+  want("норма: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 4. Карточки уроков в «Лицее» (1.4.0): два урока одного предмета подряд —
 // одна карточка «2 урока»; всё редкое — в «⋯»; ничего не вылезает за край; а
 // важность — свойство предмета и меняется во всех его уроках, кроме экзаменов.
