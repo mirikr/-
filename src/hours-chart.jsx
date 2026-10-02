@@ -322,6 +322,8 @@ export default function HoursChart({ journal, homework, subjects, goalForDate })
                     width={step}
                     height={plotH}
                     fill="transparent"
+                    data-bucket={b.key}
+                    data-goal={Math.round(b.goal * 100) / 100}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
                     onClick={() => setActive(isActive ? null : i)}
