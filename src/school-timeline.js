@@ -140,6 +140,61 @@ function optionsOf(units) {
 
 // Сколько уроков человек отсидит в этом блоке: у выбора — самый длинный
 // вариант, у выбранного — только он.
+// Записи блока, которые идут в счёт дня: у выбора среди одновременных — самый
+// длинный вариант, как и в общем числе.
+function countedEntries(block) {
+  if (block.type === "unit") return block.unit.entries;
+  if (block.type === "picked") return block.option.entries;
+  return block.options.reduce((best, o) => (o.entries.length > best.length ? o.entries : best), []);
+}
+
+// Сколько в дне уроков, олимпиад и экзаменов — раздельно: день, где только
+// олимпиада, — это не «2 урока».
+function kindsOf(blocks) {
+  const out = { lessons: 0, olympiads: 0, exams: 0 };
+  blocks.forEach((b) =>
+    countedEntries(b).forEach((e) => {
+      if (e.kind !== "exam") out.lessons += 1;
+      else if (e.examKind === "olympiad") out.olympiads += 1;
+      else out.exams += 1;
+    })
+  );
+  return out;
+}
+
+const pl = (n, one, few, many) => {
+  const last = n % 10;
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 14) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+};
+
+function eventsPhrase(k) {
+  const parts = [];
+  if (k.olympiads) parts.push(k.olympiads === 1 ? "олимпиада" : k.olympiads + " " + pl(k.olympiads, "олимпиада", "олимпиады", "олимпиад"));
+  if (k.exams) parts.push(k.exams === 1 ? "экзамен" : k.exams + " " + pl(k.exams, "экзамен", "экзамена", "экзаменов"));
+  return parts.join(" и ");
+}
+
+// «8 уроков», «олимпиада», «5 уроков и экзамен». short — для вкладки дня:
+// «5 уроков +1».
+export function dayCountLabel(plan, short) {
+  const k = (plan && plan.kinds) || { lessons: plan ? plan.count : 0, olympiads: 0, exams: 0 };
+  const lessons = k.lessons ? k.lessons + " " + pl(k.lessons, "урок", "урока", "уроков") : "";
+  const events = eventsPhrase(k);
+  if (!lessons) return events;
+  if (!events) return lessons;
+  return short ? lessons + " +" + (k.olympiads + k.exams) : lessons + " и " + events;
+}
+
+// Слово для одной карточки: «2 урока» у пары, а у экзамена — ничего.
+export function entriesLabel(entries) {
+  const n = (entries || []).filter((e) => e.kind !== "exam").length;
+  return n > 1 ? n + " " + pl(n, "урок", "урока", "уроков") : "";
+}
+
 function lessonCount(block) {
   if (block.type === "unit") return block.unit.entries.length;
   if (block.type === "picked") return block.option.entries.length;
@@ -218,6 +273,7 @@ export function buildDay(entries, now = null) {
   return {
     blocks: out,
     count: blocks.reduce((n, b) => n + lessonCount(b), 0),
+    kinds: kindsOf(blocks),
     from: blocks.length ? blocks[0].from : null,
     to: blocks.length ? Math.max(...blocks.map((b) => b.to)) : null,
   };
@@ -248,6 +304,60 @@ export function weekDates(date) {
     out[DOW[d.getDay()]] = d;
   }
   return out;
+}
+
+// Дата строкой «2026-10-05» — по местному времени, как даты экзаменов и заданий.
+export function isoDate(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+// Та же неделя, сдвинутая на weeks недель вперёд (или назад).
+export function shiftWeek(dates, weeks) {
+  const out = {};
+  Object.keys(dates).forEach((k) => {
+    const d = new Date(dates[k]);
+    d.setDate(d.getDate() + weeks * 7);
+    out[k] = d;
+  });
+  return out;
+}
+
+// На сколько недель дата iso от недели dates: 0 — эта же, 1 — следующая.
+export function weekOffsetOf(dates, iso) {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return 0;
+  const mon = weekDates(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).mon;
+  const ref = dates.mon;
+  const days = Math.round((Date.UTC(mon.getFullYear(), mon.getMonth(), mon.getDate()) - Date.UTC(ref.getFullYear(), ref.getMonth(), ref.getDate())) / 86400000);
+  return Math.round(days / 7);
+}
+
+// Записи дня не текущей недели — на конкретную дату: уроки как всегда,
+// экзамены и олимпиады — только стоящие на эту дату. Экзамен без даты виден
+// лишь в текущей неделе, там его и дозаполняют.
+export function entriesOnDate(entries, iso) {
+  return entries.filter((e) => e.kind !== "exam" || e.date === iso);
+}
+
+// Экзамены того же дня недели позже показанной даты — «Позже в этот день недели».
+export function examsAfter(entries, iso) {
+  return entries
+    .filter((e) => e.kind === "exam" && e.date && e.date > iso)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+const MONTH_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+
+// «Эта неделя», «Следующая неделя», «Прошлая неделя» или «12–18 октября».
+export function weekTitle(offset, dates, days) {
+  if (offset === 0) return "Эта неделя";
+  if (offset === 1) return "Следующая неделя";
+  if (offset === -1) return "Прошлая неделя";
+  const list = (days && days.length ? days : DOW.slice(1)).map((k) => dates[k]).filter(Boolean);
+  const a = list[0];
+  const b = list[list.length - 1];
+  if (a.getMonth() === b.getMonth()) return a.getDate() + "–" + b.getDate() + " " + MONTH_GEN[a.getMonth()];
+  return a.getDate() + " " + MONTH_GEN[a.getMonth()] + " – " + b.getDate() + " " + MONTH_GEN[b.getMonth()];
 }
 
 // С какого дня открывать расписание: с сегодняшнего. Если сегодня день скрыт

@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspens
 import { get as storageGet, set as storageSet, onAuthChange, cloudAvailable } from "./storage.js";
 import { stampState, mergeStates, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments, FileGrid, sameFile } from "./notebook.jsx";
-import NotebookSubjects from "./notebook-subjects.jsx";
-import { orderOwners, togglePin, moveOwner } from "./notebook-order.js";
+import NotebookSubjects, { Badges as SubjectBadges } from "./notebook-subjects.jsx";
+import { orderOwners, togglePin, moveOwner, ownerMeta, setSort } from "./notebook-order.js";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
@@ -12,7 +12,7 @@ import { sequenceItems } from "./calendar-seq.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import EventDetails from "./event-details.jsx";
-import { eventDescription, eventTime } from "./event-details.js";
+import { eventDescription, eventLinks, eventTime, linkLabel, splitLinks } from "./event-details.js";
 import CalendarHowTo, { CalendarSyncNote } from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
 import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design-intro.jsx";
@@ -31,16 +31,18 @@ import { carryLessonSettings, moveHomework } from "./schedule-switch.js";
 import Background from "./background.jsx";
 import { EASTER_EGGS } from "./constellations.js";
 import { platform as detectPlatform } from "./device.js";
-import { attachFile, attachmentUrl, removeAttachment as deleteAttachment } from "./files.js";
+import { attachFile, attachmentUrl, removeAttachment as deleteAttachment, setFileInUse } from "./files.js";
 import NowCard from "./now-card.jsx";
 import SchoolDay, { SchoolSheet, SCHOOL_CSS, SCHOOL_MOBILE_CSS } from "./school-day.jsx";
-import { buildDay } from "./school-timeline.js";
+import { buildDay, dayCountLabel } from "./school-timeline.js";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(() => import("./trainer.jsx"));
 import { BANK_SUBJECTS } from "./fipi-index.js";
 import { VOSH_SUBJECTS } from "./vosh-index.js";
 import { goalMinutesFor, withDaily } from "./budget-history.js";
+import { FileLibraryContext, PickExistingButton } from "./file-picker.jsx";
+import { collectFiles, fileId, fileInUse } from "./file-library.js";
 import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
 import OlympiadPreset from "./lyceum-olympiads-panel.jsx";
@@ -1752,12 +1754,14 @@ export default function StudyPlanner() {
     // вовсе. Теперь оно встаёт под первый урок этого предмета в день своего
     // срока — на паре подряд одно, а не дважды. Задания с прошедшим сроком
     // сюда не тянем: неделя смотрит вперёд.
+    // Другая неделя в «Лицее» спрашивает задания на свою дату (iso): тогда и
+    // прошедшие сроки нужны — их смотрят, листая назад.
     const ids = new Set(lyceumSchedule.map((e) => e.id));
     const today = todayStr();
     const loose = new Map();
     homework.forEach((h) => {
       if (h.lessonId && ids.has(h.lessonId)) return;
-      if (!h.subjectName || !h.date || h.date < today) return;
+      if (!h.subjectName || !h.date) return;
       const day = weekdayKeyFromDate(h.date);
       const lesson = lyceumSchedule
         .filter((e) => e.kind !== "exam" && !e.skip && e.day === day && e.subjectName === h.subjectName)
@@ -1769,12 +1773,14 @@ export default function StudyPlanner() {
     return {
       dueDate: (dayKey) => nextDateForDay(dayKey),
       // Принимает урок целиком (или его id — для привязанных заданий этого хватает).
-      forLesson: (lesson) => {
+      forLesson: (lesson, iso) => {
         const id = typeof lesson === "string" ? lesson : lesson && lesson.id;
-        return homework.filter((h) => h.lessonId === id).concat(loose.get(id) || []);
+        const free = loose.get(id) || [];
+        if (iso) return homework.filter((h) => h.lessonId === id && h.date === iso).concat(free.filter((h) => h.date === iso));
+        return homework.filter((h) => h.lessonId === id).concat(free.filter((h) => h.date >= today));
       },
-      add: (entry, text, minutes) =>
-        addHomework(nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
+      add: (entry, text, minutes, iso) =>
+        addHomework(iso || nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
       toggle: (id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done }),
       folded: (lessonId, due) => !!taskFolds[lessonId + "|" + due],
       setFolded: (lessonId, due, folded) => setTaskFold(lessonId + "|" + due, folded),
@@ -1798,6 +1804,9 @@ export default function StudyPlanner() {
     (day) => lyceumSchedule.filter((e) => e.day === day && (e.kind !== "exam" || examPlace(e) !== "past")).sort(byWeekOrder),
     [lyceumSchedule]
   );
+  // Другие недели в «Лицее»: все записи дня, и прошедшие экзамены тоже — неделя
+  // сама отберёт экзамены своих дат.
+  const dayAllEntries = useCallback((day) => lyceumSchedule.filter((e) => e.day === day).sort(byWeekOrder), [lyceumSchedule]);
   // После крестика в уведомлении о переносе: какую форму добавления открыть
   // снова (с тем, что было введено) и какую запись вернуть к правке.
   const [examReopen, setExamReopen] = useState(null);
@@ -2189,7 +2198,7 @@ export default function StudyPlanner() {
   // lessonId связывает задание с уроком расписания. Раньше связь была только
   // по названию предмета строкой, и «к какому именно уроку» приложение не знало —
   // а спрашивают обычно именно это.
-  function addHomework(date, subjectName, text, minutes, lessonId) {
+  function addHomework(date, subjectName, text, minutes, lessonId, attachments) {
     if (!text.trim()) return;
     const id = "hw-" + Date.now() + "-" + Math.round(Math.random() * 1000);
     setHomework((prev) => [
@@ -2201,7 +2210,7 @@ export default function StudyPlanner() {
         text: text.trim(),
         minutes: Math.max(0, Number(minutes) || 0),
         done: false,
-        attachments: [],
+        attachments: Array.isArray(attachments) ? attachments : [],
         ...(lessonId ? { lessonId } : null),
       },
     ]);
@@ -2237,6 +2246,19 @@ export default function StudyPlanner() {
     }
     setHomework((prev) =>
       prev.map((h) => (h.id === id ? { ...h, attachments: [...(h.attachments || []), res.attachment] } : h))
+    );
+  }
+
+  // Файл, уже загруженный в тетрадь или другое задание: добавляется ссылка на
+  // тот же файл, без новой загрузки.
+  function attachExistingToHomework(id, files) {
+    if (!files.length) return;
+    setHomework((prev) =>
+      prev.map((h) => {
+        if (h.id !== id) return h;
+        const have = new Set((h.attachments || []).map(fileId));
+        return { ...h, attachments: [...(h.attachments || []), ...files.filter((f) => !have.has(fileId(f)))] };
+      })
     );
   }
 
@@ -2499,7 +2521,8 @@ export default function StudyPlanner() {
   );
   // Сколько уроков человек отсидит сегодня: три одновременных, из которых
   // ещё не выбран один, — это один урок, а не три.
-  const todayLessonCount = useMemo(() => buildDay(todayLessons).count, [todayLessons]);
+  const todayPlan = useMemo(() => buildDay(todayLessons), [todayLessons]);
+  const todayLessonCount = todayPlan.count;
 
   // Дела на виду: несделанные, с ближайшим сроком сверху.
   const upcomingHomework = useMemo(
@@ -2516,16 +2539,37 @@ export default function StudyPlanner() {
   // Тетради всех предметов в одном месте: свои предметы и предметы лицея.
   const notebookOwners = useMemo(() => {
     const own = ALL_SUBJECTS.map((s) => ({ key: "subj:" + s.id, name: s.name, color: s.color, from: "own" }));
+    // Важность, уровень и ближайший урок — из расписания: по ним список можно
+    // упорядочить, и они видны рядом с названием.
+    const now = new Date();
     const lyceum = lyceumSubjectNames.map((name) => ({
       key: "lyceum:" + name,
       name,
       color: lyceumColorOf(name),
       from: "lyceum",
+      ...ownerMeta(name, lyceumSchedule, now),
     }));
     return own.concat(lyceum);
-  }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors]);
+    // screen — чтобы «ближайший урок» пересчитывался при входе в тетради.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors, lyceumSchedule, screen]);
 
   const orderedOwners = useMemo(() => orderOwners(notebookOwners, notebookOrder), [notebookOwners, notebookOrder]);
+
+  // Все загруженные файлы — для окна «Выбрать из загруженных» у заданий и в
+  // тетрадях. Файл хранится один раз, а показан может быть в нескольких местах.
+  const fileLibrary = useMemo(() => {
+    const names = new Map(notebookOwners.map((o) => [o.key, o.name]));
+    const ownerName = (key) => names.get(key) || String(key).replace(/^(lyceum|subj):/, "");
+    return { entries: collectFiles({ homework, notebooks, data }, ownerName) };
+  }, [homework, notebooks, data, notebookOwners]);
+
+  // Стирать файл из хранилища можно, только если на него не осталось ссылок
+  // ни в одном задании, тетради или заметке (src/files.js).
+  useEffect(() => {
+    setFileInUse((att) => !!liveState.current && fileInUse(liveState.current, att));
+    return () => setFileInUse(null);
+  }, []);
   const currentNotebook = orderedOwners.find((o) => o.key === notebookOwner) || orderedOwners[0] || null;
 
   // Опись заданий банка для поиска: номер, предмет и начало условия. Она
@@ -2701,7 +2745,7 @@ export default function StudyPlanner() {
     {
       key: "today",
       label: "Сегодня",
-      hint: todayLessonCount ? todayLessonCount + " " + lessonsWord(todayLessonCount) : "",
+      hint: todayLessonCount ? dayCountLabel(todayPlan, true) : "",
     },
     {
       key: "events",
@@ -2842,6 +2886,7 @@ export default function StudyPlanner() {
 
   return (
     <div data-theme={theme} className={"ap-shell" + (backgroundOn ? " ap-live-bg" : "")} style={styles.shell}>
+      <FileLibraryContext.Provider value={fileLibrary}>
       <Background theme={theme} enabled={backgroundOn} showcase={showcase} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=Golos+Text:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -3121,7 +3166,29 @@ export default function StudyPlanner() {
                   <div key={e.id} style={styles.todayEventRow}>
                     <PriorityMark value={e.priority} height={13} />
                     <span style={styles.todayEventName}>{e.name}</span>
-                    {e.description && <span style={styles.todayEventNote}>{e.description}</span>}
+                    {/* Подробности по частям: ссылка — настоящая ссылка, как в «Событиях»,
+                        а не кусок текста, который не нажимается. */}
+                    {[eventTime(e), e.place].filter(Boolean).map((t, i) => (
+                      <span key={"t" + i} style={styles.todayEventNote}>{t}</span>
+                    ))}
+                    {eventLinks(e).map((url) => (
+                      <a key={url} href={url} target="_blank" rel="noreferrer noopener" className="lesson-link" style={styles.todayEventLink} data-today-link>
+                        {linkLabel(url)} ↗
+                      </a>
+                    ))}
+                    {e.note && (
+                      <span style={styles.todayEventNote}>
+                        {splitLinks(e.note).map((part, i) =>
+                          part.url ? (
+                            <a key={i} href={part.url} target="_blank" rel="noreferrer noopener" className="lesson-link" style={styles.todayEventLink}>
+                              {part.label}
+                            </a>
+                          ) : (
+                            <React.Fragment key={i}>{part.text}</React.Fragment>
+                          )
+                        )}
+                      </span>
+                    )}
                   </div>
                 ))}
                 <button onClick={() => goScreen("events")} style={styles.goLink}>
@@ -3988,6 +4055,7 @@ export default function StudyPlanner() {
             days={scheduleDays}
             todayKey={todayKey}
             entriesOf={weekEntries}
+            allEntriesOf={dayAllEntries}
             hasSchedule={lyceumSchedule.length > 0}
             kit={SCHOOL_KIT}
             colorOf={lyceumColorOf}
@@ -4187,12 +4255,13 @@ export default function StudyPlanner() {
                             onToggleDone={() => updateHomework(h.id, { done: !h.done })}
                             onRemove={() => removeHomework(h.id)}
                             onAttach={(file) => attachFileToHomework(h.id, file)}
+                            onAttachExisting={(files) => attachExistingToHomework(h.id, files)}
                             onOpenAttachment={openAttachment}
                             onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                             onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
                                 />
                         ))}
-                        <HomeworkAddForm onAdd={(text, minutes) => addHomework(selectedDate, name, text, minutes)} />
+                        <HomeworkAddForm subject={name} onAdd={(text, minutes, files) => addHomework(selectedDate, name, text, minutes, undefined, files)} />
                       </div>
                     );
                   })
@@ -4207,6 +4276,7 @@ export default function StudyPlanner() {
                       onToggleDone={() => updateHomework(h.id, { done: !h.done })}
                       onRemove={() => removeHomework(h.id)}
                       onAttach={(file) => attachFileToHomework(h.id, file)}
+                      onAttachExisting={(files) => attachExistingToHomework(h.id, files)}
                       onOpenAttachment={openAttachment}
                       onRemoveAttachment={(att) => removeAttachment(h.id, att)}
                       onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
@@ -4214,7 +4284,7 @@ export default function StudyPlanner() {
                   ))}
                   <HomeworkAddForm
                     placeholder="Например: подать заявку на олимпиаду"
-                    onAdd={(text, minutes) => addHomework(selectedDate, "", text, minutes)}
+                    onAdd={(text, minutes, files) => addHomework(selectedDate, "", text, minutes, undefined, files)}
                   />
                 </div>
               </div>
@@ -4306,6 +4376,8 @@ export default function StudyPlanner() {
                 onPick={setNotebookOwner}
                 onPin={(key) => setNotebookOrder((prev) => togglePin(prev, notebookOwners, key))}
                 onMove={(from, to) => setNotebookOrder((prev) => moveOwner(prev, notebookOwners, from, to))}
+                sort={(notebookOrder && notebookOrder.sort) || "manual"}
+                onSort={(sort) => setNotebookOrder((prev) => setSort(prev, sort))}
               />
             </aside>
             <div style={styles.notesMain}>
@@ -4324,6 +4396,7 @@ export default function StudyPlanner() {
                     >
                       <span style={{ ...styles.dot, width: 8, height: 8, background: o.color }} />
                       {o.name}
+                      <SubjectBadges owner={o} compact onDark={!!on} />
                     </button>
                   );
                 })}
@@ -4354,6 +4427,8 @@ export default function StudyPlanner() {
                     onPick={setNotebookOwner}
                     onPin={(key) => setNotebookOrder((prev) => togglePin(prev, notebookOwners, key))}
                     onMove={(from, to) => setNotebookOrder((prev) => moveOwner(prev, notebookOwners, from, to))}
+                    sort={(notebookOrder && notebookOrder.sort) || "manual"}
+                    onSort={(sort) => setNotebookOrder((prev) => setSort(prev, sort))}
                   />
                 </div>
               )}
@@ -4824,6 +4899,7 @@ export default function StudyPlanner() {
           нажмите «Обновить сейчас» и проверьте соединение с интернетом.
         </div>
       )}
+      </FileLibraryContext.Provider>
     </div>
   );
 }
@@ -5875,15 +5951,19 @@ function AddScheduleForm({ onAdd }) {
   );
 }
 
-function HomeworkAddForm({ onAdd, placeholder }) {
+function HomeworkAddForm({ onAdd, placeholder, subject }) {
   const [val, setVal] = useState("");
   const [minutes, setMinutes] = useState("20");
+  // Файлы из тетради или других заданий — сразу к новому заданию.
+  const [files, setFiles] = useState([]);
   function submit() {
     if (!val.trim()) return;
-    onAdd(val, minutes);
+    onAdd(val, minutes, files);
     setVal("");
+    setFiles([]);
   }
   return (
+    <>
     <div style={styles.homeworkAddRow}>
       <input
         type="text"
@@ -5903,10 +5983,36 @@ function HomeworkAddForm({ onAdd, placeholder }) {
         title="Сколько времени нужно, минут"
       />
       <span style={styles.mutedSmall}>мин</span>
+      <PickExistingButton
+        have={files}
+        subject={subject}
+        where={"новое задание" + (subject ? " · " + subject : "")}
+        label="🗂"
+        style={styles.attachBtn}
+        onPick={(picked) => setFiles((cur) => [...cur, ...picked])}
+      />
       <button onClick={submit} style={styles.addBtnSmall}>
         +
       </button>
     </div>
+    {files.length > 0 && (
+      <div style={styles.hwStaged} data-staged>
+        {files.map((f) => (
+          <span key={fileId(f)} style={styles.hwStagedChip}>
+            {f.name}
+            <button
+              type="button"
+              onClick={() => setFiles((cur) => cur.filter((x) => fileId(x) !== fileId(f)))}
+              style={styles.hwStagedX}
+              aria-label={"Не прикреплять: " + f.name}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+    )}
+    </>
   );
 }
 
@@ -5923,7 +6029,7 @@ function Marked({ text, query }) {
   );
 }
 
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, onOpenAttachment, onRemoveAttachment, onUpdateReminder }) {
   const fileInputRef = useRef(null);
   const reminderMode = hw.reminderDays === "always" ? "always" : !hw.reminderDays || hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -5934,9 +6040,19 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onOpenAttachment, 
         <input type="checkbox" checked={!!hw.done} onChange={onToggleDone} />
         <span style={hw.done ? { ...styles.homeworkText, ...styles.topicDone } : styles.homeworkText}>{hw.text}</span>
         {hw.minutes > 0 && <span style={styles.mutedSmall}>{hw.minutes} мин</span>}
-        <button onClick={() => fileInputRef.current?.click()} style={styles.attachBtn} title="Прикрепить файл">
+        <button onClick={() => fileInputRef.current?.click()} style={styles.attachBtn} title="Загрузить файл" aria-label="Загрузить файл">
           📎
         </button>
+        {onAttachExisting && (
+          <PickExistingButton
+            have={hw.attachments || []}
+            subject={hw.subjectName}
+            where={"задание «" + hw.text + "»"}
+            label="🗂"
+            style={styles.attachBtn}
+            onPick={onAttachExisting}
+          />
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -6131,7 +6247,7 @@ const styles = {
   noteBadge: { flexShrink: 0, minHeight: 26, padding: "0 10px", border: "none", borderRadius: 13, background: "var(--neutralBg)", color: "var(--ink2)", fontSize: 12, cursor: "pointer" },
   topicMins: { flexShrink: 0, width: 58, textAlign: "right", fontSize: 13, color: "var(--ink3)" },
   // «Тетради», вариант A: три колонки в одной рамке.
-  notesShell: { display: "grid", gridTemplateColumns: "228px minmax(0, 1fr)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", overflow: "hidden", minHeight: 640 },
+  notesShell: { display: "grid", gridTemplateColumns: "252px minmax(0, 1fr)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", overflow: "hidden", minHeight: 640 },
   notesSide: { padding: "18px 10px", background: "var(--neutralBg)", borderRight: "1px solid var(--line)", minWidth: 0 },
   notesMain: { minWidth: 0, display: "flex", flexDirection: "column" },
   notesChips: { gap: 8, padding: "12px 14px", overflowX: "auto", borderBottom: "1px solid var(--line)", scrollbarWidth: "none" },
@@ -6280,6 +6396,7 @@ const styles = {
   todayEventRow: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 4 },
   todayEventName: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 19, color: "var(--ink)" },
   todayEventNote: { fontSize: 12.5, color: "var(--ink3)" },
+  todayEventLink: { fontSize: 12.5, color: "var(--accent)", textDecoration: "underline", textUnderlineOffset: 2, wordBreak: "break-all" },
   nowTaskRow: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 12.5, marginTop: 2, marginLeft: 2 },
   nowTaskText: { color: "var(--ink2)", minWidth: 0, overflowWrap: "anywhere" },
   nowTomorrowTasks: { marginTop: 8, display: "flex", flexDirection: "column", gap: 2 },
@@ -7155,6 +7272,13 @@ const styles = {
   homeworkMinutesInput: { width: 46, padding: "4px 5px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 12, background: "var(--panel2)" },
   attachBtn: { background: "none", border: "none", fontSize: 13, padding: "0 2px" },
   attachmentsRow: { marginLeft: 24, marginBottom: 4, minWidth: 0 },
+  hwStaged: { display: "flex", flexWrap: "wrap", gap: 6, margin: "2px 0 8px" },
+  hwStagedChip: {
+    display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", fontSize: 12.5, padding: "3px 4px 3px 10px",
+    borderRadius: 999, border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--ink2)",
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
+  hwStagedX: { border: "none", background: "none", color: "var(--mute)", fontSize: 15, lineHeight: 1, cursor: "pointer", padding: "0 4px" },
   // Строка напоминания у домашнего задания. Раньше звалась reminderRow — так же,
   // как строка напоминания о занятиях на «Сегодня», и в одном объекте
   // выигрывала она: у той карточки был чужой отступ слева.

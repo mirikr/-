@@ -74,7 +74,25 @@ export async function attachmentUrl(att) {
   return { ok: true, url: res.value };
 }
 
+// Один файл может быть показан в нескольких местах (задание, тетрадь), а
+// хранится он один раз. Поэтому, прежде чем стереть его из хранилища,
+// приложение проверяет, не осталось ли на него других ссылок. Проверка —
+// чуть позже: место, откуда файл убрали, к этому времени уже сохранено.
+let inUse = () => false;
+export function setFileInUse(check) {
+  inUse = typeof check === "function" ? check : () => false;
+}
+const IN_USE_DELAY = 1500;
+
 export async function removeAttachment(att) {
+  if (!att) return;
+  await new Promise((r) => setTimeout(r, IN_USE_DELAY));
+  try {
+    if (inUse(att)) return;
+  } catch (e) {
+    // Не смогли проверить — лучше оставить лишний файл, чем стереть нужный.
+    return;
+  }
   if (att.path) {
     const uid = await cloudUserId();
     if (!uid) return;

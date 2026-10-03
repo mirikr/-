@@ -297,6 +297,61 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   await c.close();
 }
 
+// Сортировка предметов по расписанию и метки рядом с названием (1.7.0).
+{
+  const L = (id, day, start, name, priority, level) => ({ id, day, start, end: "23:59", subjectName: name, kind: "lesson", priority, level });
+  const sched = [
+    L("a", "mon", "08:30", "Право", 3, "prof"),
+    L("b", "tue", "08:30", "История", 1, "base"),
+    L("c", "wed", "08:30", "Экономика", 2, "olymp"),
+  ];
+  const c = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const p = await c.newPage();
+  p.setDefaultTimeout(5000);
+  const errs = [];
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.addInitScript((sch) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "notes");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify({ journal: [], lyceumSchedule: sch }), updatedAt: Date.now() - 1000 }));
+  }, sched);
+  await p.goto(URL0);
+  await p.waitForTimeout(2000);
+  const lyceumOrder = async () =>
+    (await p.locator(".ap-notes-subject").allInnerTexts()).map((t) => t.split("\n")[0].trim()).filter((n) => ["Право", "История", "Экономика"].includes(n)).join(",");
+  const row = (n) => p.locator(".ap-notes-subject", { hasText: n }).first();
+  want("метка уровня: проф у права", (await row("Право").locator("[data-level]").getAttribute("data-level")) === "prof");
+  want("метка уровня: спецкурс у олимпиадного трека", /спецкурс/.test(await row("Экономика").innerText()));
+  want("метка уровня: база у истории", /база/.test(await row("История").innerText()));
+  want("важность столбиками: у права — 3", (await row("Право").locator("[data-priority]").getAttribute("data-priority")) === "3");
+  const sel = p.getByRole("combobox", { name: "Порядок предметов" }).first();
+  await sel.selectOption("priority");
+  await p.waitForTimeout(300);
+  want("по важности: право, экономика, история", (await lyceumOrder()) === "Право,Экономика,История", await lyceumOrder());
+  await sel.selectOption("level");
+  await p.waitForTimeout(300);
+  want("по уровню: спецкурс, проф, база", (await lyceumOrder()) === "Экономика,Право,История", await lyceumOrder());
+  await sel.selectOption("name");
+  await p.waitForTimeout(300);
+  want("по алфавиту", (await lyceumOrder()) === "История,Право,Экономика", await lyceumOrder());
+  await p.waitForTimeout(1300);
+  await p.reload();
+  await p.waitForTimeout(1800);
+  want("выбор порядка сохраняется", (await p.getByRole("combobox", { name: "Порядок предметов" }).first().inputValue()) === "name" && (await lyceumOrder()) === "История,Право,Экономика");
+  if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + "/sort-desktop.png" });
+  // Телефон: метки и выбор порядка не раздвигают страницу вбок.
+  await p.setViewportSize({ width: 375, height: 760 });
+  await p.waitForTimeout(500);
+  const wideS = await p.evaluate(() => document.documentElement.scrollWidth);
+  want("телефон: метки и порядок помещаются", wideS <= 375, wideS + " px");
+  if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + "/sort-phone.png" });
+  want("сортировка: ошибок нет", errs.length === 0, errs[0] || "");
+  await c.close();
+}
+
 await browser.close();
 server.close();
 console.log(bad ? `\nпровалено: ${bad}` : "\nтетрадь не теряет правки, предметы расставляются");
