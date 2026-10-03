@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import { attachFile, attachmentUrl, removeAttachment, formatSize } from "./files.js";
+import { PickExistingButton } from "./file-picker.jsx";
 
 // Тетрадь предмета: блоки, которые вы называете сами, внутри — ветки (темы),
 // внутри ветки — конспект с форматированием и прикреплённые файлы.
@@ -242,7 +243,7 @@ export function withFileUndo(list, att, onChange, onUndo) {
   );
 }
 
-export function Attachments({ files, onChange, prefix, onUndo }) {
+export function Attachments({ files, onChange, prefix, onUndo, subject, where }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -292,6 +293,14 @@ export function Attachments({ files, onChange, prefix, onUndo }) {
         <button onClick={() => fileRef.current.click()} style={styles.fileBtn} disabled={busy}>
           {busy ? "Загружаю…" : "+ файл"}
         </button>
+        {/* Тот же файл, что уже лежит у задания или в другой ветке, — без новой загрузки. */}
+        <PickExistingButton
+          have={list}
+          subject={subject}
+          where={where}
+          style={styles.fileBtn}
+          onPick={(picked) => picked.length && onChange((cur) => [...(cur || []), ...picked])}
+        />
         {error && <span style={styles.error}>{error}</span>}
       </div>
     </>

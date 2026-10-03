@@ -1,6 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import MoreMenu from "./more-menu.jsx";
-import { buildDay, openingDay, spanLabel, timeOf, weekDates } from "./school-timeline.js";
+import {
+  buildDay,
+  dayCountLabel,
+  entriesLabel,
+  entriesOnDate,
+  examsAfter,
+  isoDate,
+  openingDay,
+  shiftWeek,
+  spanLabel,
+  timeOf,
+  weekDates,
+  weekOffsetOf,
+  weekTitle,
+} from "./school-timeline.js";
 
 // «Лицей КЭО», вариант A: день лентой по времени.
 //
@@ -194,7 +208,7 @@ function LessonCard({ unit, state, day, kit, colorOf, tasks, handlers }) {
             углу: на телефоне она иначе уезжала на отдельную строку. */}
         <div style={S.cardTitleWrap}>
           <span style={S.cardName}>{title}</span>
-          {unit.entries.length > 1 && <span style={S.chipQuiet}>{unit.entries.length + " " + lessonsWord(unit.entries.length)}</span>}
+          {entriesLabel(unit.entries) && <span style={S.chipQuiet}>{entriesLabel(unit.entries)}</span>}
           {isExam ? (
             <span style={{ ...S.chip, background: "var(--redBg)", color: "var(--red)" }}>{kit.examKindLabel(first.examKind)}</span>
           ) : (
@@ -351,11 +365,16 @@ function Blocks({ blocks, day, kit, colorOf, tasks, handlers }) {
   });
 }
 
+// Насколько далеко листаются недели: полгода назад и год вперёд.
+const MIN_WEEK = -26;
+const MAX_WEEK = 52;
+
 // Весь экран «Лицея».
 export default function SchoolDay({
   days,
   todayKey,
   entriesOf,
+  allEntriesOf,
   hasSchedule,
   kit,
   colorOf,
@@ -378,6 +397,9 @@ export default function SchoolDay({
   // вчерашний выбор дня, запомненный с прошлого раза, был бы ответом не на тот
   // вопрос. Экран пересобирается при каждом заходе, и выбор сбрасывается сам.
   const [day, setDay] = useState(() => openingDay(todayKey, days));
+  // Неделя стрелками: 0 — текущая (с неё экран и открывается), 1 — следующая,
+  // -1 — прошлая.
+  const [week, setWeek] = useState(0);
   const [addOpen, setAddOpen] = useState(null);
   const [formSeed, setFormSeed] = useState(null);
 
@@ -390,7 +412,10 @@ export default function SchoolDay({
   useEffect(() => {
     if (!focus || !String(focus.id).startsWith("lesson:")) return;
     const found = findEntry(String(focus.id).slice("lesson:".length));
-    if (found && days.includes(found.day)) setDay(found.day);
+    if (found && days.includes(found.day)) {
+      setDay(found.day);
+      setWeek(weekOf(found));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
 
@@ -399,7 +424,10 @@ export default function SchoolDay({
     const req = handlers.editRequest;
     if (!req || !req.id) return;
     const found = findEntry(req.id);
-    if (found && days.includes(found.day)) setDay(found.day);
+    if (found && days.includes(found.day)) {
+      setDay(found.day);
+      setWeek(0);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handlers.editRequest]);
 
@@ -407,6 +435,7 @@ export default function SchoolDay({
   useEffect(() => {
     if (!reopen) return;
     if (days.includes(reopen.day)) setDay(reopen.day);
+    setWeek(0);
     setFormSeed(reopen);
     setAddOpen("exam");
     if (onReopenDone) onReopenDone();
@@ -415,32 +444,86 @@ export default function SchoolDay({
 
   // Неделя, которую показывают вкладки. В воскресенье без уроков — следующая:
   // открыт понедельник, и дата под ним должна быть завтрашней, а не прошлой.
-  const dates = useMemo(() => {
+  const thisWeek = useMemo(() => {
     const base = new Date(now);
     if (todayKey === "sun" && !days.includes("sun")) base.setDate(base.getDate() + 1);
     return weekDates(base);
   }, [now.toDateString(), todayKey, days]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dates = useMemo(() => (week ? shiftWeek(thisWeek, week) : thisWeek), [thisWeek, week]);
+  const dateOf = (key) => isoDate(dates[key]);
 
-  const lessonsOf = (key) => entriesOf(key).filter((e) => e.kind !== "exam" || kit.examPlace(e) !== "far");
-  const summaries = useMemo(() => {
+  // Экзамен из поиска — в неделе своей даты, урок — в текущей.
+  function weekOf(entry) {
+    if (!entry || entry.kind !== "exam" || !entry.date) return 0;
+    return Math.max(MIN_WEEK, Math.min(MAX_WEEK, weekOffsetOf(thisWeek, entry.date)));
+  }
+
+  // Текущая неделя — как и раньше: ближние экзамены в дне, дальние внизу.
+  // Другая неделя — по датам: в дне только экзамены, стоящие на этот день.
+  const nowLessonsOf = (key) => entriesOf(key).filter((e) => e.kind !== "exam" || kit.examPlace(e) !== "far");
+  const lessonsOf = week ? (key) => entriesOnDate((allEntriesOf || entriesOf)(key), dateOf(key)) : nowLessonsOf;
+  const nowSummaries = useMemo(() => {
     const out = {};
     days.forEach((key) => {
-      out[key] = buildDay(lessonsOf(key), key === todayKey ? nowMin : null);
+      out[key] = buildDay(nowLessonsOf(key), key === todayKey ? nowMin : null);
     });
     return out;
   }, [days, entriesOf, todayKey, nowMin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const summaries = useMemo(() => {
+    if (!week) return nowSummaries;
+    const out = {};
+    days.forEach((key) => {
+      out[key] = buildDay(lessonsOf(key));
+    });
+    return out;
+  }, [week, nowSummaries, dates, days, allEntriesOf, entriesOf]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Задания под уроками другой недели — на её даты; новое задание из «⋯» тоже
+  // встаёт на дату показанного дня.
+  const shownTasks = useMemo(() => {
+    if (!week || !tasks) return tasks;
+    const iso = (key) => isoDate(dates[key]);
+    return {
+      ...tasks,
+      dueDate: (key) => iso(key),
+      forLesson: (lesson) => tasks.forLesson(lesson, lesson && lesson.day ? iso(lesson.day) : iso(day)),
+      add: (entry, text, minutes) => tasks.add(entry, text, minutes, iso(entry.day || day)),
+    };
+  }, [week, tasks, dates, day]);
 
   const current = summaries[day] || buildDay([]);
-  const far = entriesOf(day).filter((e) => e.kind === "exam" && kit.examPlace(e) === "far");
-  const isToday = day === todayKey;
+  const far = week
+    ? examsAfter((allEntriesOf || entriesOf)(day), dateOf(day))
+    : entriesOf(day).filter((e) => e.kind === "exam" && kit.examPlace(e) === "far");
+  const isToday = !week && day === todayKey;
+  const shownDate = dates[day];
 
   return (
     <div className="ap-sd">
-      <div className="ap-sd-days" role="tablist" aria-label="День недели" style={{ "--n": days.length }}>
+      {week !== 0 && (
+        <div className="ap-sd-weekbar" data-week={week}>
+          <span className="ap-sd-weekname">{weekTitle(week, dates, days)}</span>
+          <button type="button" className="ap-sd-weekback" onClick={() => setWeek(0)}>
+            К текущей неделе
+          </button>
+        </div>
+      )}
+      <div className="ap-sd-week">
+      <button
+        type="button"
+        className="ap-sd-wk"
+        onClick={() => setWeek((w) => Math.max(MIN_WEEK, w - 1))}
+        disabled={week <= MIN_WEEK}
+        aria-label="Предыдущая неделя"
+        title="Предыдущая неделя"
+      >
+        ‹
+      </button>
+      <div className={"ap-sd-days" + (week ? " is-other" : "")} role="tablist" aria-label="День недели" style={{ "--n": days.length }}>
         {days.map((key) => {
           const d = dates[key];
           const n = summaries[key] ? summaries[key].count : 0;
-          const today = key === todayKey;
+          const today = !week && key === todayKey;
           return (
             <button
               key={key}
@@ -449,21 +532,35 @@ export default function SchoolDay({
               aria-selected={key === day}
               onClick={() => setDay(key)}
               className={"ap-sd-dayb" + (today ? " is-today" : "")}
-              aria-label={DAY_NAME[key] + ", " + d.getDate() + " " + MONTH_SHORT[d.getMonth()] + (today ? ", сегодня" : "") + ", " + n + " " + lessonsWord(n)}
+              aria-label={DAY_NAME[key] + ", " + d.getDate() + " " + MONTH_SHORT[d.getMonth()] + (today ? ", сегодня" : "") + ", " + (n ? dayCountLabel(summaries[key]) : "нет уроков")}
             >
               <span className="d1">{DAY_SHORT[key]}</span>
               <span className="d2">
                 {d.getDate()}
                 <span className="mon"> {MONTH_SHORT[d.getMonth()]}</span>
               </span>
-              <span className="d3">{today ? (n ? n + " · сегодня" : "сегодня") : n ? n + " " + lessonsWord(n) : "нет уроков"}</span>
+              <span className="d3">{today ? (n ? dayCountLabel(summaries[key], true) + " · сегодня" : "сегодня") : n ? dayCountLabel(summaries[key], true) : "нет уроков"}</span>
             </button>
           );
         })}
       </div>
+      <button
+        type="button"
+        className="ap-sd-wk"
+        onClick={() => setWeek((w) => Math.min(MAX_WEEK, w + 1))}
+        disabled={week >= MAX_WEEK}
+        aria-label="Следующая неделя"
+        title="Следующая неделя"
+      >
+        ›
+      </button>
+      </div>
 
       <div className="ap-sd-grid">
-        <section className="ap-card ap-sd-line" aria-label={DAY_NAME[day] + (isToday ? ", сегодня" : "")}>
+        <section
+          className="ap-card ap-sd-line"
+          aria-label={DAY_NAME[day] + (isToday ? ", сегодня" : week ? ", " + shownDate.getDate() + " " + MONTH_SHORT[shownDate.getMonth()] : "")}
+        >
           {!hasSchedule ? (
             <div style={S.empty}>
               <div style={S.emptyTitle}>Расписание ещё не собрано</div>
@@ -478,7 +575,7 @@ export default function SchoolDay({
           ) : current.blocks.length === 0 ? (
             <div style={S.emptyDay}>{isToday ? "Сегодня уроков нет." : "В этот день уроков нет."}</div>
           ) : (
-            <Blocks blocks={current.blocks} day={day} kit={kit} colorOf={colorOf} tasks={tasks} handlers={handlers} />
+            <Blocks blocks={current.blocks} day={day} kit={kit} colorOf={colorOf} tasks={shownTasks} handlers={handlers} />
           )}
 
           {far.length > 0 && (
@@ -552,7 +649,7 @@ export default function SchoolDay({
               Все задания →
             </button>
           </section>
-          <NextDayCard days={days} todayKey={todayKey} summaries={summaries} entriesOf={lessonsOf} kit={kit} homeworkOn={homeworkOn} now={now} />
+          <NextDayCard days={days} todayKey={todayKey} summaries={nowSummaries} entriesOf={nowLessonsOf} kit={kit} homeworkOn={homeworkOn} now={now} />
           <section style={S.legend}>
             <div style={S.legendTitle}>Как читать</div>
             <div>
@@ -596,10 +693,14 @@ function NextDayCard({ days, todayKey, summaries, entriesOf, kit, homeworkOn, no
     <section className="ap-card" style={S.sideCard}>
       <h2 style={S.sideTitle}>{step === 1 ? "Завтра, " + DAY_NAME[key] : DAY_IN[key]}</h2>
       <div style={S.nextLine}>
-        {plan.count} {lessonsWord(plan.count)} · {timeOf(plan.from)}–{timeOf(plan.to)}
+        {dayCountLabel(plan)} · {timeOf(plan.from)}–{timeOf(plan.to)}
       </div>
       <div style={S.sideMuted}>
-        {firstUnit ? "Первый — " + firstUnit.subject + (firstUnit.entries[0].room ? ", " + firstUnit.entries[0].room : "") + ". " : ""}
+        {firstUnit
+          ? firstUnit.entries[0].kind === "exam"
+            ? "С утра — " + (firstUnit.entries[0].examKind === "olympiad" ? "олимпиада" : "экзамен") + " «" + firstUnit.subject + "». "
+            : "Первый — " + firstUnit.subject + (firstUnit.entries[0].room ? ", " + firstUnit.entries[0].room : "") + ". "
+          : ""}
         {evening.length ? "Вечером: " + [...new Set(evening)].join(", ") + "." : ""}
       </div>
       {due.length > 0 && (
@@ -653,7 +754,7 @@ export function CompactDay({ blocks, kit, colorOf, tasksFor, onOpen }) {
                 <span style={{ ...S.cStripe, background: u.kind === "exam" ? "var(--red)" : colorOf(u.subject) }} aria-hidden="true" />
                 <span style={S.cName}>
                   {u.subject}
-                  {u.entries.length > 1 && <span style={S.cPair}> · {u.entries.length} {lessonsWord(u.entries.length)}</span>}
+                  {entriesLabel(u.entries) && <span style={S.cPair}> · {entriesLabel(u.entries)}</span>}
                 </span>
                 <span style={S.cMeta}>{u.kind === "exam" ? kit.examKindLabel(first.examKind) : first.room}</span>
                 {u.kind !== "exam" && Number(first.priority) > 1 ? <Bars value={first.priority} info={info} /> : <span style={S.cBarsGap} />}
@@ -703,7 +804,22 @@ export function SchoolSheet({ title, onClose, children }) {
 
 export const SCHOOL_CSS = `
 .ap-sd { display: flex; flex-direction: column; gap: 16px; }
+.ap-sd-week { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
+.ap-sd-wk {
+  width: 34px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink2);
+  font-size: 22px; line-height: 1; padding: 0 0 3px; cursor: pointer; transition: border-color .16s ease, background .16s ease;
+}
+.ap-sd-wk:hover:not(:disabled) { border-color: var(--ink3); color: var(--ink); }
+.ap-sd-wk:disabled { opacity: .35; cursor: default; }
+.ap-sd-weekbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: -6px; }
+.ap-sd-weekname { font-family: var(--serif); font-size: 17px; }
+.ap-sd-weekback {
+  border: 1px solid var(--line); background: var(--panel2); color: var(--ink2); border-radius: 999px;
+  padding: 4px 12px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.ap-sd-weekback:hover { border-color: var(--ink3); color: var(--ink); }
 .ap-sd-days { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px; }
+.ap-sd-days.is-other .ap-sd-dayb:not([aria-selected="true"]) { border-style: dashed; }
 .ap-sd-dayb {
   display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0;
   padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel);
@@ -765,6 +881,10 @@ export const SCHOOL_CSS = `
 export const SCHOOL_MOBILE_CSS = `
 .ap-sd { gap: 12px; }
 .ap-sd-days { gap: 4px; }
+.ap-sd-week { gap: 4px; }
+.ap-sd-wk { width: 26px; border-radius: 10px; font-size: 19px; }
+.ap-sd-weekbar { margin-bottom: -4px; }
+.ap-sd-weekname { font-size: 15.5px; }
 .ap-sd-dayb { align-items: center; padding: 7px 2px 8px; border-radius: 12px; }
 .ap-sd-dayb .d1 { font-size: 11.5px; font-weight: 500; }
 .ap-sd-dayb .d2 { font-size: 18px; }

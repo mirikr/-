@@ -376,6 +376,8 @@ function Editor({ owner, block, branch, prefix, onUndo, onBack, onPatch, onRemov
           onChange={(next) => onPatch(typeof next === "function" ? (cur) => ({ files: next(cur.files || []) }) : { files: next })}
           prefix={prefix}
           onUndo={onUndo}
+          subject={owner ? owner.name : ""}
+          where={(owner ? owner.name + " › " : "") + block.title + " › " + branch.title}
         />
       </div>
     </div>

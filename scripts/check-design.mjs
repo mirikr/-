@@ -275,6 +275,34 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 3д. Ссылка у сегодняшнего события в «Сегодня» нажимается, как в «Событиях» (1.7.0).
+{
+  const d = new Date();
+  const today = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(6000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(([st]) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "today");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, [{ events: [{ id: "ev1", name: "Английский язык — высшая проба", date: today, priority: 3, start: "09:00", end: "13:00", place: "платформа ВШЭ", url: "https://olymp50.hse.ru/school.html#olympregisteredfirst", note: "Регламент: https://olymp.hse.ru/rules" }] }]);
+  await page.goto(URL0);
+  await page.waitForTimeout(2000);
+  const link = page.locator("a[data-today-link]").first();
+  want("«Сегодня»: ссылка события — настоящая ссылка", (await link.getAttribute("href")) === "https://olymp50.hse.ru/school.html#olympregisteredfirst" && (await link.getAttribute("target")) === "_blank");
+  want("«Сегодня»: подпись ссылки — сайт", /olymp50\.hse\.ru/.test(await link.innerText()));
+  want("«Сегодня»: ссылка в описании тоже нажимается", (await page.locator('a[href="https://olymp.hse.ru/rules"]').count()) === 1);
+  want("«Сегодня»: время и место на месте", /09:00–13:00/.test(await page.locator("body").innerText()) && /платформа ВШЭ/.test(await page.locator("body").innerText()));
+  want("«Сегодня»: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 4. Карточки уроков в «Лицее» (1.4.0): два урока одного предмета подряд —
 // одна карточка «2 урока»; всё редкое — в «⋯»; ничего не вылезает за край; а
 // важность — свойство предмета и меняется во всех его уроках, кроме экзаменов.
@@ -474,6 +502,105 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
     (await stored()).find((e) => e.id === "near1").date);
   want("и открывает правку этого экзамена", (await page.locator(`input[type="date"][value="${ymd(at(nearN))}"]`).count()) > 0);
   want("экзамены: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
+// 6б. Недели листаются стрелками (1.7.0): открывается текущая, в другой неделе
+// даты свои, «сегодня» не подсвечено, экзамен стоит в ленте дня только в неделе
+// своей даты, задания — на даты показанной недели. «К текущей неделе» — назад.
+{
+  const DOW = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const base = new Date(); base.setHours(0, 0, 0, 0);
+  if (base.getDay() === 0) base.setDate(base.getDate() + 1);
+  const mon = new Date(base); mon.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+  const plus = (n) => { const d = new Date(mon); d.setDate(mon.getDate() + n); return d; };
+  const lesson = (id, day) => ({ id, day, kind: "lesson", subjectName: "Алгебра", level: "base", priority: 2, start: "08:30", end: "09:10", room: "каб. 402", teacher: "", place: "", url: "", date: "" });
+  const state = {
+    lyceumSchedule: [
+      lesson("m1", "mon"),
+      lesson("w1", "wed"),
+      { id: "ol3", day: "wed", kind: "exam", examKind: "olympiad", subjectName: "Олимпиада по праву", level: "base", priority: 3, start: "10:00", end: "13:00", room: "", teacher: "", place: "", url: "", date: ymd(plus(23)) },
+    ],
+    homework: [
+      { id: "hw-n", date: ymd(plus(7)), subjectName: "Алгебра", text: "Номера на следующую неделю", minutes: 30, done: false, attachments: [], lessonId: "" },
+      { id: "hw-2", date: ymd(plus(14)), subjectName: "Алгебра", text: "Номера через две недели", minutes: 30, done: false, attachments: [], lessonId: "" },
+    ],
+  };
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(5000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript((st) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "school");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, state);
+  await page.goto(URL0);
+  await page.waitForTimeout(2000);
+  const tabDate = (day) => page.getByRole("tab", { name: new RegExp("^" + DAY_NAME[day] + ",") }).first().getAttribute("aria-label");
+  const line = page.locator(".ap-sd-line");
+  const next = page.getByRole("button", { name: "Следующая неделя" });
+  const prev = page.getByRole("button", { name: "Предыдущая неделя" });
+
+  want("стрелки недель по бокам дней", (await next.count()) === 1 && (await prev.count()) === 1);
+  want("открыта текущая неделя — без подписи другой недели", (await page.locator(".ap-sd-weekbar").count()) === 0);
+  want("в понедельнике — дата этой недели", (await tabDate("mon")).includes(", " + mon.getDate() + " "), await tabDate("mon"));
+
+  await next.click(); await page.waitForTimeout(300);
+  want("вперёд — «Следующая неделя»", (await page.locator(".ap-sd-weekname").innerText()) === "Следующая неделя");
+  want("даты сдвинулись на неделю", (await tabDate("mon")).includes(", " + plus(7).getDate() + " "), await tabDate("mon"));
+  want("«сегодня» в чужой неделе не подсвечено", (await page.locator(".ap-sd-dayb.is-today").count()) === 0);
+  await openDay(page, "mon");
+  const lineText = await line.innerText();
+  want("задание на дату этой недели — под уроком", lineText.includes("Номера на следующую неделю"));
+  want("задание на другую неделю здесь не показано", !lineText.includes("Номера через две недели"));
+  await openDay(page, "wed");
+  const lowered = (await line.innerText()).toLowerCase();
+  want("олимпиада через три недели — внизу, «позже в этот день»", lowered.includes("позже в этот день недели") && lowered.includes("олимпиада по праву"));
+
+  await next.click(); await next.click(); await page.waitForTimeout(300);
+  await openDay(page, "wed");
+  const olCard = page.locator(".ap-sd-card.is-exam", { hasText: "Олимпиада по праву" });
+  want("в неделе своей даты олимпиада — в ленте дня", (await olCard.count()) === 1);
+  want("и вкладка дня говорит «олимпиада»", /олимпиада/.test(await tabDate("wed")), await tabDate("wed"));
+
+  await next.click(); await page.waitForTimeout(300);
+  await openDay(page, "wed");
+  want("неделей позже олимпиады уже нет", !(await line.innerText()).toLowerCase().includes("олимпиада по праву"));
+
+  // Задание, добавленное из «⋯» в чужой неделе, встаёт на её дату.
+  await openDay(page, "mon");
+  await page.getByRole("button", { name: "Действия: Алгебра" }).first().click();
+  await page.getByRole("menuitem", { name: "+ Задание к уроку" }).click();
+  await page.getByPlaceholder("Что задали?").fill("Задание из чужой недели");
+  await page.getByPlaceholder("Что задали?").press("Enter");
+  await page.waitForTimeout(900);
+  const hw = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).homework);
+  const added = hw.find((h) => h.text === "Задание из чужой недели");
+  want("новое задание — на дату показанного дня", added && added.date === ymd(plus(28)), added ? added.date : "не добавлено");
+
+  await page.getByRole("button", { name: "К текущей неделе" }).click(); await page.waitForTimeout(300);
+  want("«К текущей неделе» возвращает", (await page.locator(".ap-sd-weekbar").count()) === 0 && (await tabDate("mon")).includes(", " + mon.getDate() + " "));
+  await prev.click(); await page.waitForTimeout(300);
+  want("назад — «Прошлая неделя»", (await page.locator(".ap-sd-weekname").innerText()) === "Прошлая неделя");
+  if (SHOT_DIR) await page.screenshot({ path: SHOT_DIR + "/weeks-desktop.png" });
+
+  // Телефон: стрелки помещаются, ничего не вылезает вбок.
+  await page.setViewportSize({ width: 375, height: 760 });
+  await page.waitForTimeout(400);
+  const fit = await page.evaluate(() => {
+    const row = document.querySelector(".ap-sd-week").getBoundingClientRect();
+    const arrows = [...document.querySelectorAll(".ap-sd-wk")].map((b) => b.getBoundingClientRect());
+    return { over: document.documentElement.scrollWidth - window.innerWidth, inside: arrows.every((r) => r.left >= row.left - 1 && r.right <= row.right + 1 && r.width >= 24) };
+  });
+  want("телефон: стрелки на месте, вбок не листается", fit.over <= 0 && fit.inside, JSON.stringify(fit));
+  if (SHOT_DIR) await page.screenshot({ path: SHOT_DIR + "/weeks-phone.png" });
+  want("недели: ошибок нет", errors.length === 0, errors[0] || "");
   await ctx.close();
 }
 

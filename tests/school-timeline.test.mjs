@@ -1,6 +1,21 @@
 // Лента дня в «Лицее»: пары, выбор между одновременными уроками, «сейчас».
 import assert from "node:assert";
-import { buildDay, dayStatus, mergePairs, openingDay, spanLabel, weekDates } from "../src/school-timeline.js";
+import {
+  buildDay,
+  dayCountLabel,
+  dayStatus,
+  entriesLabel,
+  entriesOnDate,
+  examsAfter,
+  isoDate,
+  mergePairs,
+  openingDay,
+  shiftWeek,
+  spanLabel,
+  weekDates,
+  weekOffsetOf,
+  weekTitle,
+} from "../src/school-timeline.js";
 import { buildSchedule } from "../src/lyceum-schedule-10.js";
 
 let passed = 0;
@@ -115,6 +130,59 @@ check("даты недели — с понедельника", () => {
   assert.equal(dates.mon.getDate(), 28);
   assert.equal(dates.sat.getDate(), 3);
   assert.equal(dates.sun.getDate(), 4);
+});
+
+check("день только с олимпиадами — не «уроки»", () => {
+  const ol = (id, start, end, name) => ({ id, day: "sun", kind: "exam", examKind: "olympiad", subjectName: name, start, end, date: "2026-10-04" });
+  const only = buildDay([ol("o1", "13:30", "15:00", "Финансовая грамотность"), ol("o2", "15:00", "16:30", "Экономика")]);
+  assert.equal(dayCountLabel(only), "2 олимпиады");
+  const one = buildDay([ol("o1", "13:30", "16:30", "Финансовая грамотность")]);
+  assert.equal(dayCountLabel(one), "олимпиада");
+  const exam = buildDay([{ ...ol("x1", "10:00", "12:00", "Английский"), examKind: "exam" }]);
+  assert.equal(dayCountLabel(exam), "экзамен");
+  const lesson = (id, start, end, name) => ({ id, day: "sun", kind: "lesson", subjectName: name, start, end, priority: 1 });
+  const mixed = buildDay([lesson("l1", "08:30", "09:10", "Право"), lesson("l2", "09:25", "10:05", "История"), ol("o3", "13:30", "16:30", "Финансовая грамотность")]);
+  assert.equal(dayCountLabel(mixed), "2 урока и олимпиада");
+  assert.equal(dayCountLabel(mixed, true), "2 урока +1");
+  assert.equal(dayCountLabel(buildDay([lesson("l1", "08:30", "09:10", "Право")])), "1 урок");
+  assert.equal(entriesLabel([{ kind: "exam" }, { kind: "exam" }]), "");
+  assert.equal(entriesLabel([{ kind: "lesson" }, { kind: "lesson" }]), "2 урока");
+});
+
+check("перелистывание недель: даты, сдвиг и экзамены по датам", () => {
+  const week = weekDates(new Date(2026, 9, 3)); // суббота, 3 октября
+  assert.equal(isoDate(week.mon), "2026-09-28");
+  const next = shiftWeek(week, 1);
+  assert.equal(isoDate(next.mon), "2026-10-05");
+  assert.equal(isoDate(next.sat), "2026-10-10");
+  assert.equal(isoDate(shiftWeek(week, -1).mon), "2026-09-21");
+  // Через переход на зимнее время и границу года — без сбоя на час.
+  assert.equal(isoDate(shiftWeek(week, 14).mon), "2027-01-04");
+  assert.equal(weekOffsetOf(week, "2026-10-01"), 0);
+  assert.equal(weekOffsetOf(week, "2026-10-04"), 0);
+  assert.equal(weekOffsetOf(week, "2026-10-05"), 1);
+  assert.equal(weekOffsetOf(week, "2026-11-12"), 6);
+  assert.equal(weekOffsetOf(week, "2026-09-27"), -1);
+  assert.equal(weekOffsetOf(week, ""), 0);
+  const days = ["mon", "tue", "wed", "thu", "fri", "sat"];
+  assert.equal(weekTitle(0, week, days), "Эта неделя");
+  assert.equal(weekTitle(1, next, days), "Следующая неделя");
+  assert.equal(weekTitle(-1, shiftWeek(week, -1), days), "Прошлая неделя");
+  assert.equal(weekTitle(2, shiftWeek(week, 2), days), "12–17 октября");
+  assert.equal(weekTitle(5, shiftWeek(week, 5), days), "2–7 ноября");
+  assert.equal(weekTitle(4, shiftWeek(week, 4), days), "26–31 октября");
+  assert.equal(weekTitle(9, shiftWeek(week, 9), days), "30 ноября – 5 декабря");
+  const entries = [
+    { id: "l", kind: "lesson", day: "thu" },
+    { id: "a", kind: "exam", day: "thu", date: "2026-10-08" },
+    { id: "b", kind: "exam", day: "thu", date: "2026-10-22" },
+    { id: "c", kind: "exam", day: "thu", date: "2026-10-15" },
+    { id: "n", kind: "exam", day: "thu" },
+  ];
+  assert.deepEqual(entriesOnDate(entries, "2026-10-08").map((e) => e.id), ["l", "a"]);
+  assert.deepEqual(entriesOnDate(entries, "2026-10-29").map((e) => e.id), ["l"]);
+  assert.deepEqual(examsAfter(entries, "2026-10-08").map((e) => e.id), ["c", "b"]);
+  assert.deepEqual(examsAfter(entries, "2026-10-22").map((e) => e.id), []);
 });
 
 console.log(`\n${passed} проверок пройдено`);
