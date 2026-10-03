@@ -10,7 +10,7 @@ import {
   periodLabel,
   WEEK,
 } from "./lyceum-now.js";
-import { buildDay, timeOf } from "./school-timeline.js";
+import { buildDay, dayCountLabel, timeOf } from "./school-timeline.js";
 import { CompactDay, useNowMinutes } from "./school-day.jsx";
 
 // Уроки на «Сегодня»: что идёт сейчас по звонкам и весь твой день лентой.
@@ -43,11 +43,18 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, kit
   const hasOwn = WEEK.some((key) => myStarts(key).length > 0);
   const myNextDay = hasOwn ? nextDayWith(dayKey, (key) => myStarts(key).length > 0) : null;
   const myEnds = (entriesFor(dayKey) || []).map((e) => e.end).filter(Boolean).sort();
+  // Что стоит первым: урок, олимпиада или экзамен — от этого зависят слова.
+  // День, где только олимпиада, — не «уроки».
+  const firstOf = (key) =>
+    (entriesFor(key) || []).filter((e) => e.start).sort((a, b) => String(a.start).localeCompare(String(b.start)))[0] || null;
+  const todayList = entriesFor(dayKey) || [];
   const me = {
     hasOwn,
     firstToday: mineToday[0] || null,
+    firstTodayWhat: whatOf(firstOf(dayKey)),
+    onlyExamsToday: todayList.length > 0 && todayList.every((e) => e.kind === "exam"),
     lastEndToday: myEnds[myEnds.length - 1] || null,
-    next: myNextDay ? { when: myNextDay.when, start: myStarts(myNextDay.day)[0] } : null,
+    next: myNextDay ? { when: myNextDay.when, start: myStarts(myNextDay.day)[0], what: whatOf(firstOf(myNextDay.day)) } : null,
   };
 
   // На перемене и до начала дня смотреть интересно уже на следующий урок:
@@ -102,7 +109,7 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, kit
       {later && (
         <div style={styles.nowLater}>
           <div style={styles.nowAllTitle}>
-            {later.step === 1 ? "Завтра" : DAY_IN[later.key]} · {later.plan.count} {lessonsWord(later.plan.count)} ·{" "}
+            {later.step === 1 ? "Завтра" : DAY_IN[later.key]} · {dayCountLabel(later.plan)} ·{" "}
             {timeOf(later.plan.from)}–{timeOf(later.plan.to)}
           </div>
           <CompactDay blocks={later.plan.blocks} kit={kit} colorOf={colorOf} tasksFor={tasksFor} onOpen={onOpen} />
@@ -187,7 +194,7 @@ function headline(state, dayKey, me, nowMin) {
   // Когда уроков нет или они кончились, полезно не «их нет», а когда следующие
   // — и именно твои. Общая сетка отвечает только тем, кто расписание не выбрал.
   const later = () => {
-    if (me.next) return `${me.next.when} твой первый в ${me.next.start}`;
+    if (me.next) return me.next.what === "урок" ? `${me.next.when} твой первый в ${me.next.start}` : `${me.next.when} ${me.next.what} в ${me.next.start}`;
     if (me.hasOwn) return "";
     const day = nextSchoolDay(dayKey);
     return day ? `${day.when} первый урок в параллели в ${day.first.start}` : "";
@@ -201,10 +208,18 @@ function headline(state, dayKey, me, nowMin) {
   if (me.hasOwn) {
     if (!me.firstToday) return { title: "Сегодня у тебя уроков нет", note: later() };
     if (me.lastEndToday && nowMin > minutesOfTime(me.lastEndToday)) {
-      return { title: "Твои уроки на сегодня закончились", note: later() };
+      return { title: me.onlyExamsToday ? "На сегодня у тебя всё" : "Твои уроки на сегодня закончились", note: later() };
     }
     if (nowMin < minutesOfTime(me.firstToday)) {
       const wait = minutesOfTime(me.firstToday) - nowMin;
+      if (me.firstTodayWhat !== "урок") {
+        const title = !me.onlyExamsToday
+          ? "День ещё не начался"
+          : me.firstTodayWhat === "олимпиада"
+            ? "Олимпиада ещё не началась"
+            : "Экзамен ещё не начался";
+        return { title, note: `${me.firstTodayWhat} в ${me.firstToday}, через ${left(wait)}` };
+      }
       return { title: "Уроки ещё не начались", note: `твой первый в ${me.firstToday}, через ${left(wait)}` };
     }
   }
@@ -233,14 +248,12 @@ function headline(state, dayKey, me, nowMin) {
 
 const pad = (n) => String(n).padStart(2, "0");
 
-function lessonsWord(n) {
-  const last = n % 10;
-  const two = n % 100;
-  if (two >= 11 && two <= 14) return "уроков";
-  if (last === 1) return "урок";
-  if (last >= 2 && last <= 4) return "урока";
-  return "уроков";
+// «урок», «олимпиада» или «экзамен» — как назвать запись в подписи.
+function whatOf(entry) {
+  if (!entry || entry.kind !== "exam") return "урок";
+  return entry.examKind === "olympiad" ? "олимпиада" : "экзамен";
 }
+
 
 function subjectsWord(n) {
   const last = n % 10;
