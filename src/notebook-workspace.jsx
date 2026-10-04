@@ -4,6 +4,7 @@ import MoreMenu from "./more-menu.jsx";
 import { Attachments } from "./notebook.jsx";
 import { removeAttachment } from "./files.js";
 import { dropFileTo, useFileDropTarget } from "./file-drag.js";
+import { moveBlockIn, moveBranchIn, useOutlineDrag } from "./outline-drag.js";
 
 // Тетрадь в две панели: слева оглавление (блоки и ветки), справа открытая
 // ветка на всю оставшуюся ширину. Раньше блоки и ветки раскрывались гармошкой
@@ -67,6 +68,14 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
   }, [sel, list]);
 
   const q = query.trim().toLowerCase();
+  // Блоки и ветки переставляются перетаскиванием (outline-drag.js). Пока ищут
+  // или что-то переименовывают — нет: в отфильтрованном списке места не те.
+  const od = useOutlineDrag({
+    enabled: !query.trim() && !renaming && adding === null,
+    onMoveBranch: (fromBlock, branchId, toBlock, index) => onChange((prev) => moveBranchIn(prev || [], fromBlock, branchId, toBlock, index)),
+    onMoveBlock: (blockId, index) => onChange((prev) => moveBlockIn(prev || [], blockId, index)),
+    onOpenBlock: (blockId) => setClosed((p) => ({ ...p, [blockId]: false })),
+  });
   const matches = (b, r) => !q || r.title.toLowerCase().includes(q) || plain(r.html).toLowerCase().includes(q) || b.title.toLowerCase().includes(q);
 
   function update(fn) {
@@ -229,17 +238,25 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
           </p>
         )}
 
-        <div style={S.blocks}>
+        <div ref={od.containerRef} style={S.blocks} data-outline-dragging={od.drag ? od.drag.kind : undefined}>
+          {od.drag && od.drag.line !== null && <div style={{ ...S.dropLine, top: od.drag.line }} aria-hidden="true" />}
           {list.map((block) => {
             const shown = (block.branches || []).filter((r) => matches(block, r));
             if (q && !shown.length) return null;
             const isOpen = q ? true : closed[block.id] !== true;
             return (
-              <div key={block.id} data-focus-id={"block:" + block.id} style={S.block}>
+              <div
+                key={block.id}
+                data-focus-id={"block:" + block.id}
+                data-ol-block={block.id}
+                data-ol-closed={isOpen ? undefined : "true"}
+                data-ol-lifted={od.blockProps(block.id)["data-ol-lifted"]}
+                style={{ ...S.block, ...od.blockProps(block.id).style }}
+              >
                 <DropZone
                   onSpring={dragKey ? () => setClosed((p) => ({ ...p, [block.id]: false })) : null}
                   render={(dp) => (
-                <div {...dp} style={S.blockHead}>
+                <div {...dp} data-ol-head={block.id} onPointerDown={od.headProps(block.id).onPointerDown} style={S.blockHead} title="Блок можно перетащить, чтобы поменять порядок">
                   <button
                     type="button"
                     onClick={() => setClosed((p) => ({ ...p, [block.id]: isOpen }))}
@@ -295,6 +312,9 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
                         <button
                           {...dp}
                           type="button"
+                          data-ol-branch={r.id}
+                          data-ol-lifted={od.branchProps(block.id, r.id)["data-ol-lifted"]}
+                          onPointerDown={od.branchProps(block.id, r.id).onPointerDown}
                           data-focus-id={"branch:" + r.id}
                           onClick={() => {
                             setSel({ blockId: block.id, branchId: r.id });
@@ -302,7 +322,7 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
                           }}
                           aria-current={on ? "true" : undefined}
                           className="ap-nbw-branch"
-                          style={{ ...S.branch, ...(on ? S.branchOn : null) }}
+                          style={{ ...S.branch, ...(on ? S.branchOn : null), ...od.branchProps(block.id, r.id).liftStyle }}
                         >
                           <span style={S.branchText}>
                             <span style={S.branchTitle}>{r.title || "Без названия"}</span>
@@ -465,9 +485,11 @@ const S = {
   },
   searchInput: { flex: 1, minWidth: 0, border: "none", background: "transparent", outline: "none", fontSize: 13.5, minHeight: 0, padding: 0, boxShadow: "none" },
   muted: { fontSize: 13.5, color: "var(--ink3)", lineHeight: 1.55, margin: 0 },
-  blocks: { display: "flex", flexDirection: "column", gap: 8 },
+  blocks: { display: "flex", flexDirection: "column", gap: 8, position: "relative" },
+  // Куда встанет перетаскиваемая ветка или блок.
+  dropLine: { position: "absolute", left: 4, right: 4, height: 3, marginTop: -1.5, borderRadius: 2, background: "var(--accent)", zIndex: 6, pointerEvents: "none" },
   block: { display: "flex", flexDirection: "column", gap: 2 },
-  blockHead: { display: "flex", alignItems: "center", gap: 4 },
+  blockHead: { display: "flex", alignItems: "center", gap: 4, WebkitTouchCallout: "none" },
   blockToggle: {
     flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, minHeight: 38, padding: "0 6px",
     border: "none", borderRadius: 9, background: "none", color: "var(--ink)", textAlign: "left", cursor: "pointer",
@@ -477,6 +499,7 @@ const S = {
   count: { fontSize: 12, color: "var(--mute)", flexShrink: 0 },
   branches: { display: "flex", flexDirection: "column", gap: 2, paddingLeft: 20 },
   branch: {
+    WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none",
     display: "flex", alignItems: "center", gap: 8, width: "100%", minHeight: 38, padding: "6px 10px",
     border: "none", borderRadius: 9, background: "transparent", color: "var(--ink)", textAlign: "left", cursor: "pointer",
   },

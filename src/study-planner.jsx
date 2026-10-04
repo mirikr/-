@@ -5,6 +5,7 @@ import Notebook, { Attachments, FileGrid, sameFile } from "./notebook.jsx";
 import NotebookSubjects, { Badges as SubjectBadges } from "./notebook-subjects.jsx";
 import { orderOwners, togglePin, moveOwner, ownerMeta, setSort } from "./notebook-order.js";
 import SortableList from "./sortable-list.jsx";
+import { moveTopicOrder, orderedTopics } from "./topic-order.js";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
@@ -774,10 +775,7 @@ export default function StudyPlanner() {
         id: s.id,
         name: s.name,
         color: s.color,
-        topics: [
-          ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
-          ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
-        ],
+        topics: orderedTopics(subjectData(data, s.id)),
       })),
     [ALL_SUBJECTS, data]
   );
@@ -1227,6 +1225,15 @@ export default function StudyPlanner() {
   function setTopicUrl(subjectId, topicId, custom, url) {
     const trimmed = (url || "").trim();
     updateTopic(subjectId, topicId, custom, (t) => ({ ...t, url: trimmed || null }));
+  }
+
+  // Урок перетащили на место другого: порядок — в data[предмет].order.
+  function moveTopic(subjectId, movedId, targetId) {
+    setData((prev) => {
+      const subject = prev[subjectId];
+      if (!subject) return prev;
+      return { ...prev, [subjectId]: { ...subject, order: moveTopicOrder(subject, movedId, targetId) } };
+    });
   }
 
   function addCustomTopic(subjectId, name, url) {
@@ -3841,10 +3848,8 @@ export default function StudyPlanner() {
             {ALL_SUBJECTS.length > 0 && (() => {
               const s = ALL_SUBJECTS.find((x) => x.id === openSubject) || orderedStudy[0] || ALL_SUBJECTS[0];
               const st = stats.perSubject[s.id] || { done: 0, total: 0, pct: 0 };
-              const allTopics = [
-                ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
-                ...subjectData(data, s.id).custom.map((t) => ({ ...t, custom: true })),
-              ];
+              // В том порядке, в каком их расставили (topic-order.js).
+              const allTopics = orderedTopics(subjectData(data, s.id));
               const tab = subjectTab[s.id] || "lessons";
               const next = allTopics.find((t) => !t.done);
               const nextIndex = next ? allTopics.indexOf(next) : -1;
@@ -4086,9 +4091,15 @@ export default function StudyPlanner() {
                         )}
                         <div style={styles.lessonList}>
                           {allTopics.length === 0 && <div style={styles.muted}>Уроков пока нет — добавьте первый ниже.</div>}
-                          {shownTopics.map((t) => (
+                          <SortableList
+                            items={shownTopics}
+                            keyOf={(t) => t.id}
+                            labelOf={(t) => shortName(t.name)}
+                            gap={0}
+                            onMove={(from, to) => moveTopic(s.id, shownTopics[from].id, shownTopics[to].id)}
+                            renderItem={(t, { handleProps }) => (
                             <TopicItem
-                              key={t.id}
+                              handleProps={handleProps}
                               subjectId={s.id}
                               topic={t}
                               index={allTopics.indexOf(t) + 1}
@@ -4107,7 +4118,8 @@ export default function StudyPlanner() {
                               onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
                               onUndo={showUndo}
                             />
-                          ))}
+                            )}
+                          />
                           {hideDone && st.done > 0 && (
                             <button type="button" onClick={() => setHideDone(false)} style={styles.showDone}>
                               Показать пройденные · {st.done}
@@ -5251,6 +5263,7 @@ function TopicItem({
   onRemoveNote,
   onRemoveTopic,
   onUndo,
+  handleProps,
 }) {
   const [noteText, setNoteText] = useState("");
   const [noteMins, setNoteMins] = useState("15");
@@ -5270,7 +5283,15 @@ function TopicItem({
           aria-label={(topic.done ? "Пройден: " : "Отметить пройденным: ") + name}
           style={styles.topicCheck}
         />
-        <span style={styles.topicNum}>{index}</span>
+        {/* Номер — он же ручка: за него урок перетаскивают пальцем (мышью можно
+            и за всю строку). */}
+        {handleProps ? (
+          <span {...handleProps} title="Перетащить, чтобы поменять порядок" style={{ ...styles.topicNum, ...styles.topicNumHandle }}>
+            {index}
+          </span>
+        ) : (
+          <span style={styles.topicNum}>{index}</span>
+        )}
         {topic.url ? (
           <a
             className="lesson-link"
@@ -6398,6 +6419,7 @@ const styles = {
   topicRowNext: { background: "var(--warmBg)", margin: "0 -12px", padding: "4px 12px", borderRadius: 10 },
   topicCheck: { width: 19, height: 19, margin: 0, flexShrink: 0 },
   topicNum: { width: 22, flexShrink: 0, fontSize: 13, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
+  topicNumHandle: { cursor: "grab", touchAction: "none", borderRadius: 6, userSelect: "none" },
   topicName: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 1.4, overflowWrap: "anywhere" },
   noteBadge: { flexShrink: 0, minHeight: 26, padding: "0 10px", border: "none", borderRadius: 13, background: "var(--neutralBg)", color: "var(--ink2)", fontSize: 12, cursor: "pointer" },
   topicMins: { flexShrink: 0, width: 58, textAlign: "right", fontSize: 13, color: "var(--ink3)" },
