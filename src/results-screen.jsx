@@ -164,7 +164,10 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
     <div style={S.wrap} className="ap-results">
       {sandbox && (
         <div style={S.demoBar} role="group" aria-label="Роль в предпросмотре">
-          <span style={S.demoLabel}>Предпросмотр — смотреть как:</span>
+          {/* Переключатель — только для демонстрации: в приложении роль
+              определяется аккаунтом (учитель — по почте из списка учителей). */}
+          <span style={S.demoBadge} data-demo-badge>ДЕМО</span>
+          <span style={S.demoLabel}>Только для демонстрации — смотреть как:</span>
           {[
             ["student", "Ученик"],
             ["teacher", "Учитель"],
@@ -175,6 +178,7 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
             </button>
           ))}
           <span style={S.demoNote}>
+            В настоящем приложении этого переключателя нет: учителем вы будете, если ваша почта в списке учителей, иначе — учеником.{" "}
             {role === "teacher"
               ? "Выложенное на почту " + DEMO_EMAIL + " увидит «ученик» — переключитесь обратно."
               : role === "outsider"
@@ -1184,6 +1188,7 @@ const S = {
     border: "1px dashed var(--warmLine, var(--line))", background: "var(--warmBg, var(--panel2))",
   },
   demoLabel: { fontSize: 13, fontWeight: 600, color: "var(--ink2)" },
+  demoBadge: { fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 6, background: "var(--accent)", color: "var(--btnInk)" },
   demoNote: { fontSize: 12.5, color: "var(--ink3)", flexBasis: "100%" },
   toolbar: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   chips: { display: "flex", gap: 6, flexWrap: "wrap", flex: "1 1 320px" },
