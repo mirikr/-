@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   DAY_KEYS,
   DAY_SHORT,
@@ -18,8 +18,12 @@ import {
   studentName,
   pendingChanges,
   isAbsent,
+  cleanMark,
+  markIssue,
+  markIssues,
   withStudents,
 } from "./gradebook.js";
+import { percentOfGrade, scoreTone } from "./results-model.js";
 import { CLASSES, allStudents } from "./school-roster.js";
 import { publishItems } from "./results-inbox.js";
 
@@ -37,9 +41,23 @@ const todayIso = () => {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 };
 const VIEW_KEY = "planner-gradebook-view";
+const WIDE = "(min-width: 1100px)";
+
+function useWide() {
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(WIDE).matches);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(WIDE);
+    const on = () => setWide(mq.matches);
+    mq.addEventListener ? mq.addEventListener("change", on) : mq.addListener(on);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", on) : mq.removeListener(on));
+  }, []);
+  return wide;
+}
 
 export default function GradebookPanel({ gradebooks, setGradebooks, schedule, subjects, authorName, onPublished, demoEmail, classes = CLASSES, authorField = null }) {
   const list = gradebooks || [];
+  const wide = useWide();
   const hasLegacy = list.some((g) => !g.classId);
   const [classId, setClassId] = useState(() => (list[0] ? list[0].classId || "" : classes[0] ? classes[0].id : ""));
   const inClass = list.filter((g) => (g.classId || "") === classId);
@@ -142,21 +160,60 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     patch((g) => ({ ...g, marks: { ...g.marks, [studentId]: { ...((g.marks || {})[studentId] || {}), [date]: value } } }));
   }
 
-  // Enter и стрелки ходят по клеткам, как в таблице.
-  function onCellKey(e, row, col) {
-    const go = (r, c) => {
+  // Клетки — лёгкие кнопки, полем ввода становится только та, которую правят:
+  // две тысячи полей разом (четыре месяца на класс) заметно тормозили прокрутку.
+  // Enter и стрелки ходят по клеткам, как в таблице; начать печатать можно
+  // сразу — клетка откроется сама.
+  const [editing, setEditing] = useState(null); // { row, col, initial }
+  const focusCell = (r, c) =>
+    requestAnimationFrame(() => {
       const el = tableRef.current && tableRef.current.querySelector(`[data-cell="${r}:${c}"]`);
-      if (el) {
-        e.preventDefault();
-        el.focus();
-        el.select && el.select();
-      }
-    };
-    if (e.key === "Enter" || e.key === "ArrowDown") go(row + 1, col);
-    else if (e.key === "ArrowUp") go(row - 1, col);
-    else if (e.key === "ArrowRight" && e.currentTarget.selectionStart === e.currentTarget.value.length) go(row, col + 1);
-    else if (e.key === "ArrowLeft" && e.currentTarget.selectionStart === 0) go(row, col - 1);
-  }
+      if (el) el.focus();
+    });
+  const live = useRef(null);
+  live.current = {
+    commit(row, col, value) {
+      const st = gb && gb.students[row];
+      const d = dates[col];
+      if (!st || !d) return;
+      const next = cleanMark(value);
+      const prev = ((gb.marks || {})[st.id] || {})[d] ?? "";
+      if (next !== String(prev)) setMark(st.id, d, next);
+    },
+    has(row, col) {
+      return !!(gb && gb.students[row] && dates[col]);
+    },
+  };
+  const api = useMemo(
+    () => ({
+      start: (row, col, initial) => setEditing({ row, col, initial }),
+      // Закончить правку: сохранить и (по желанию) перейти к соседней клетке.
+      finish: (row, col, value, move) => {
+        live.current.commit(row, col, value);
+        if (move && live.current.has(row + move[0], col + move[1])) {
+          const r = row + move[0];
+          const c = col + move[1];
+          if (move[2]) setEditing({ row: r, col: c, initial: null });
+          else {
+            setEditing(null);
+            focusCell(r, c);
+          }
+        } else {
+          setEditing((e) => (e && e.row === row && e.col === col ? null : e));
+          if (move) focusCell(row, col);
+        }
+      },
+      cancel: (row, col) => {
+        setEditing(null);
+        focusCell(row, col);
+      },
+      clear: (row, col) => live.current.commit(row, col, ""),
+      go: (row, col) => {
+        if (live.current.has(row, col)) focusCell(row, col);
+      },
+    }),
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   async function publishAll() {
     if (!gb || !changes.length) return;
@@ -190,6 +247,71 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
       })()
     : "";
 
+  function pickClass(id) {
+    setClassId(id);
+    const first = list.find((g) => (g.classId || "") === id);
+    setOpenId(first ? first.id : "");
+    setMsg("");
+    setSettingsOpen(false);
+  }
+  const wordN = (n, one, few, many) => (n % 100 >= 11 && n % 100 <= 14 ? many : n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many);
+  const summaryBtn = raw && (
+    <button type="button" onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} aria-label="Настройки журнала" title="Настройки журнала: период, дни уроков, шкала" style={S.summaryBtn} data-settings-summary>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+      {settingsSummary}
+    </button>
+  );
+
+  // На широком экране классы — списком слева, у выбранного класса под ним его
+  // журналы (предметы). На узком — чипами в строку, как раньше.
+  const journalButtons = (
+    <div style={S.sideJournals} role="group" aria-label="Журналы класса">
+      {inClass.map((g) => {
+        const on = raw && g.id === raw.id;
+        return (
+          <button key={g.id} type="button" aria-pressed={on} onClick={() => { setOpenId(g.id); setMsg(""); }} style={{ ...S.sideJournal, ...(on ? S.sideJournalOn : null) }} data-journal={g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}>
+            {g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}
+          </button>
+        );
+      })}
+      <button type="button" onClick={create} style={{ ...S.sideJournal, ...S.sideJournalAdd }}>
+        {classId ? "+ Предмет" : "+ Журнал"}
+      </button>
+    </div>
+  );
+  const sideNav = (
+    <nav aria-label="Классы и журналы" className="ap-card" style={S.side} data-class-list>
+      <div style={S.sideLabel}>Классы</div>
+      <div role="group" aria-label="Класс" style={S.sideList}>
+        {classes.map((c) => {
+          const on = classId === c.id;
+          const n = (c.students || []).length;
+          const js = list.filter((g) => g.classId === c.id).length;
+          return (
+            <div key={c.id} style={S.sideBlock}>
+              <button type="button" aria-pressed={on} onClick={() => pickClass(c.id)} style={{ ...S.sideItem, ...(on ? S.sideOn : null) }} data-class={c.name}>
+                <span style={S.sideName}>{c.name}</span>
+                <span style={S.sideMeta}>
+                  {n} {wordN(n, "ученик", "ученика", "учеников")} · {js ? js + " " + wordN(js, "журнал", "журнала", "журналов") : "журналов нет"}
+                </span>
+              </button>
+              {on && journalButtons}
+            </div>
+          );
+        })}
+        {(hasLegacy || !classes.length) && (
+          <div style={S.sideBlock}>
+            <button type="button" aria-pressed={classId === ""} onClick={() => pickClass("")} style={{ ...S.sideItem, ...(classId === "" ? S.sideOn : null) }} data-class="Свой список">
+              <span style={S.sideName}>Свой список</span>
+              <span style={S.sideMeta}>ученики вписаны вручную</span>
+            </button>
+            {classId === "" && journalButtons}
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+
   // Класс и предмет — чипами в одну строку, справа — сводка настроек.
   const topRow = (
     <div style={S.topRow}>
@@ -201,14 +323,9 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
               key={c.id}
               type="button"
               aria-pressed={classId === c.id}
-              onClick={() => {
-                setClassId(c.id);
-                const first = list.find((g) => g.classId === c.id);
-                setOpenId(first ? first.id : "");
-                setMsg("");
-                setSettingsOpen(false);
-              }}
+              onClick={() => pickClass(c.id)}
               style={{ ...S.chip, ...(classId === c.id ? S.chipOn : null) }}
+              data-class={c.name}
             >
               {c.name}
             </button>
@@ -244,19 +361,30 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
         </div>
       )}
       {raw && <span style={{ flex: 1 }} />}
-      {raw && (
-        <button type="button" onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} aria-label="Настройки журнала" title="Настройки журнала: период, дни уроков, шкала" style={S.summaryBtn} data-settings-summary>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
-          {settingsSummary}
-        </button>
-      )}
+      {summaryBtn}
     </div>
   );
 
-  if (!gb) {
-    return (
-      <div style={S.outer}>
+  // Обёртка: список классов сбоку (широкий экран) или чипы сверху.
+  const shell = (body, attrs) =>
+    wide ? (
+      <div style={S.split} {...attrs}>
+        {sideNav}
+        <div style={S.outer}>
+          {raw && <div style={S.summaryRow}>{summaryBtn}</div>}
+          {body}
+        </div>
+      </div>
+    ) : (
+      <div style={S.outer} {...attrs}>
         {topRow}
+        {body}
+      </div>
+    );
+
+  if (!gb) {
+    return shell(
+      <>
         {classes.length === 0 && <p style={S.text}>Списки классов добавляет разработчик. Пока их нет — журнал можно вести своим списком учеников.</p>}
         <section className="ap-card" style={S.card}>
           <div style={S.title}>Журнал</div>
@@ -269,11 +397,12 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             {currentClass ? "+ Журнал " + currentClass.name : "+ Новый журнал"}
           </button>
         </section>
-      </div>
+      </>
     );
   }
 
   const changedKeys = new Set(changes.map((c) => c.key));
+  const issues = markIssues(gb, dates);
   const inJournal = new Set(gb.students.map((st) => st.id));
   const q = query.trim().toLowerCase().replace(/ё/g, "е");
   const candidates = allStudents(classes)
@@ -284,17 +413,12 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   const noEmailNames = gb.students.filter((s) => !String(s.email || "").trim()).map(studentName);
   const word = (n, one, few, many) => (n % 100 >= 11 && n % 100 <= 14 ? many : n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many);
 
-  // Цвет клетки по оценке; «н» — серым; пустая — пунктиром.
-  const toneOf = (rawValue) => {
-    if (String(rawValue ?? "").trim() === "") return S.cellEmpty;
-    if (isAbsent(rawValue)) return S.cellAbsent;
-    const g = markGrade(gb, markValue(rawValue, gb.scale));
-    return g ? CELL_TONE[g] : null;
-  };
+  // Цвет клетки — пропорционально баллу (в 5-балльном — по оценке); «н» —
+  // серым; пустая — пунктиром.
+  const toneOf = (rawValue) => toneOfMark(rawValue, gb.scale);
 
-  return (
-    <div style={S.outer} data-gradebook={gb.name}>
-      {topRow}
+  return shell(
+      <>
 
       {settingsOpen && (
         <div style={S.settings} data-settings>
@@ -411,7 +535,9 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
         </div>
       )}
 
-      <section className="ap-card" style={S.card}>
+      {/* Без стекла: размытие фона под большой таблицей пересчитывалось на
+          каждом шаге прокрутки. */}
+      <section className="ap-card" style={{ ...S.card, ...S.cardSolid }}>
         <div style={S.cardHead}>
           <h3 style={S.cardTitle}>
             {gb.name}{" "}
@@ -523,6 +649,34 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
           </div>
         )}
 
+        {issues.length > 0 && (
+          <div style={S.issues} data-mark-issues role="alert">
+            <div>
+              <b>
+                Похоже на опечатку: {issues.length} {word(issues.length, "отметка", "отметки", "отметок")}
+              </b>{" "}
+              — такие не уходят ученикам, пока их не исправить. Уже выложенная отметка у ученика остаётся прежней.
+            </div>
+            {issues.slice(0, 8).map((it) => (
+              <div key={it.student.id + it.date} style={S.issueRow} data-issue={studentName(it.student) + " · " + ddmm(it.date)}>
+                <button type="button" onClick={() => api.go(it.row, it.col)} style={S.issueWhere} title="Перейти к клетке">
+                  {studentName(it.student)} · {ddmm(it.date)}
+                </button>
+                <span style={S.issueText}>{it.text}</span>
+                {it.fix !== null && (
+                  <button type="button" onClick={() => setMark(it.student.id, it.date, it.fix)} style={S.issueFix} aria-label={`Исправить на ${it.fix}: ${studentName(it.student)}, ${ddmm(it.date)}`}>
+                    Исправить на {it.fix}
+                  </button>
+                )}
+                <button type="button" onClick={() => setMark(it.student.id, it.date, "")} style={S.link} aria-label={`Стереть: ${studentName(it.student)}, ${ddmm(it.date)}`}>
+                  Стереть
+                </button>
+              </div>
+            ))}
+            {issues.length > 8 && <div style={S.label}>…и ещё {issues.length - 8}</div>}
+          </div>
+        )}
+
         {gb.students.length === 0 ? (
           <p style={S.text}>Добавьте учеников — появится таблица.</p>
         ) : dates.length === 0 ? (
@@ -578,7 +732,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                           <div style={S.rosterName}>
                             <div style={S.rosterText}>
                               <div style={S.nameRow}>
-                                <input value={st.last ?? ""} placeholder="Фамилия" onChange={(e) => editStudent(st.id, { last: e.target.value })} aria-label={"Фамилия: " + studentName(st)} style={{ ...S.nameInput, flex: "0 1 auto", fieldSizing: "content", minWidth: 48 }} />
+                                <input value={st.last ?? ""} placeholder="Фамилия" onChange={(e) => editStudent(st.id, { last: e.target.value })} aria-label={"Фамилия: " + studentName(st)} style={{ ...S.nameInput, width: "auto", flex: "0 1 auto", fieldSizing: "content", minWidth: 48, maxWidth: "70%" }} />
                                 <input value={st.first ?? ""} placeholder="Имя" onChange={(e) => editStudent(st.id, { first: e.target.value })} aria-label={"Имя: " + studentName(st)} style={{ ...S.nameInput, fontWeight: 500 }} />
                               </div>
                               <input
@@ -598,7 +752,6 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                       {dates.map((d, col) => {
                         const cellRaw = ((gb.marks || {})[st.id] || {})[d] ?? "";
                         const absent = isAbsent(cellRaw);
-                        const bad = String(cellRaw).trim() !== "" && !absent && markValue(cellRaw, gb.scale) === null;
                         const changed = changedKeys.has(st.id + "|" + d);
                         const todayStyle = d === today ? S.todayCol : null;
                         if (asGrades && gb.scale === 100) {
@@ -613,21 +766,20 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                             </td>
                           );
                         }
+                        const ed = editing && editing.row === row && editing.col === col ? editing : null;
                         return (
-                          <td key={d} style={{ ...S.td, ...todayStyle }}>
-                            <input
-                              data-cell={row + ":" + col}
-                              value={cellRaw}
-                              placeholder="·"
-                              inputMode="text"
-                              aria-label={`${studentName(st)}, ${ddmm(d)}`}
-                              onChange={(e) => setMark(st.id, d, e.target.value)}
-                              onKeyDown={(e) => onCellKey(e, row, col)}
-                              onFocus={(e) => e.target.select()}
-                              style={{ ...S.cell, ...toneOf(cellRaw), ...(changed ? S.cellChanged : null), ...(bad ? S.cellBad : null) }}
-                              title={bad ? (gb.scale === 5 ? "Отметка от 1 до 5 или «н»" : "Отметка от 0 до 100 или «н»") : changed ? "Ещё не выложена" : absent ? "Не был" : ""}
-                            />
-                          </td>
+                          <MarkCell
+                            key={d}
+                            row={row}
+                            col={col}
+                            value={String(cellRaw)}
+                            scale={gb.scale}
+                            changed={changed}
+                            today={d === today}
+                            editing={ed}
+                            label={`${studentName(st)}, ${ddmm(d)}`}
+                            api={api}
+                          />
                         );
                       })}
                       <td style={{ ...S.td, ...S.avgCell }}>
@@ -723,6 +875,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             ) : (
               "Всё выложено — ученики видят отметки в своих «Результатах»"
             )}
+            {issues.length > 0 && ` · С опечаткой: ${issues.length} — не уйдут, пока не исправить`}
             {noEmailNames.length > 0 &&
               ` · Без почты: ${noEmailNames.length} (${noEmailNames.slice(0, 2).join(", ")}${noEmailNames.length > 2 ? "…" : ""}) — им отметки не уйдут`}
           </span>
@@ -734,9 +887,11 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
       <p style={S.hint}>
         Отметка — цифра в клетке{gb.scale === 100 ? " (0–100)" : " (1–5)"}, «н» — не был, пусто — без отметки. Enter и стрелки ходят по клеткам. Жёлтая рамка — ещё
         не выложено. Отметки видны ученику в его «Результатах» как официальные.
-        {gb.scale === 100 ? " Оценки — по шкале уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5." : ""}
+        {gb.scale === 100 ? " Оценки — по шкале уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5." : ""} Цвет клетки — по баллу: чем выше, тем зеленее.
+        Буква или лишняя цифра подсветятся красным — такая отметка не уйдёт, пока её не исправить.
       </p>
-    </div>
+      </>,
+    { "data-gradebook": gb.name }
   );
 }
 
@@ -756,8 +911,131 @@ const GRADE_TONE = {
   2: { borderColor: "color-mix(in srgb, var(--red) 60%, transparent)", color: "var(--red)" },
 };
 
+function toneOfMark(rawValue, scale) {
+  if (String(rawValue ?? "").trim() === "") return S.cellEmpty;
+  if (isAbsent(rawValue)) return S.cellAbsent;
+  if (markIssue(rawValue, scale)) return S.cellBad;
+  const v = markValue(rawValue, scale);
+  if (v === null) return null;
+  const t = scoreTone(scale === 5 ? percentOfGrade(v) : v);
+  return t ? { ...t, borderStyle: "solid" } : null;
+}
+
+// Клетка журнала. Пока не правят — кнопка (дёшево и для прокрутки, и для
+// перерисовки: React.memo пропускает клетки, где ничего не поменялось).
+const MarkCell = memo(function MarkCell({ row, col, value, scale, changed, today, editing, label, api }) {
+  const done = useRef(false);
+  const inputRef = useRef(null);
+  useEffect(() => {
+    if (!editing || !inputRef.current) return;
+    done.current = false;
+    const el = inputRef.current;
+    el.focus();
+    if (editing.initial === null || editing.initial === undefined) el.select();
+    else el.setSelectionRange(el.value.length, el.value.length);
+  }, [editing]);
+  const issue = markIssue(value, scale);
+  const absent = isAbsent(value);
+  const style = { ...S.cell, ...toneOfMark(value, scale), ...(changed ? S.cellChanged : null), ...(issue ? S.cellBad : null) };
+  const title = issue ? issue.text + (issue.fix !== null ? ` — может, ${issue.fix}?` : "") : changed ? "Ещё не выложена" : absent ? "Не был" : "";
+  const finish = (e, move) => {
+    if (done.current) return;
+    done.current = true;
+    api.finish(row, col, e.currentTarget.value, move);
+  };
+  return (
+    <td style={{ ...S.td, ...(today ? S.todayCol : null) }}>
+      {editing ? (
+        <input
+          ref={inputRef}
+          data-cell={row + ":" + col}
+          defaultValue={editing.initial ?? value}
+          inputMode="text"
+          autoComplete="off"
+          aria-label={label}
+          aria-invalid={issue ? "true" : undefined}
+          onBlur={(e) => finish(e, null)}
+          onKeyDown={(e) => {
+            const el = e.currentTarget;
+            if (e.key === "Enter" || e.key === "ArrowDown") {
+              e.preventDefault();
+              finish(e, [1, 0, true]);
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              finish(e, [-1, 0, true]);
+            } else if (e.key === "ArrowRight" && el.selectionStart === el.value.length && el.selectionEnd === el.value.length) {
+              e.preventDefault();
+              finish(e, [0, 1, true]);
+            } else if (e.key === "ArrowLeft" && el.selectionStart === 0 && el.selectionEnd === 0) {
+              e.preventDefault();
+              finish(e, [0, -1, true]);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              done.current = true;
+              api.cancel(row, col);
+            }
+          }}
+          style={{ ...style, ...S.cellEditing }}
+          title={title}
+        />
+      ) : (
+        <button
+          type="button"
+          data-cell={row + ":" + col}
+          aria-label={label + (value ? ": " + value : ": пусто")}
+          aria-invalid={issue ? "true" : undefined}
+          onClick={() => api.start(row, col, null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === "F2") {
+              e.preventDefault();
+              api.start(row, col, null);
+            } else if (e.key === "Delete" || e.key === "Backspace") {
+              e.preventDefault();
+              api.clear(row, col);
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              api.go(row + 1, col);
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              api.go(row - 1, col);
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault();
+              api.go(row, col + 1);
+            } else if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              api.go(row, col - 1);
+            } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              // Начали печатать — клетка открывается с этой буквой.
+              e.preventDefault();
+              api.start(row, col, e.key);
+            }
+          }}
+          style={style}
+          title={title}
+        >
+          {value || "·"}
+        </button>
+      )}
+    </td>
+  );
+});
+
 const S = {
   outer: { display: "flex", flexDirection: "column", gap: 12, minWidth: 0 },
+  split: { display: "grid", gridTemplateColumns: "220px minmax(0, 1fr)", gap: 16, alignItems: "start" },
+  side: { position: "sticky", top: 16, display: "flex", flexDirection: "column", gap: 4, padding: "10px 8px", borderRadius: 16, border: "1px solid var(--line)", background: "var(--panel)" },
+  sideLabel: { padding: "2px 10px 4px", fontSize: 11.5, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
+  sideList: { display: "flex", flexDirection: "column", gap: 2 },
+  sideBlock: { display: "flex", flexDirection: "column", gap: 2 },
+  sideItem: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, width: "100%", padding: "9px 10px", border: "none", borderRadius: 10, background: "transparent", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" },
+  sideOn: { background: "color-mix(in srgb, var(--ink) 9%, transparent)" },
+  sideName: { fontSize: 15, fontWeight: 700 },
+  sideMeta: { fontSize: 12, color: "var(--ink3)" },
+  sideJournals: { display: "flex", flexDirection: "column", gap: 2, margin: "2px 0 6px 12px", paddingLeft: 8, borderLeft: "2px solid var(--line)" },
+  sideJournal: { width: "100%", padding: "7px 10px", border: "none", borderRadius: 9, background: "transparent", color: "var(--ink2)", font: "inherit", fontSize: 13.5, textAlign: "left", cursor: "pointer" },
+  sideJournalOn: { background: "var(--btnBg)", color: "var(--btnInk)", fontWeight: 600 },
+  sideJournalAdd: { color: "var(--ink3)", border: "1px dashed var(--line)", marginTop: 2 },
+  summaryRow: { display: "flex", justifyContent: "flex-end" },
   topRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   chipGroup: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
   chip: { height: 34, padding: "0 13px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13.5, cursor: "pointer" },
@@ -836,10 +1114,17 @@ const S = {
   dateTop: { fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   dateDay: { display: "flex", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 11, fontWeight: 400, color: "var(--mute)" },
   hideBtn: { border: "none", background: "none", color: "var(--mute)", fontSize: 13, lineHeight: 1, padding: "0 2px", cursor: "pointer" },
-  cell: { width: 40, height: 36, boxSizing: "border-box", textAlign: "center", border: "1px solid var(--line)", borderRadius: 8, background: "var(--panel2)", color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 18, fontVariantNumeric: "tabular-nums", padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" },
+  cell: { width: 40, height: 36, boxSizing: "border-box", textAlign: "center", border: "1px solid var(--line)", borderRadius: 8, background: "var(--panel2)", color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 18, fontVariantNumeric: "tabular-nums", padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
   // Ещё не выложено — жёлтое кольцо поверх цвета оценки.
   cellChanged: { boxShadow: "inset 0 0 0 2px var(--warmLine)", borderColor: "var(--warmLine)", borderStyle: "solid" },
-  cellBad: { borderColor: "var(--red)", color: "var(--red)" },
+  cellBad: { borderColor: "var(--red)", borderStyle: "solid", color: "var(--red)", background: "var(--redBg)" },
+  cardSolid: { backdropFilter: "none", WebkitBackdropFilter: "none", background: "var(--menuBg)" },
+  cellEditing: { outline: "2px solid var(--accent)", outlineOffset: 1, cursor: "text" },
+  issues: { display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 12, border: "1px solid color-mix(in srgb, var(--red) 40%, transparent)", background: "var(--redBg)", fontSize: 13, color: "var(--ink)" },
+  issueRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  issueWhere: { border: "none", background: "none", padding: 0, font: "inherit", fontWeight: 700, color: "var(--ink)", textDecoration: "underline", textDecorationStyle: "dotted", cursor: "pointer" },
+  issueText: { color: "var(--red)" },
+  issueFix: { minHeight: 30, padding: "0 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   avgCell: { fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 60 },
   footLabel: { textAlign: "left", fontSize: 12, color: "var(--mute)" },
   footCell: { fontSize: 12, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },

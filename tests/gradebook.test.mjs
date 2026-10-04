@@ -1,6 +1,6 @@
 // Журнал учителя: даты из расписания, отметки, что выложить ученикам.
 import assert from "node:assert";
-import { classStats, isAbsent, markGrade, sortStudents, studentName, studentStats, dateAverage, daysFromSchedule, lessonDates, markPublished, markValue, newGradebook, parseStudents, payloadFor, pendingChanges, studentAverage } from "../src/gradebook.js";
+import { classStats, cleanMark, markIssue, markIssues, isAbsent, markGrade, sortStudents, studentName, studentStats, dateAverage, daysFromSchedule, lessonDates, markPublished, markValue, newGradebook, parseStudents, payloadFor, pendingChanges, studentAverage } from "../src/gradebook.js";
 
 let passed = 0;
 function check(name, fn) {
@@ -137,6 +137,30 @@ check("«н» — не был: уходит ученику, в средние н
   assert.equal(payloadFor(g, "2026-10-05", "н").scale, "absent");
   const done = markPublished(g, ch);
   assert.equal(pendingChanges(done).length, 0);
+});
+
+check("опечатки: буквы и лишний ноль — подсказка, у ученика ничего не стирается", () => {
+  assert.equal(cleanMark(" 9о "), "90");
+  assert.equal(cleanMark("y"), "н");
+  assert.equal(cleanMark("Н/Б"), "н");
+  assert.equal(cleanMark("8,5"), "8.5");
+  assert.equal(markIssue("90", 100), null);
+  assert.equal(markIssue("н", 100), null);
+  assert.equal(markIssue("", 100), null);
+  assert.equal(markIssue("900", 100).fix, "90");
+  assert.equal(markIssue("1000", 100).fix, "100");
+  assert.equal(markIssue("9б", 100).fix, "9");
+  assert.equal(markIssue("55", 5).fix, "5");
+  assert.equal(markIssue("0", 5).fix, null);
+  assert.equal(markIssue("-5", 100).fix, "5");
+  const g = { ...gb, marks: { s1: { "2026-10-05": "90" }, s2: {}, s3: {} } };
+  const pub = markPublished(g, pendingChanges(g));
+  const typo = { ...pub, marks: { ...pub.marks, s1: { "2026-10-05": "900" } } };
+  assert.deepEqual(pendingChanges(typo), []);
+  assert.equal(markIssues(typo).length, 1);
+  assert.equal(markIssues(typo)[0].student.id, "s1");
+  const erased = { ...pub, marks: { ...pub.marks, s1: { "2026-10-05": "" } } };
+  assert.deepEqual(pendingChanges(erased).map((c) => c.action), ["del"]);
 });
 
 console.log(`\n${passed} проверок пройдено`);

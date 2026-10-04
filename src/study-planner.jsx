@@ -241,6 +241,8 @@ const SANDBOX = import.meta.env.VITE_SANDBOX === "1";
 const RESULTS_ON = SANDBOX || import.meta.env.VITE_RESULTS === "1";
 // На сайте, пока раздел выключен, его код в сборку не попадает.
 const ResultsScreen = RESULTS_ON ? lazy(() => import("./results-screen.jsx")) : null;
+// Данные результатов для дневника и расписания — тоже только там, где раздел есть.
+const loadResultsData = RESULTS_ON ? () => import("./results-data.js") : null;
 const TASK_FOLDS_KEY = "planner-task-folds";
 function readTaskFolds() {
   try {
@@ -753,6 +755,36 @@ export default function StudyPlanner() {
   // его содержимое: чужому человеку он достался бы как чей-то чужой конспект.
   // Поэтому встроенные предметы видит только владелец, остальные заводят свои.
   const builtinsVisible = !cloudConfigured || !accountReady || isOwnerEmail(accountEmail);
+
+  // «Результаты»: пока раздел в разработке — только у владельца (и в предпросмотре).
+  // Выложенное ученику грузится здесь, а не в самом разделе: дневнику нужны те же
+  // данные, чтобы отметить дни с результатами.
+  const resultsAllowed = RESULTS_ON && (SANDBOX || isOwnerEmail(accountEmail));
+  const [resultsLib, setResultsLib] = useState(null);
+  const [resultsPub, setResultsPub] = useState({ code: "", items: [] });
+  const [resultsTick, setResultsTick] = useState(0);
+  const [resultsHidden, setResultsHidden] = useState([]);
+  const [resultsFocus, setResultsFocus] = useState(null);
+  useEffect(() => {
+    if (!resultsAllowed || !loadResultsData) return undefined;
+    let alive = true;
+    loadResultsData()
+      .then(async (lib) => {
+        const pub = await lib.loadPublished({ sandbox: SANDBOX, accountId, accountEmail });
+        if (!alive) return;
+        setResultsLib(lib);
+        setResultsPub(pub);
+        setResultsHidden(lib.readHidden());
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [resultsAllowed, accountId, accountEmail, resultsTick]);
+  const resultDays = useMemo(
+    () => (resultsLib ? resultsLib.dayMarks(results, resultsPub.items, resultsHidden) : null),
+    [resultsLib, results, resultsPub, resultsHidden]
+  );
 
   // Готовое расписание лицея — для тех, кто вошёл: оно привязано к человеку, а
   // не к устройству, и без входа сотрётся вместе с памятью браузера. В сборке
@@ -2536,6 +2568,16 @@ export default function StudyPlanner() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // «Результаты» сразу на странице предмета — из расписания и из дневника.
+  function resultsColorOf(name) {
+    const own = ALL_SUBJECTS.find((x) => x.name === name);
+    return own ? own.color : lyceumColorOf(name);
+  }
+  function openResults(subject) {
+    setResultsFocus({ subject, n: Date.now() });
+    goScreen("results");
+  }
+
   // Тетрадь предмета лицея открывается в «Тетрадях»: раньше она раскрывалась
   // прямо над расписанием и отодвигала уроки вниз.
   function openLyceumNotebook(name) {
@@ -4200,18 +4242,19 @@ export default function StudyPlanner() {
               setResults={setResults}
               subjects={Array.from(new Set([...ALL_SUBJECTS.map((x) => x.name), ...lyceumSubjectNames]))}
               accountId={accountId}
-              accountEmail={accountEmail}
+              published={resultsPub.items}
+              code={resultsPub.code}
+              onReload={() => setResultsTick((n) => n + 1)}
+              onHiddenChange={setResultsHidden}
+              focus={resultsFocus}
               sandbox={SANDBOX}
               onUndo={showUndo}
               // Пока раздел в разработке — полностью только у владельца.
-              allowed={SANDBOX || isOwnerEmail(accountEmail)}
+              allowed={resultsAllowed}
               gradebooks={gradebooks}
               setGradebooks={setGradebooks}
               schedule={lyceumSchedule}
-              colorOf={(name) => {
-                const own = ALL_SUBJECTS.find((x) => x.name === name);
-                return own ? own.color : lyceumColorOf(name);
-              }}
+              colorOf={resultsColorOf}
             />
           </Suspense>
         )}
@@ -4255,6 +4298,7 @@ export default function StudyPlanner() {
               editRequest: examEdit,
               onEditDone: () => setExamEdit(null),
               onNotebook: openLyceumNotebook,
+              onResults: resultsAllowed ? openResults : undefined,
             }}
             soon={upcomingHomework.filter((h) => !h.done).slice(0, 4)}
             onToggleTask={(id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done })}
@@ -4279,7 +4323,8 @@ export default function StudyPlanner() {
                 "Записи с уроками и заметками к ним добавляются сюда автоматически — можно также добавить запись " +
                 "вручную. Высота заливки дня — доля дневной цели, а цель на каждый день недели задаётся " +
                 "в «Распределении». Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. " +
-                "Красная рамка — день экзамена или олимпиады."
+                "Красная рамка — день экзамена или олимпиады." +
+                (resultDays ? " Цифра в углу — результат за этот день: оценка или балл, цвет — по баллу (чем выше, тем зеленее)." : "")
               }
             />
 
@@ -4320,11 +4365,16 @@ export default function StudyPlanner() {
                   const hasHw = hwDates.has(key);
                   const hasExam = examDates.has(key);
                   const lessonDots = lessonDotsByDate[key] || [];
+                  const dayRes = resultDays && resultDays[key];
+                  const resMark = dayRes ? resultsLib.daySummary(dayRes) : null;
                   return (
                     <button
                       key={key}
                       onClick={() => setSelectedDate(key)}
-                      title={`${Math.round(hours * 10) / 10} ч из ${Math.round(goal * 10) / 10} ч цели`}
+                      title={
+                        `${Math.round(hours * 10) / 10} ч из ${Math.round(goal * 10) / 10} ч цели` +
+                        (dayRes ? "\nРезультаты: " + dayRes.map((m) => (m.subject ? m.subject + " — " : "") + m.label).join(", ") : "")
+                      }
                       className="ap-day"
                       style={{
                         ...styles.calCell,
@@ -4348,6 +4398,15 @@ export default function StudyPlanner() {
                       )}
                       <span style={styles.calDayNum}>{cellDate.getDate()}</span>
                       {hasHw && <span style={styles.hwDot} />}
+                      {resMark && (
+                        <span
+                          style={{ ...styles.calResult, ...(resMark.percent !== null ? resultsLib.scoreTone(resMark.percent) : styles.calResultAbsent) }}
+                          data-day-result={key}
+                        >
+                          {resMark.label}
+                          {resMark.more > 0 && <sup style={styles.calResultMore}>+{resMark.more}</sup>}
+                        </span>
+                      )}
                       {/* Рамка выбранного дня — отдельным слоем поверх заливки: и тень,
                           и обводка рисуются под детьми элемента, поэтому заливка их
                           перекрывала и выступала из-под рамки полоской. Обводка
@@ -4404,6 +4463,25 @@ export default function StudyPlanner() {
                 );
               })}
 
+              {resultDays && (resultDays[selectedDate] || []).length > 0 && (
+                <div style={styles.homeworkBlock} data-day-results>
+                  <div style={styles.homeworkTitle}>Результаты</div>
+                  {resultDays[selectedDate].map((m) => (
+                    <button key={m.id} type="button" onClick={() => openResults(m.subject)} style={styles.dayResultRow} title="Открыть в «Результатах»">
+                      <span style={{ ...styles.dot, background: m.subject ? resultsColorOf(m.subject) : "var(--ink3)" }} />
+                      <span style={styles.dayResultName}>
+                        <b>{m.subject || "Без предмета"}</b> · {m.title}
+                        <span style={styles.dayResultKind}>
+                          {m.title.toLowerCase() === m.kindName.toLowerCase() ? "" : " · " + m.kindName.toLowerCase()}
+                          {m.official ? " · 🔒" : ""}
+                        </span>
+                      </span>
+                      <span style={{ ...styles.dayResultScore, ...(m.percent !== null ? resultsLib.scoreTone(m.percent) : styles.calResultAbsent) }}>{m.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div style={styles.homeworkBlock}>
                 <div style={styles.homeworkTitle}>Домашнее задание и дела</div>
                 {selectedDaySubjects.length === 0 ? (
@@ -4416,6 +4494,14 @@ export default function StudyPlanner() {
                       <div key={name} style={styles.homeworkSubjectBlock}>
                         <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
                           {name}
+                          {resultDays &&
+                            (resultDays[selectedDate] || [])
+                              .filter((m) => m.subject === name)
+                              .map((m) => (
+                                <span key={m.id} style={{ ...styles.subjectResult, ...(m.percent !== null ? resultsLib.scoreTone(m.percent) : styles.calResultAbsent) }} title={m.title} data-subject-result={name}>
+                                  {m.label}
+                                </span>
+                              ))}
                           {dayInfo && (
                             <>
                               <span style={styles.dayPriority}>
@@ -7474,6 +7560,31 @@ const styles = {
     pointerEvents: "none",
   },
   calDayNum: { position: "relative", zIndex: 1 },
+  // Результат за день — меткой в правом нижнем углу клетки, цвет — по баллу.
+  calResult: {
+    position: "absolute",
+    right: 3,
+    bottom: 3,
+    zIndex: 2,
+    minWidth: 15,
+    height: 15,
+    padding: "0 3px",
+    boxSizing: "border-box",
+    borderRadius: 6,
+    border: "1px solid",
+    fontSize: 10,
+    lineHeight: "13px",
+    fontWeight: 800,
+    textAlign: "center",
+    fontVariantNumeric: "tabular-nums",
+  },
+  calResultAbsent: { background: "var(--neutralBg)", color: "var(--ink3)", borderColor: "var(--line)" },
+  calResultMore: { fontSize: 7.5, marginLeft: 1, verticalAlign: "top", lineHeight: 1 },
+  dayResultRow: { display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 0", border: "none", borderBottom: "1px solid var(--line2, var(--line))", background: "none", color: "var(--ink)", font: "inherit", fontSize: 13, textAlign: "left", cursor: "pointer" },
+  dayResultName: { flex: 1, minWidth: 0, overflowWrap: "anywhere" },
+  dayResultKind: { color: "var(--ink3)" },
+  dayResultScore: { minWidth: 26, padding: "2px 7px", boxSizing: "border-box", borderRadius: 8, border: "1px solid", fontWeight: 800, textAlign: "center", fontVariantNumeric: "tabular-nums" },
+  subjectResult: { display: "inline-block", marginLeft: 6, minWidth: 18, padding: "0 5px", borderRadius: 6, border: "1px solid", fontSize: 11, lineHeight: "16px", fontWeight: 800, textAlign: "center", verticalAlign: "1px" },
   calLegend: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12, color: "var(--ink3)", margin: "12px 0 8px" },
   calLegendItem: { display: "flex", alignItems: "center", gap: 5 },
   calLegendBox: { width: 12, height: 12, borderRadius: 3 },

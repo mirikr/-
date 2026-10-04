@@ -60,6 +60,32 @@ export function gradeFromPercent(p) {
 // обратно она переводилась в ту же оценку: 5 → 95, 4 → 80, 3 → 60, 2 → 25.
 export const GRADE_TO_100 = { 2: 25, 3: 60, 4: 80, 5: 95 };
 
+// Цвет балла — пропорционально значению: от красного (0) через охру (60) к
+// зелёному (100). Смешиваются цвета темы, поэтому в тёмной теме цвета светлее
+// сами. percent — 0–100 или null (тогда приглушённый).
+export function scoreColor(percent) {
+  if (percent === null || percent === undefined || !Number.isFinite(Number(percent))) return "var(--ink3)";
+  const v = Math.max(0, Math.min(100, Number(percent)));
+  if (v <= 60) return `color-mix(in oklab, var(--warmInk) ${Math.round((v / 60) * 100)}%, var(--red))`;
+  return `color-mix(in oklab, var(--green) ${Math.round(((v - 60) / 40) * 100)}%, var(--warmInk))`;
+}
+
+// Фон и рамка того же цвета — для клеток и меток.
+export function scoreTone(percent) {
+  if (percent === null || percent === undefined) return null;
+  const c = scoreColor(percent);
+  return { background: `color-mix(in srgb, ${c} 15%, transparent)`, borderColor: `color-mix(in srgb, ${c} 45%, transparent)`, color: c };
+}
+
+// Оценка 2–5 → место на той же шкале (плавно между серединами диапазонов).
+export function percentOfGrade(g) {
+  if (g === null || g === undefined || !Number.isFinite(Number(g))) return null;
+  const v = Math.max(2, Math.min(5, Number(g)));
+  const lo = Math.floor(v);
+  const hi = Math.min(5, lo + 1);
+  return GRADE_TO_100[lo] + (GRADE_TO_100[hi] - GRADE_TO_100[lo]) * (v - lo);
+}
+
 const num = (v) => {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(String(v).replace(",", "."));

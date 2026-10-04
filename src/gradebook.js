@@ -106,6 +106,59 @@ export function markValue(raw, scale) {
   return n;
 }
 
+// Частые опечатки в клетке: «о» вместо нуля, «н» в английской раскладке (y),
+// «нб» и «н/б», запятая вместо точки, пробелы. Остальное не трогаем — его
+// покажет markIssue.
+export function cleanMark(raw) {
+  let s = String(raw === undefined || raw === null ? "" : raw).replace(/\s+/g, "");
+  if (!s) return "";
+  if (/^(н|нб|н\/б|y|yb|n|h)$/i.test(s)) return "н";
+  if (/^[0-9оОoO.,]+$/.test(s)) s = s.replace(/[оОoO]/g, "0");
+  return s.replace(",", ".");
+}
+
+// Что не так с отметкой и как, скорее всего, хотели: null — всё в порядке
+// (или пусто, или «н»). fix — предложение, а не автозамена: «900» могло быть и
+// 90, и 100 — решает учитель.
+export function markIssue(raw, scale) {
+  const s = cleanMark(raw);
+  if (!s || isAbsent(s)) return null;
+  const max = scale === 5 ? 5 : 100;
+  const min = scale === 5 ? 1 : 0;
+  const range = scale === 5 ? "от 1 до 5" : "от 0 до 100";
+  const n = Number(s);
+  if (!/^-?\d+(\.\d+)?$/.test(s) || !Number.isFinite(n)) {
+    const digits = s.replace(/[^0-9.]/g, "").replace(/^\.+|\.+$/g, "");
+    const d = Number(digits);
+    const fix = digits && Number.isFinite(d) && d >= min && d <= max ? String(d) : null;
+    return { text: `«${String(raw).trim()}» — не отметка: нужно число ${range} или «н»`, fix };
+  }
+  if (n < 0) return { text: "Отметка не бывает меньше нуля", fix: -n >= min && -n <= max ? String(-n) : null };
+  if (n > max) {
+    // Лишняя цифра: 900 → 90, 1000 → 100, 55 → 5.
+    let t = String(Math.trunc(n));
+    while (t.length > 1 && Number(t) > max) t = t.slice(0, -1);
+    const fix = Number(t) >= min && Number(t) <= max ? t : null;
+    return { text: `${s} — больше ${max}`, fix };
+  }
+  if (n < min) return { text: `Оценка ${range}`, fix: null };
+  return null;
+}
+
+// Все клетки журнала с ошибками — в порядке таблицы.
+export function markIssues(gb, dates) {
+  const out = [];
+  const list = dates || lessonDates(gb);
+  (gb.students || []).forEach((st, row) => {
+    const marks = (gb.marks || {})[st.id] || {};
+    list.forEach((date, col) => {
+      const issue = markIssue(marks[date], gb.scale);
+      if (issue) out.push({ ...issue, student: st, date, row, col, raw: marks[date] });
+    });
+  });
+  return out;
+}
+
 // Средний балл ученика по журналу — среднее арифметическое отметок.
 export function studentAverage(gb, studentId, dates) {
   const row = (gb.marks || {})[studentId] || {};
@@ -136,6 +189,9 @@ export function pendingChanges(gb) {
       const v = isAbsent(row[date]) ? "н" : markValue(row[date], gb.scale);
       const key = st.id + "|" + date;
       seen.add(key);
+      // Опечатка в клетке («900», «9б») — не повод стирать у ученика уже
+      // выложенную отметку: ждём, пока учитель исправит.
+      if (v === null && dates.has(date) && String(row[date] ?? "").trim() !== "") return;
       if (v === null || !dates.has(date)) {
         if (published[key] !== undefined) out.push({ action: "del", student: st, email, date, key });
         return;

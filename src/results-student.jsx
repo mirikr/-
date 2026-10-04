@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import MoreMenu from "./more-menu.jsx";
-import { KINDS, expandResults, gradeOf, kindName, olympiadStages, stageSummary, statusName, summarize } from "./results-model.js";
+import { KINDS, expandResults, gradeOf, kindName, olympiadStages, percentOfGrade, scoreColor, stageSummary, statusName, summarize } from "./results-model.js";
 
 // Экран ученика в «Результатах» — вариант B из макетов: слева предметы со
 // средним баллом и отдельной группой олимпиады, справа страница выбранного —
@@ -78,15 +78,20 @@ function pageStats(list, mode) {
   return { rows, avg: mean(rows.map((x) => x.v)), best, last, trend: last && prev ? last.v - prev.v : null, avgGrade: mean(grades), avgPoints: mean(points) };
 }
 
+// Цвет числа по его величине: в баллах — сам балл, в оценках — место оценки
+// на той же шкале.
+const tint = (v, mode) => scoreColor(mode === "grades" ? percentOfGrade(v) : v);
+
 // Что показать крупно у записи и подписью под этим.
 function scoreOf(r, mode) {
-  if (r.scale === "absent") return { big: "н", sub: "не был" };
+  if (r.scale === "absent") return { big: "н", sub: "не был", pct: null };
   const s = summarize(r);
-  if (r.kind === "olympiad") return { big: s.percent === null ? "—" : f1(Number(String(s.main).split(" ")[0].replace(",", "."))), sub: s.main.includes(" из ") ? "из " + s.main.split(" из ")[1] : "баллов" };
+  const pct = s.percent;
+  if (r.kind === "olympiad") return { pct, big: s.percent === null ? "—" : f1(Number(String(s.main).split(" ")[0].replace(",", "."))), sub: s.main.includes(" из ") ? "из " + s.main.split(" из ")[1] : "баллов" };
   const g = gradeOf(r);
-  if (mode === "grades") return { big: g === null ? "—" : String(g), sub: s.percent === null ? "оценка" : f1(s.percent) + " из 100" };
-  if (s.percent === null) return { big: r.scale === "pass" ? (r.passed ? "зачёт" : r.passed === false ? "незачёт" : "—") : "—", sub: "" };
-  return { big: f1(s.percent), sub: g === null ? "из 100" : "оценка " + g };
+  if (mode === "grades") return { pct: g === null ? null : percentOfGrade(g), big: g === null ? "—" : String(g), sub: s.percent === null ? "оценка" : f1(s.percent) + " из 100" };
+  if (s.percent === null) return { pct, big: r.scale === "pass" ? (r.passed ? "зачёт" : r.passed === false ? "незачёт" : "—") : "—", sub: "" };
+  return { pct, big: f1(s.percent), sub: g === null ? "из 100" : "оценка " + g };
 }
 
 // Подробность под названием: кто выложил или «моя запись» и исходные баллы.
@@ -122,9 +127,18 @@ function olympiadState(r) {
   return { badge, line: [where, then].filter(Boolean).join(" · ") };
 }
 
-export default function StudentView({ items, hiddenIds, showHidden, setShowHidden, onHide, onEdit, onRemove, onAdd, mode, setMode, colorOf, onCode }) {
+// focus — открыть сразу предмет (из расписания): { subject, n }; n меняется
+// при каждом переходе, чтобы повторный переход сработал.
+export default function StudentView({ items, hiddenIds, showHidden, setShowHidden, onHide, onEdit, onRemove, onAdd, mode, setMode, colorOf, onCode, focus }) {
   const narrow = useNarrow();
-  const [sel, setSel] = useState({ type: "all" });
+  const [sel, setSel] = useState(() => (focus && focus.subject ? { type: "subject", name: focus.subject } : { type: "all" }));
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    if (focus && focus.subject) {
+      setSel({ type: "subject", name: focus.subject });
+      setQuery("");
+    }
+  }, [focus]);
   const [kind, setKind] = useState("all");
   const hidden = new Set(hiddenIds || []);
   const visible = items.filter((r) => r.source === "self" || showHidden || !hidden.has(r.id));
@@ -143,13 +157,18 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
       .sort((a, b) => b.list.length - a.list.length || a.name.localeCompare(b.name, "ru"));
   }, [visible, mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const olympiads = visible.filter((r) => r.kind === "olympiad").sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  // Поиск по предметам (и олимпиадам — по названию и предмету).
+  const norm = (t) => String(t || "").toLowerCase().replace(/ё/g, "е");
+  const q = norm(query.trim());
+  const shownSubjects = q ? subjects.filter((x) => norm(x.name).includes(q)) : subjects;
+  const shownOlympiads = q ? olympiads.filter((r) => norm(r.title).includes(q) || norm(r.subject).includes(q)) : olympiads;
   const overall = pageStats(visible, "points");
   const official = visible.filter((r) => r.source !== "self").length;
 
   // Выбранное могло пропасть (скрыли, удалили) — тогда «Все предметы».
   const current =
     sel.type === "subject" ? subjects.find((s) => s.name === sel.name) : sel.type === "olympiad" ? olympiads.find((r) => r.id === sel.id) : null;
-  const view = current ? sel.type : sel.type === "olympiads" ? "olympiads" : "all";
+  const view = current ? sel.type : sel.type === "olympiads" ? "olympiads" : sel.type === "subject" ? "emptySubject" : "all";
   const pageList = view === "subject" ? current.list : visible;
 
   if (!items.length) {
@@ -162,7 +181,7 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
           пометкой 🔒.
         </p>
         <div style={S.row}>
-          <button type="button" onClick={onAdd} style={S.primary}>
+          <button type="button" onClick={() => onAdd()} style={S.primary}>
             + Результат
           </button>
           <button type="button" onClick={onCode} style={S.secondary}>
@@ -192,7 +211,7 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
           Код ученика
         </button>
       )}
-      <button type="button" onClick={onAdd} style={S.primary}>
+      <button type="button" onClick={() => onAdd()} style={S.primary}>
         {narrow ? "+ Добавить" : "+ Результат"}
       </button>
     </div>
@@ -212,7 +231,18 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
   );
 
   const page =
-    view === "olympiad" ? (
+    view === "emptySubject" ? (
+      <section className="ap-card" style={narrow ? S.phoneCard : S.page} data-subject-page={sel.name} data-subject-empty>
+        <div style={S.pageHead}>
+          <span style={{ ...S.dot, width: 12, height: 12, background: color(sel.name) }} />
+          <h2 style={{ ...S.pageTitle, ...(narrow ? { fontSize: 22 } : null) }}>{sel.name}</h2>
+        </div>
+        <p style={S.muted}>По этому предмету результатов пока нет. Добавьте свой — или они появятся, когда учитель выложит отметки.</p>
+        <button type="button" onClick={() => onAdd(sel.name)} style={{ ...S.primary, alignSelf: "flex-start" }}>
+          + Результат по предмету
+        </button>
+      </section>
+    ) : view === "olympiad" ? (
       <OlympiadPage r={current} color={color(current.subject)} onEdit={onEdit} onRemove={onRemove} onHide={onHide} hidden={hidden.has(current.id)} narrow={narrow} />
     ) : view === "olympiads" ? (
       <section className="ap-card" style={S.page}>
@@ -220,7 +250,7 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
         {olympiads.length === 0 ? (
           <p style={S.muted}>Олимпиад пока нет.</p>
         ) : (
-          olympiads.map((r) => <OlympiadNavItem key={r.id} r={r} color={color(r.subject)} onPick={() => setSel({ type: "olympiad", id: r.id })} />)
+          shownOlympiads.map((r) => <OlympiadNavItem key={r.id} r={r} color={color(r.subject)} onPick={() => setSel({ type: "olympiad", id: r.id })} />)
         )}
       </section>
     ) : (
@@ -248,16 +278,44 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
       />
     );
 
+  const pickFirst = () => {
+    if (shownSubjects.length) setSel({ type: "subject", name: shownSubjects[0].name });
+    else if (shownOlympiads.length) setSel({ type: "olympiad", id: shownOlympiads[0].id });
+  };
+  const search = (
+    <div style={S.searchWrap}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={S.searchIcon}>
+        <circle cx="11" cy="11" r="7" />
+        <path d="M20 20l-3.5-3.5" />
+      </svg>
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") pickFirst();
+          if (e.key === "Escape") setQuery("");
+        }}
+        placeholder="Найти предмет"
+        aria-label="Найти предмет"
+        style={S.search}
+      />
+    </div>
+  );
+  const nothing = q && !shownSubjects.length && !shownOlympiads.length ? <div style={{ ...S.muted, padding: "4px 12px" }} data-search-empty>Ничего не нашлось</div> : null;
+
   if (narrow) {
     return (
       <div style={S.wrap} className="ap-results-b" data-layout="phone">
         {top}
+        {(subjects.length > 3 || q) && search}
+        {nothing}
         <div style={S.chips} role="tablist" aria-label="Предметы">
           <Chip on={view === "all"} onClick={() => setSel({ type: "all" })} dot="var(--ink)" label="Все" />
-          {subjects.map((s) => (
+          {shownSubjects.map((s) => (
             <Chip key={s.name} on={view === "subject" && current.name === s.name} onClick={() => setSel({ type: "subject", name: s.name })} dot={color(s.name)} label={s.name} />
           ))}
-          {olympiads.length > 0 && <Chip on={view === "olympiads" || view === "olympiad"} onClick={() => setSel({ type: "olympiads" })} dot="var(--red)" diamond label="Олимпиады" />}
+          {shownOlympiads.length > 0 && <Chip on={view === "olympiads" || view === "olympiad"} onClick={() => setSel({ type: "olympiads" })} dot="var(--red)" diamond label="Олимпиады" />}
         </div>
         {page}
       </div>
@@ -269,15 +327,17 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
       {top}
       <div style={S.grid}>
         <nav aria-label="Предметы и олимпиады" className="ap-card" style={S.nav}>
+          {search}
           <div style={S.navLabel}>Предметы</div>
           <NavSubject on={view === "all"} onClick={() => setSel({ type: "all" })} name="Все предметы" color="var(--ink)" stats={pageStats(visible, mode)} count={visible.length} mode={mode} />
-          {subjects.map((s) => (
+          {nothing}
+          {shownSubjects.map((s) => (
             <NavSubject key={s.name} on={view === "subject" && current.name === s.name} onClick={() => setSel({ type: "subject", name: s.name })} name={s.name} color={color(s.name)} stats={s.stats} count={s.list.length} mode={mode} />
           ))}
-          {olympiads.length > 0 && (
+          {shownOlympiads.length > 0 && (
             <>
               <div style={{ ...S.navLabel, ...S.navLabelSep }}>Олимпиады</div>
-              {olympiads.map((r) => (
+              {shownOlympiads.map((r) => (
                 <OlympiadNavItem key={r.id} r={r} color={color(r.subject)} on={view === "olympiad" && current.id === r.id} onPick={() => setSel({ type: "olympiad", id: r.id })} />
               ))}
             </>
@@ -305,7 +365,7 @@ function NavSubject({ on, onClick, name, color, stats, count, mode }) {
       <span style={S.navRow}>
         <span style={{ ...S.dot, background: color }} />
         <span style={S.navName}>{name}</span>
-        <span style={S.navValue} data-nav-avg={name}>
+        <span style={{ ...S.navValue, color: tint(stats.avg, mode) }} data-nav-avg={name}>
           {f1(stats.avg)}
         </span>
       </span>
@@ -386,7 +446,7 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
         <section className="ap-card" style={S.phoneCard} aria-label={title}>
           <div style={S.phoneHead}>
             <h2 style={{ ...S.pageTitle, fontSize: 22 }}>{title}</h2>
-            <span style={S.phoneBig} data-page-avg>
+            <span style={{ ...S.phoneBig, color: tint(st.avg, mode) }} data-page-avg>
               {f1(st.avg)} <span style={S.phoneUnit}>{grades ? "из 5" : "из 100"}</span>
             </span>
           </div>
@@ -416,11 +476,12 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
         {toggle}
       </div>
       <div style={S.tiles}>
-        <Tile label={grades ? "Средняя оценка" : "Средний"} value={f1(st.avg)} sub={(grades ? "из 5 · " : "из 100 · ") + list.length + " " + word(list.length, "запись", "записи", "записей")} id="avg" />
-        <Tile label={grades ? "Лучшая" : "Лучший"} value={valueText(st.best)} sub={whatWhen(st.best)} id="best" />
+        <Tile label={grades ? "Средняя оценка" : "Средний"} value={f1(st.avg)} color={tint(st.avg, mode)} sub={(grades ? "из 5 · " : "из 100 · ") + list.length + " " + word(list.length, "запись", "записи", "записей")} id="avg" />
+        <Tile label={grades ? "Лучшая" : "Лучший"} value={valueText(st.best)} color={st.best ? tint(st.best.v, mode) : null} sub={whatWhen(st.best)} id="best" />
         <Tile
           label={grades ? "Последняя" : "Последний"}
           value={valueText(st.last)}
+          color={st.last ? tint(st.last.v, mode) : null}
           sub={
             <>
               {st.last ? kindName(st.last.r.kind).toLowerCase() : ""}
@@ -430,9 +491,9 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
           id="last"
         />
         {grades ? (
-          <Tile label="Средний балл" value={f1(st.avgPoints)} sub="из 100" id="other" />
+          <Tile label="Средний балл" value={f1(st.avgPoints)} color={scoreColor(st.avgPoints)} sub="из 100" id="other" />
         ) : (
-          <Tile label="Средняя оценка" value={f1(st.avgGrade)} sub="из 5" id="other" />
+          <Tile label="Средняя оценка" value={f1(st.avgGrade)} color={scoreColor(percentOfGrade(st.avgGrade))} sub="из 5" id="other" />
         )}
       </div>
       {st.rows.length > 1 ? (
@@ -449,11 +510,11 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
   );
 }
 
-function Tile({ label, value, sub, id }) {
+function Tile({ label, value, sub, id, color }) {
   return (
     <div style={S.tile} data-tile={id}>
       <div style={S.tileLabel}>{label}</div>
-      <div style={S.tileValue}>{value}</div>
+      <div style={{ ...S.tileValue, ...(color ? { color } : null) }}>{value}</div>
       <div style={S.tileSub}>{sub}</div>
     </div>
   );
@@ -484,7 +545,7 @@ function RecordRow({ r, mode, withSubject, hidden, onEdit, onRemove, onHide, nar
           {withSubject && r.subject && <div style={S.rowSub}>{r.subject}</div>}
         </div>
         <div style={S.rowScore}>
-          <div style={S.scoreBig}>{sc.big}</div>
+          <div style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{sc.big}</div>
           <div style={S.scoreSub}>{r.kind !== "olympiad" && mode !== "grades" && summarize(r).main.includes(" из ") && Number(r.max) !== 100 && r.scale === "points" ? summarize(r).main : sc.sub}</div>
         </div>
         {menu}
@@ -500,7 +561,7 @@ function RecordRow({ r, mode, withSubject, hidden, onEdit, onRemove, onHide, nar
         <span style={S.rowSub}>{detailOf(r, withSubject)}</span>
       </span>
       <span style={S.rowScore}>
-        <span style={S.scoreBig}>{sc.big}</span>
+        <span style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{sc.big}</span>
         <span style={S.scoreSub}>{sc.sub}</span>
       </span>
       {menu}
@@ -638,7 +699,7 @@ function ScoreChart({ rows, mode, color, height = 176, compact }) {
         <line x1={left} y1={y(threshold)} x2={width - right} y2={y(threshold)} stroke="var(--accent)" strokeDasharray="5 5" opacity=".6" />
         <polyline points={rows.map((r, i) => `${x(i)},${y(r.v)}`).join(" ")} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {rows.map((r, i) => (
-          <g key={i} fill={color} stroke="var(--panel)" strokeWidth="2" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: "default" }}>
+          <g key={i} fill={scoreColor(grades ? percentOfGrade(r.v) : r.v)} stroke="var(--panel)" strokeWidth="2" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} style={{ cursor: "default" }}>
             <circle cx={x(i)} cy={y(r.v)} r="14" fill="transparent" stroke="none" />
             {marker(SHAPE[r.r.kind] || "circle", x(i), y(r.v))}
             {show(i) && (
@@ -679,6 +740,9 @@ const S = {
   muted: { margin: 0, fontSize: 13.5, color: "var(--ink3)" },
   grid: { display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: 20, alignItems: "start" },
   nav: { display: "flex", flexDirection: "column", gap: 2, padding: "10px 8px", borderRadius: 18, border: "1px solid var(--line)", background: "var(--panel)" },
+  searchWrap: { position: "relative", display: "flex", alignItems: "center", margin: "0 4px 6px" },
+  searchIcon: { position: "absolute", left: 11, color: "var(--mute)", pointerEvents: "none" },
+  search: { width: "100%", boxSizing: "border-box", height: 36, padding: "0 10px 0 32px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--ink)", font: "inherit", fontSize: 14 },
   navLabel: { padding: "2px 12px 4px", fontSize: 11.5, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
   navLabelSep: { padding: "10px 12px 4px", marginTop: 4, borderTop: "1px solid var(--line2, var(--line))" },
   navItem: { display: "flex", flexDirection: "column", gap: 6, width: "100%", padding: "10px 12px", border: "none", borderRadius: 11, background: "transparent", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" },

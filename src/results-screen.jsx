@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { KINDS, SCALES, STAGES, STATUSES, blankResult, blankStage, cleanResult, gradeOf, kindName, olympiadStages, overallStats, stageSummary, statusName, subjectSummary, summarize } from "./results-model.js";
-import { decryptFeed, recipientCode } from "./results-feed.js";
-import { canPublish, fetchInbox, fetchPublished, inboxIsDemo, publish, unpublish } from "./results-inbox.js";
+import { canPublish, fetchPublished, inboxIsDemo, publish, unpublish } from "./results-inbox.js";
+import { DEMO_EMAIL, HIDDEN_KEY, readHidden } from "./results-data.js";
 import GradebookPanel from "./gradebook-panel.jsx";
 import StudentView from "./results-student.jsx";
 import { CLASSES } from "./school-roster.js";
 import { studentName } from "./gradebook.js";
-import FEED from "./results-feed.json";
-import DEMO_FEED from "./results-demo-feed.json";
 
 // Раздел «Результаты»: КТ, экзамены, олимпиады, пробники.
 //
@@ -20,17 +18,6 @@ import DEMO_FEED from "./results-demo-feed.json";
 // Учитель»: учитель выкладывает результат на учебную почту, ученик (вы же)
 // сразу его видит. Аккаунт там — учебный, его код открывает демо-ленту.
 
-const DEMO_EMAIL = "student@demo";
-const DEMO_ACCOUNT = "sandbox-demo";
-const HIDDEN_KEY = "planner-results-hidden";
-
-function readHidden() {
-  try {
-    return JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]");
-  } catch (e) {
-    return [];
-  }
-}
 
 function newId() {
   return "res-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
@@ -48,7 +35,10 @@ const fmtDate = (iso) => {
 
 // allowed — открыт ли раздел этому аккаунту: пока он в разработке, полностью
 // его видит только владелец (и предпросмотр); остальным — заглушка.
-export default function ResultsScreen({ results, setResults, subjects, accountId, accountEmail, sandbox, onUndo, allowed = true, gradebooks, setGradebooks, schedule, colorOf }) {
+// published / code — выложенное ученику и его код (грузит приложение через
+// results-data.js: те же данные нужны дневнику); onReload — перечитать их
+// после выкладки учителем. focus — открыть сразу предмет (из расписания).
+export default function ResultsScreen({ results, setResults, subjects, accountId, sandbox, onUndo, allowed = true, gradebooks, setGradebooks, schedule, colorOf, published = [], code = "", onReload, focus, onHiddenChange }) {
   const [role, setRole] = useState("student");
   // Показывать баллами или оценками (шкала уроков: 0–49 → 2 … 90–100 → 5).
   const [mode, setModeState] = useState(() => {
@@ -67,30 +57,14 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
     }
   };
   const [editing, setEditing] = useState(null); // запись или null
-  const [published, setPublished] = useState([]);
   const [hidden, setHidden] = useState(readHidden);
   const [showHidden, setShowHidden] = useState(false);
-  const [code, setCode] = useState("");
-  const [reload, setReload] = useState(0);
   const [codeOpen, setCodeOpen] = useState(false);
-  const teacherAllowed = allowed && (sandbox || canPublish());
-
-  // Код аккаунта и выложенное мне: из обновления и от учителя.
+  // Пришли из расписания или дневника к предмету — показываем свои результаты.
   useEffect(() => {
-    let alive = true;
-    const id = sandbox ? DEMO_ACCOUNT : accountId;
-    (async () => {
-      const c = id ? await recipientCode(id) : "";
-      const fromFeed = c ? await decryptFeed(sandbox ? DEMO_FEED : FEED, c) : [];
-      const fromTeacher = sandbox || accountEmail ? await fetchInbox(DEMO_EMAIL) : [];
-      if (!alive) return;
-      setCode(c);
-      setPublished([...fromTeacher, ...fromFeed]);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [accountId, accountEmail, sandbox, reload]);
+    if (focus) setRole("student");
+  }, [focus]);
+  const teacherAllowed = allowed && (sandbox || canPublish());
 
   function hide(id, on) {
     setHidden((prev) => {
@@ -100,6 +74,7 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
       } catch (e) {
         /* приватное окно */
       }
+      if (onHiddenChange) onHiddenChange(next);
       return next;
     });
   }
@@ -189,7 +164,7 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
         <TeacherPanel
           subjects={subjectList}
           sandbox={sandbox}
-          onPublished={() => setReload((n) => n + 1)}
+          onPublished={() => onReload && onReload()}
           gradebooks={gradebooks}
           setGradebooks={setGradebooks}
           schedule={schedule}
@@ -203,7 +178,8 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
           onHide={hide}
           onEdit={(r) => setEditing(r)}
           onRemove={remove}
-          onAdd={() => setEditing({ ...blankResult("lesson"), date: todayIso() })}
+          onAdd={(subject) => setEditing({ ...blankResult("lesson"), date: todayIso(), ...(subject ? { subject } : null) })}
+          focus={focus}
           mode={mode}
           setMode={setMode}
           colorOf={colorOf}

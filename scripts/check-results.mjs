@@ -55,6 +55,15 @@ const act = async (title, item) => {
   await page.getByRole("menuitem", { name: item, exact: true }).click();
   await page.waitForTimeout(250);
 };
+// Клетка журнала — кнопка; поле появляется, когда её открывают. Tab — сохранить.
+const setCell = async (rc, v) => {
+  const c = page.locator(`[data-cell="${rc}"]`);
+  await c.click();
+  await c.fill(v);
+  await c.press("Tab");
+  await page.waitForTimeout(60);
+};
+const cellText = (rc) => text(`[data-cell="${rc}"]`);
 const mode = async (m) => { await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: m }).click(); await page.waitForTimeout(200); };
 
 want("в меню есть «Результаты»", (await page.locator(".ap-nav", { hasText: "Результаты" }).count()) >= 1);
@@ -104,6 +113,21 @@ await page.waitForTimeout(150);
 want("Право: фильтр записей по виду", JSON.stringify((await scores('[data-subject-page="Право"]')).sort()) === JSON.stringify(["Урок 1=90", "Урок 2=70"]));
 await page.locator('[data-subject-page="Право"] [data-records]').getByRole("button", { name: "Все", exact: true }).click();
 await nav("Все предметы");
+await page.getByLabel("Найти предмет").fill("общ");
+await page.waitForTimeout(150);
+const navNames = () => page.locator("[data-nav-subject]").evaluateAll((els) => els.map((e) => e.getAttribute("data-nav-subject")));
+want("поиск предмета: остался только найденный", JSON.stringify(await navNames()) === JSON.stringify(["Все предметы", "Обществознание"]), (await navNames()).join(" | "));
+await page.getByLabel("Найти предмет").press("Enter");
+await page.waitForTimeout(150);
+want("поиск: Enter открывает найденный предмет", (await page.locator('[data-subject-page="Обществознание"]').count()) === 1);
+await page.getByLabel("Найти предмет").fill("химия");
+want("поиск: «Ничего не нашлось»", (await page.locator("[data-search-empty]").count()) === 1);
+await page.getByLabel("Найти предмет").fill("");
+await nav("Все предметы");
+// Цвет — смесь цветов темы: доля зелёного растёт с баллом.
+const greenShare = (t) => page.evaluate((t) => { const el = document.querySelector(`[data-result="${t}"] [data-score-color]`); const m = el && /var\(--green\) (\d+)%/.exec(el.style.color); return m ? Number(m[1]) : 0; }, t);
+want("цвет балла — по величине: 90 зеленее 70", (await greenShare("Урок 1")) > (await greenShare("Урок 2")) && (await greenShare("Урок 2")) > 0, (await greenShare("Урок 1")) + " / " + (await greenShare("Урок 2")));
+await nav("Все предметы");
 // Все четыре: 90, 70, 78 (пробник), 59 (олимпиада) → 74,3.
 want("средний по всем — среднее арифметическое", (await text('[data-nav-avg="Все предметы"]')) === "74,3" && /Средний балл 74,3 из 100 по 4 записям · 2 официальных, 2 своих/.test(await text("[data-results-summary]")), await text("[data-results-summary]"));
 await mode("Оценки");
@@ -129,6 +153,20 @@ await page.waitForTimeout(1500);
 want("удаление своей", !(await cards()).includes("Своя КТ") && (await stored()).length === 2);
 await act("Высшая проба", "Скрыть у себя");
 want("официальную можно скрыть у себя", !(await cards()).includes("Высшая проба") && (await page.locator('[data-nav-olympiad="Высшая проба"]').count()) === 0 && (await page.getByRole("button", { name: /Показать скрытые · 1/ }).count()) === 1);
+
+// Дневник: день с результатом отмечен в календаре, в карточке дня — список,
+// по нажатию — «Результаты» на странице предмета.
+const todayKey = await page.evaluate(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); });
+await page.locator(".ap-nav", { hasText: "Дневник" }).first().click();
+await page.waitForTimeout(600);
+const dayMark = page.locator(`[data-day-result="${todayKey}"]`);
+want("дневник: день с результатами отмечен оценкой", (await dayMark.count()) === 1 && /^[2-5]\+1$/.test((await dayMark.innerText()).trim()), (await dayMark.count()) ? await dayMark.innerText() : "нет");
+const dayList = await text("[data-day-results]");
+want("дневник: в карточке дня — результаты", /Право · Урок 1/.test(dayList) && /Право · Урок 2/.test(dayList), dayList.replace(/\n/g, " | "));
+await page.locator("[data-day-results] button", { hasText: "Урок 1" }).click();
+await page.waitForTimeout(600);
+want("дневник → «Результаты» на странице предмета", (await page.locator('[data-subject-page="Право"]').count()) === 1);
+await nav("Все предметы");
 
 // Роль учителя: выложить ученику, ученик видит; убрать — пропадает.
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
@@ -172,7 +210,8 @@ want("учитель убрал — у ученика пропало", (await pa
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(300);
 await page.getByRole("button", { name: "Журнал", exact: true }).click();
-want("журнал: классы из списка", (await page.getByRole("group", { name: "Класс", exact: true }).getByRole("button").allInnerTexts()).join(",") === "10Б,11А");
+const classNames = await page.locator("[data-class]").evaluateAll((els) => els.map((e) => e.getAttribute("data-class")));
+want("журнал: классы — списком сбоку", (await page.locator("[data-class-list]").count()) === 1 && classNames.join(",") === "10Б,11А", classNames.join(","));
 await page.getByRole("button", { name: "+ Журнал 10Б" }).click();
 await page.waitForTimeout(300);
 await page.getByLabel("Предмет журнала").fill("Право");
@@ -202,14 +241,18 @@ const row = async (name) => (await page.locator("[data-student]").evaluateAll((e
 const ru = await row("Учебный ученик");
 const ri = await row("Иванов Иван");
 const rs = await row("Сидоров Пётр");
-await page.locator(`[data-cell="${ru}:0"]`).fill("90");
-await page.locator(`[data-cell="${ru}:1"]`).fill("75");
-await page.locator(`[data-cell="${ru}:2"]`).fill("н");
+await setCell(`${ru}:0`, "90");
+await setCell(`${ru}:1`, "75");
+await setCell(`${ru}:2`, "н");
+await page.locator(`[data-cell="${ri}:0"]`).click();
 await page.locator(`[data-cell="${ri}:0"]`).fill("60");
 await page.locator(`[data-cell="${ri}:0"]`).press("Enter");
 await page.keyboard.type("50");
 await page.waitForTimeout(200);
 want("журнал: Enter — на ученика ниже", (await page.locator(`[data-cell="${ri + 1}:0"]`).inputValue()) === "50");
+await page.keyboard.press("Tab");
+await page.waitForTimeout(100);
+want("журнал: в таблице лёгкие клетки, поле — только у открытой", (await page.locator("[data-gradebook-table] input[data-cell]").count()) === 0 && (await page.locator("[data-gradebook-table] button[data-cell]").count()) > 20);
 want("журнал: средний по ученику («н» не считается)", (await text('[data-avg="Учебный ученик"]')) === "82,5", await text('[data-avg="Учебный ученик"]'));
 want("журнал: средняя оценка, пропуски и распределение", (await text('[data-avg-grade="Учебный ученик"]')) === "4,5" && (await text('[data-absent="Учебный ученик"]')) === "1" && (await text('[data-dist="Учебный ученик"]')) === "1 · 1 · 0 · 0", [await text('[data-avg-grade="Учебный ученик"]'), await text('[data-absent="Учебный ученик"]'), await text('[data-dist="Учебный ученик"]')].join(" / "));
 await page.locator("[data-gradebook]").getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Оценки" }).click();
@@ -218,12 +261,22 @@ want("журнал: «Оценки» — в клетках оценки по ш�
 await page.locator("[data-gradebook]").getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Баллы" }).click();
 await page.waitForTimeout(200);
 want("журнал: сводка по классу", /средняя оценка\s*3,8/.test(await text("[data-class-stats]")) && /Лучший средний: Учебный ученик/.test(await text("[data-class-stats]")), await text("[data-class-stats]"));
-await page.locator(`[data-cell="${rs}:1"]`).fill("120");
+await setCell(`${rs}:1`, "120");
 await page.waitForTimeout(150);
+const issuesText = () => text("[data-mark-issues]");
+want("опечатка: «120» — подсказка с исправлением", /Похоже на опечатку: 1/.test(await issuesText()) && /120 — больше 100/.test(await issuesText()) && (await page.getByRole("button", { name: /^Исправить на 12: Сидоров Пётр/ }).count()) === 1, await issuesText());
+await setCell(`${rs}:2`, "8о");
+want("опечатка: «о» вместо нуля исправляется сама", (await cellText(`${rs}:2`)) === "80", await cellText(`${rs}:2`));
+await setCell(`${rs}:3`, "9б");
+want("опечатка: буква — подсказка «9»", (await page.getByRole("button", { name: /^Исправить на 9: Сидоров Пётр/ }).count()) === 1);
+await page.getByRole("button", { name: /^Исправить на 9: Сидоров Пётр/ }).click();
+want("опечатка: исправление в один клик", (await cellText(`${rs}:3`)) === "9" && /Похоже на опечатку: 1/.test(await issuesText()));
+await setCell(`${rs}:2`, "");
+await setCell(`${rs}:3`, "");
 const pubBtn = () => page.getByRole("button", { name: /Выложить изменения|Всё выложено/ });
 // 90, 75, «н», 60 и 50 (Кузнецова) — с почтой; Сидоров без почты — ему не уходит; 120 — вне шкалы.
 want("журнал: вне шкалы и без почты — не уходят", /Выложить изменения · 5/.test(await pubBtn().innerText()), await pubBtn().innerText());
-await page.locator(`[data-cell="${rs}:1"]`).fill("");
+await setCell(`${rs}:1`, "");
 const status = () => text("[data-gradebook] [role=status]");
 want("журнал: внизу — сколько не выложено и кому без почты", /5 новых отмет\S* ещё не выложен/.test(await status()) && /Без почты: 2/.test(await status()), await status());
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/gradebook.png", fullPage: true });
@@ -241,9 +294,11 @@ if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "
 await mode("Баллы");
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(300);
-await page.locator(`[data-cell="${ru}:0"]`).fill("");
-await page.locator(`[data-cell="${ru}:1"]`).fill("80");
-await page.locator(`[data-cell="${ru}:2"]`).fill("");
+await setCell(`${ru}:1`, "7500");
+want("опечатка в выложенной: у ученика не стирается", (await page.getByRole("button", { name: "Всё выложено" }).count()) === 1 && /С опечаткой: 1/.test(await text("[data-gradebook] [role=status]")), await text("[data-gradebook] [role=status]"));
+await setCell(`${ru}:0`, "");
+await setCell(`${ru}:1`, "80");
+await setCell(`${ru}:2`, "");
 await page.waitForTimeout(150);
 await page.getByRole("button", { name: /Выложить изменения · 3/ }).click();
 await page.waitForTimeout(500);
