@@ -332,6 +332,45 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 3ж. «События» (1.7.2): в один день — по времени; в «Отсчёте» крупно все
+// события ближайшего дня, первое по времени — сверху.
+{
+  const at = (n) => { const d = new Date(Date.now() + n * 864e5); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const st = {
+    events: [
+      { id: "r1", name: "Русский язык — Высшая проба", date: at(2), priority: 3, start: "15:30", end: "16:30", place: "Платформа ВШЭ" },
+      { id: "g1", name: "Региональный этап ВсОШ", date: at(108), priority: 3 },
+      { id: "f1", name: "Фин Грамотность — Высшая проба", date: at(2), priority: 3, start: "13:30", end: "15:00" },
+    ],
+  };
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(6000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(([st]) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "events");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, [st]);
+  await page.goto(URL0);
+  await page.waitForTimeout(2000);
+  const lead = await page.locator("[data-countdown-event]").evaluateAll((els) => els.map((e) => e.getAttribute("data-countdown-event")));
+  want("«Отсчёт»: оба события дня — крупно, первое по времени сверху", lead.join("|") === "Фин Грамотность — Высшая проба|Русский язык — Высшая проба", lead.join("|"));
+  const leadText = await page.locator("[data-countdown-lead]").innerText();
+  want("«Отсчёт»: подпись «до событий» и время у каждого", /до событий/.test(leadText) && /13:30–15:00/.test(leadText) && /15:30–16:30/.test(leadText));
+  const rest = await page.locator("[data-countdown-lead] ~ div").first().innerText();
+  want("«Отсчёт»: ниже — только события других дней", /Региональный этап/.test(rest) && !/Высшая проба/.test(rest), rest.replace(/\n/g, " ").slice(0, 80));
+  const body = await page.locator("body").innerText();
+  want("«События»: в списке тоже по времени", body.lastIndexOf("Фин Грамотность") < body.lastIndexOf("Русский язык — Высшая проба"));
+  if (SHOT_DIR) await page.screenshot({ path: SHOT_DIR + "/countdown.png" });
+  want("«Отсчёт»: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 4. Карточки уроков в «Лицее» (1.4.0): два урока одного предмета подряд —
 // одна карточка «2 урока»; всё редкое — в «⋯»; ничего не вылезает за край; а
 // важность — свойство предмета и меняется во всех его уроках, кроме экзаменов.

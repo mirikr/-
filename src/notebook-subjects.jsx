@@ -1,63 +1,15 @@
-import React, { useRef, useState } from "react";
-import { dropIndex, LEVELS, SORTS } from "./notebook-order.js";
+import React, { useState } from "react";
+import { LEVELS, SORTS } from "./notebook-order.js";
+import SortableList from "./sortable-list.jsx";
+import { dropFileTo, useFileDropTarget } from "./file-drag.js";
 
 // Список предметов в «Тетрадях». Карандаш в заголовке включает правку:
-// у каждой строки появляются булавка и ручка. Тянуть можно мышью за всю
-// строку, пальцем — за ручку, чтобы по остальной строке список по-прежнему
-// прокручивался. Стрелки ↑/↓ на ручке делают то же с клавиатуры.
+// у каждой строки появляются булавка и ручка; перетаскивание — SortableList
+// (предмет берётся целиком и едет за мышью или пальцем).
 // startEditing и onDone — для телефона: там колонки предметов нет, список
 // открывается сразу в правке по карандашу у чипов, а «Готово» его закрывает.
 export default function NotebookSubjects({ owners, current, countOf, onPick, onPin, onMove, startEditing, onDone, sort, onSort }) {
   const [editing, setEditing] = useState(!!startEditing);
-  const [drag, setDrag] = useState(null); // { from, over, mids }
-  const rows = useRef([]);
-  const pinnedCount = owners.filter((o) => o.pinned).length;
-
-  function startDrag(e, index) {
-    if (e.button !== undefined && e.button !== 0) return;
-    if (e.target.closest && e.target.closest("[data-nodrag]")) return;
-    e.preventDefault();
-    e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId);
-    // Середины строк — в координатах страницы: при автопрокрутке они не сбиваются.
-    const mids = owners.map((_, i) => {
-      const el = rows.current[i];
-      if (!el) return 0;
-      const r = el.getBoundingClientRect();
-      return r.top + window.scrollY + r.height / 2;
-    });
-    setDrag({ from: index, over: index, mids });
-  }
-
-  function moveDrag(e) {
-    if (!drag) return;
-    // У края экрана список подъезжает сам — длинный список на телефоне иначе
-    // не перетащить с конца в начало.
-    if (e.clientY < 60) window.scrollBy(0, -14);
-    else if (e.clientY > window.innerHeight - 60) window.scrollBy(0, 14);
-    const over = dropIndex(drag.mids, drag.from, e.clientY + window.scrollY, pinnedCount);
-    if (over !== drag.over) setDrag({ ...drag, over });
-  }
-
-  function endDrag() {
-    if (!drag) return;
-    if (drag.over !== drag.from) onMove(drag.from, drag.over);
-    setDrag(null);
-  }
-
-  function onKey(e, index) {
-    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-      e.preventDefault();
-      onMove(index, index + (e.key === "ArrowUp" ? -1 : 1));
-    }
-  }
-
-  // Пока тянут — показываем список уже с предметом на новом месте.
-  const shown = owners.map((o, i) => ({ o, i }));
-  if (drag && drag.over !== drag.from) {
-    const [moved] = shown.splice(drag.from, 1);
-    shown.splice(drag.over, 0, moved);
-  }
-
   return (
     <>
       <div style={S.head}>
@@ -65,7 +17,6 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
         <button
           type="button"
           onClick={() => {
-            setDrag(null);
             if (editing && onDone) {
               onDone();
               return;
@@ -114,19 +65,21 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
                   const on = o.key === current;
                   const count = countOf(o.key);
                   return (
+                    <SubjectDrop key={o.key} ownerKey={o.key} onOpen={() => onPick(o.key)} render={(dp) => (
                     <button
-                      key={o.key}
+                      {...dp}
                       type="button"
                       onClick={() => onPick(o.key)}
                       aria-current={on ? "true" : undefined}
                       className="ap-notes-subject"
-                      style={{ ...S.row, ...(on ? S.rowOn : null) }}
+                      style={{ "--c": o.color, ...S.row, ...(on ? S.rowOn : null) }}
                     >
                       <span style={{ ...S.dot, background: o.color }} />
                       <span style={S.name}>{o.name}</span>
                       <Badges owner={o} />
                       <span style={S.count}>{count || ""}</span>
                     </button>
+                    )} />
                   );
                 })}
               </div>
@@ -135,65 +88,21 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
         </div>
       )}
       {editing && (
-      <div style={S.list} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-        {shown.map(({ o, i }) => {
-          const on = o.key === current;
-          const count = countOf(o.key);
-          const dragging = drag && drag.from === i;
-          const body = (
-            <>
+        <SortableList
+          items={owners}
+          keyOf={(o) => o.key}
+          labelOf={(o) => o.name}
+          groupOf={(o) => (o.pinned ? 0 : 1)}
+          onMove={onMove}
+          renderItem={(o, { handleProps, dragging }) => (
+            <div
+              data-subject={o.name}
+              style={{ ...S.pick, ...S.editRow, borderColor: dragging ? "var(--mute)" : "var(--line2)" }}
+            >
+              <span {...handleProps}>⋮⋮</span>
               <span style={{ ...S.dot, background: o.color }} />
               <span style={S.name}>{o.name}</span>
               <Badges owner={o} />
-              {!editing && o.pinned && (
-                <span style={S.pinMark} title="Закреплён" aria-label="закреплён">
-                  <PinIcon filled />
-                </span>
-              )}
-              {!editing && <span style={S.count}>{count ? count + " блок." : "пусто"}</span>}
-            </>
-          );
-          if (!editing) {
-            return (
-              <button
-                key={o.key}
-                onClick={() => onPick(o.key)}
-                style={{
-                  ...S.pick,
-                  background: on ? "var(--neutralBg)" : "transparent",
-                  borderColor: on ? "var(--mute)" : "var(--line2)",
-                }}
-              >
-                {body}
-              </button>
-            );
-          }
-          return (
-            <div
-              key={o.key}
-              ref={(el) => (rows.current[i] = el)}
-              data-subject={o.name}
-              onPointerDown={(e) => e.pointerType === "mouse" && startDrag(e, i)}
-              style={{
-                ...S.pick,
-                ...S.editRow,
-                borderColor: dragging ? "var(--mute)" : "var(--line2)",
-                background: dragging ? "var(--neutralBg)" : "transparent",
-                boxShadow: dragging ? "0 6px 18px rgba(0,0,0,.12)" : "none",
-              }}
-            >
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={"Перетащить: " + o.name}
-                title="Перетащить"
-                onPointerDown={(e) => e.pointerType !== "mouse" && startDrag(e, i)}
-                onKeyDown={(e) => onKey(e, i)}
-                style={S.handle}
-              >
-                ⋮⋮
-              </span>
-              {body}
               <button
                 type="button"
                 data-nodrag
@@ -207,12 +116,18 @@ export default function NotebookSubjects({ owners, current, countOf, onPick, onP
                 <PinIcon filled={o.pinned} />
               </button>
             </div>
-          );
-        })}
-      </div>
+          )}
+        />
       )}
     </>
   );
+}
+
+// Файл, перетаскиваемый мышью: подержали над предметом — открылась его
+// тетрадь; бросили прямо на предмет — файл ляжет в блок «Файлы».
+function SubjectDrop({ ownerKey, onOpen, render }) {
+  const [props] = useFileDropTarget({ onDrop: () => dropFileTo({ ownerKey, inbox: true }), onSpring: onOpen });
+  return render(props);
 }
 
 // Сбоку от названия: важность столбиками и уровень по расписанию.
@@ -274,8 +189,9 @@ const S = {
   groups: { display: "flex", flexDirection: "column", gap: 14 },
   group: { display: "flex", flexDirection: "column", gap: 2 },
   groupLabel: { padding: "0 10px 4px", fontSize: 11.5, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
-  row: { display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 40, padding: "0 10px", border: "none", borderRadius: 10, background: "transparent", color: "var(--ink)", fontSize: 14, textAlign: "left", cursor: "pointer" },
-  rowOn: { background: "var(--panel2)", fontWeight: 600, boxShadow: "0 1px 2px rgba(34,32,27,.08)" },
+  // Фон под курсором и у открытого — в CSS (.ap-notes-subject в study-planner).
+  row: { display: "flex", alignItems: "center", gap: 10, width: "100%", minHeight: 40, padding: "0 10px", border: "none", borderRadius: 10, color: "var(--ink)", fontSize: 14, textAlign: "left", cursor: "pointer" },
+  rowOn: { fontWeight: 600 },
   list: { display: "flex", flexDirection: "column", gap: 4 },
   pick: {
     display: "flex",

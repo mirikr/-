@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import SkebobNote from "./skebob.jsx";
+import { useFileDropTarget } from "./file-drag.js";
 
 // Значки разделов. Раньше пункты меню были одними словами, и восемь строк
 // подряд читались сплошным столбцом: глазу не за что было зацепиться. Значок
@@ -151,8 +152,12 @@ function NavButton({ item, on, onGo }) {
   // У событий в подсказке число — оно встаёт кружком, как счётчик
   // непрочитанного; у остальных подсказка — просто подпись справа.
   const badge = item.key === "events" && item.hint;
+  // Файл задания, перетаскиваемый мышью: подержали над «Тетрадями» — раздел
+  // открылся, и файл можно бросить в нужную ветку.
+  const [dropProps] = useFileDropTarget({ onSpring: () => onGo(item.key) });
   return (
     <button
+      {...(item.key === "notes" ? dropProps : null)}
       type="button"
       // Цвет и подложка — в таблице стилей: инлайновый стиль перебивал :hover,
       // и подсветка под курсором не появлялась вовсе.
