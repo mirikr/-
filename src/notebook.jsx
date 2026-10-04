@@ -3,6 +3,7 @@ import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import { attachFile, attachmentUrl, removeAttachment, formatSize } from "./files.js";
 import { PickExistingButton } from "./file-picker.jsx";
+import { canDragFiles, dropFileTo, endFileDrag, startFileDrag, useFileDropTarget } from "./file-drag.js";
 
 // Тетрадь предмета: блоки, которые вы называете сами, внутри — ветки (темы),
 // внутри ветки — конспект с форматированием и прикреплённые файлы.
@@ -243,7 +244,7 @@ export function withFileUndo(list, att, onChange, onUndo) {
   );
 }
 
-export function Attachments({ files, onChange, prefix, onUndo, subject, where }) {
+export function Attachments({ files, onChange, prefix, onUndo, subject, where, dragSource, dropTarget }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -285,9 +286,12 @@ export function Attachments({ files, onChange, prefix, onUndo, subject, where })
     withFileUndo(list, att, onChange, onUndo);
   }
 
+  // Сюда, в открытую ветку, можно бросить файл, перетащенный мышью из другой
+  // ветки, предмета или задания.
+  const [dropProps] = useFileDropTarget({ onDrop: dropTarget ? () => dropFileTo(dropTarget) : null });
   return (
-    <>
-      <FileGrid files={list} onDownload={openFile} onRemove={drop} />
+    <div {...(dropTarget ? dropProps : null)} className="ap-file-drop" style={styles.fileDropZone}>
+      <FileGrid files={list} onDownload={openFile} onRemove={drop} dragSource={dragSource} />
       <div style={styles.fileActions}>
         <input ref={fileRef} type="file" onChange={onPick} style={{ display: "none" }} />
         <button onClick={() => fileRef.current.click()} style={styles.fileBtn} disabled={busy}>
@@ -303,7 +307,7 @@ export function Attachments({ files, onChange, prefix, onUndo, subject, where })
         />
         {error && <span style={styles.error}>{error}</span>}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -311,23 +315,40 @@ export function Attachments({ files, onChange, prefix, onUndo, subject, where })
 // экран; нажали на имя — развернулось целиком. Скачивание — своей кнопкой,
 // чтобы, разворачивая имя, файл случайно не скачать.
 // Плитки файлов — и в тетради, и у домашнего задания.
-export function FileGrid({ files, onDownload, onRemove }) {
+// dragSource — откуда файл, если его можно перетащить мышью (см. file-drag.js).
+export function FileGrid({ files, onDownload, onRemove, dragSource }) {
   if (!files || !files.length) return null;
+  const drag = dragSource && canDragFiles();
   return (
     <div style={styles.fileGrid}>
       {files.map((f, i) => (
-        <FileTile key={f.path || f.key || i} file={f} onDownload={() => onDownload(f)} onRemove={() => onRemove(f)} />
+        <FileTile key={f.path || f.key || i} file={f} onDownload={() => onDownload(f)} onRemove={() => onRemove(f)} dragSource={drag ? dragSource : null} />
       ))}
     </div>
   );
 }
 
-function FileTile({ file, onDownload, onRemove }) {
+function FileTile({ file, onDownload, onRemove, dragSource }) {
   const [full, setFull] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const dot = String(file.name || "").lastIndexOf(".");
   const ext = dot > 0 ? file.name.slice(dot + 1).slice(0, 4).toUpperCase() : "";
   return (
-    <div style={styles.fileTile}>
+    <div
+      style={{ ...styles.fileTile, ...(dragSource ? styles.fileTileDrag : null), ...(dragging ? styles.fileTileDragging : null) }}
+      draggable={dragSource ? true : undefined}
+      data-file-tile={file.name}
+      title={dragSource ? (dragSource.kind === "homework" ? "Можно перетащить в тетрадь: подержите над «Тетрадями» в меню" : "Можно перетащить мышью в другую ветку, блок или предмет") : undefined}
+      onDragStart={
+        dragSource
+          ? (e) => {
+              startFileDrag(e, file, dragSource);
+              setDragging(true);
+            }
+          : undefined
+      }
+      onDragEnd={dragSource ? () => { setDragging(false); endFileDrag(); } : undefined}
+    >
       <span style={styles.fileExt} aria-hidden="true">
         {ext || "ФАЙЛ"}
       </span>
@@ -478,6 +499,9 @@ const styles = {
     display: "flex", alignItems: "center", gap: 8, minWidth: 0, padding: "6px 6px 6px 8px",
     border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel2)",
   },
+  fileTileDrag: { cursor: "grab" },
+  fileTileDragging: { opacity: 0.45 },
+  fileDropZone: { display: "flex", flexDirection: "column", gap: 6, borderRadius: 12 },
   fileExt: {
     flexShrink: 0, minWidth: 34, height: 34, padding: "0 4px", borderRadius: 7, display: "inline-flex",
     alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, letterSpacing: 0.3,

@@ -68,3 +68,16 @@ export function eventDescription(event) {
     .filter(Boolean)
     .join(" · ");
 }
+
+// Порядок событий: по дате, в один день — по времени начала. У кого время не
+// указано, те после событий со временем: когда они начнутся, неизвестно.
+// Прошедшие (newestFirst) — с последнего дня, но внутри дня всё так же по часам.
+export function byDateTime(a, b, newestFirst = false) {
+  const byDate = String(a.date || "").localeCompare(String(b.date || ""));
+  if (byDate) return newestFirst ? -byDate : byDate;
+  const sa = a.start || "";
+  const sb = b.start || "";
+  if (sa && !sb) return -1;
+  if (!sa && sb) return 1;
+  return sa.localeCompare(sb) || String(a.name || "").localeCompare(String(b.name || ""), "ru");
+}

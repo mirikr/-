@@ -1,5 +1,5 @@
 // Подробности события: время, ссылки, описание.
-import { eventTime, eventLinks, eventDescription, splitLinks, normalizeUrl, hasDetails, linkLabel } from "../src/event-details.js";
+import { byDateTime, eventTime, eventLinks, eventDescription, splitLinks, normalizeUrl, hasDetails, linkLabel } from "../src/event-details.js";
 
 let bad = 0;
 function check(name, ok, note = "") {
@@ -25,6 +25,29 @@ check("текст без ссылок — один кусок", splitLinks("пр
 check("описание одной строкой", eventDescription({ start: "10:00", end: "13:00", place: "Лицей, ауд. 401", url: "olimpiada.ru", note: "взять паспорт" }) === "10:00–13:00 · Лицей, ауд. 401 · https://olimpiada.ru · взять паспорт");
 check("пустое событие — без подробностей", !hasDetails({ name: "Экзамен", date: "2026-10-01" }) && eventDescription({}) === "");
 check("есть место — есть подробности", hasDetails({ place: "Лицей" }));
+
+{
+  const list = [
+    { name: "Региональный этап", date: "2026-10-04" },
+    { name: "Русский язык", date: "2026-10-04", start: "15:30" },
+    { name: "Олимпиада позже", date: "2026-11-20", start: "09:00" },
+    { name: "Фин грамотность", date: "2026-10-04", start: "13:30" },
+    { name: "Вчера утром", date: "2026-10-03", start: "08:00" },
+    { name: "Вчера вечером", date: "2026-10-03", start: "18:00" },
+  ];
+  const up = [...list].sort((a, b) => byDateTime(a, b)).map((e) => e.name);
+  check(
+    "в один день — по времени, без времени — в конце дня",
+    up.join("|") === "Вчера утром|Вчера вечером|Фин грамотность|Русский язык|Региональный этап|Олимпиада позже",
+    up.join("|")
+  );
+  const past = [...list].sort((a, b) => byDateTime(a, b, true)).map((e) => e.name);
+  check(
+    "прошедшие — с последнего дня, внутри дня по часам",
+    past.join("|") === "Олимпиада позже|Фин грамотность|Русский язык|Региональный этап|Вчера утром|Вчера вечером",
+    past.join("|")
+  );
+}
 
 console.log(bad ? `\nпровалено: ${bad}` : "\nподробности событий работают");
 process.exit(bad ? 1 : 0);

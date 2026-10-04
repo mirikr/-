@@ -160,9 +160,24 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   const to = await p.locator("[data-subject]").nth(1).boundingBox();
   await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await p.mouse.down();
-  for (let k = 1; k <= 8; k += 1) await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + ((to.y + 3 - (from.y + from.height / 2)) * k) / 8);
+  for (let k = 1; k <= 8; k += 1) {
+    await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + ((to.y + 3 - (from.y + from.height / 2)) * k) / 8);
+    if (k !== 5) continue;
+    // На полпути: предмет поднят и едет за мышью, соседи расступились.
+    await p.waitForTimeout(250);
+    const mid = await p.evaluate(() => {
+      const lifted = document.querySelector("[data-lifted]");
+      const moved = [...document.querySelectorAll("[data-sortable-item]")].filter((el) => !el.dataset.lifted && el.style.transform.includes("translateY"));
+      return { name: lifted && lifted.dataset.sortableItem, top: lifted && lifted.getBoundingClientRect().top, shadow: lifted && getComputedStyle(lifted).boxShadow, moved: moved.length };
+    });
+    const expectTop = from.y + ((to.y + 3 - (from.y + from.height / 2)) * 5) / 8;
+    want("перетаскивание: предмет поднят и едет за мышью", mid.name === "Химия" && Math.abs(mid.top - expectTop) < 14 && mid.shadow !== "none", JSON.stringify({ ...mid, expectTop: Math.round(expectTop) }));
+    want("перетаскивание: соседи расступаются", mid.moved >= 1, "сдвинуто " + mid.moved);
+    if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + "/drag-notebook.png" });
+  }
   await p.mouse.up();
   await p.waitForTimeout(200);
+  want("отпустили — ничего не висит в воздухе", (await p.locator("[data-lifted]").count()) === 0);
   const all = await p.locator("[data-subject]").evaluateAll((els) => els.map((e) => e.dataset.subject));
   want("мышью: предмет встал под закреплённый", all[0] === "История" && all[1] === "Химия", all.slice(0, 3).join(","));
 
@@ -349,6 +364,90 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   want("телефон: метки и порядок помещаются", wideS <= 375, wideS + " px");
   if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + "/sort-phone.png" });
   want("сортировка: ошибок нет", errs.length === 0, errs[0] || "");
+  await c.close();
+}
+
+// Булавка у открытого предмета и подсветка открытого и того, что под курсором (1.7.2).
+{
+  const c = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const p = await c.newPage();
+  p.setDefaultTimeout(5000);
+  const errs = [];
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.addInitScript(() => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "notes");
+    const subs = ["Право", "Экономика", "Политология"].map((n, i) => ({ id: "c" + i, name: n, color: ["#C0563B", "#3F8F6A", "#5B7FBF"][i], topics: [] }));
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify({ journal: [], customSubjects: subs }), updatedAt: Date.now() - 1000 }));
+  });
+  await p.goto(URL0);
+  await p.waitForTimeout(2000);
+  await p.locator(".ap-notes-subject", { hasText: "Политология" }).click();
+  await p.waitForTimeout(300);
+  const bg = (sel) => p.locator(sel).first().evaluate((el) => getComputedStyle(el).backgroundColor);
+  const onBg = await bg('.ap-notes-subject[aria-current="true"]');
+  const offBg = await bg('.ap-notes-subject:not([aria-current="true"])');
+  want("тетради: открытый предмет подсвечен", onBg !== offBg && !/rgba\(0, 0, 0, 0\)/.test(onBg), onBg + " / " + offBg);
+  await p.locator(".ap-notes-subject", { hasText: "Право" }).hover();
+  await p.waitForTimeout(250);
+  const hoverBg = await p.locator(".ap-notes-subject", { hasText: "Право" }).evaluate((el) => getComputedStyle(el).backgroundColor);
+  want("тетради: под курсором — тоже подсветка", !/rgba\(0, 0, 0, 0\)/.test(hoverBg) && hoverBg !== "transparent", hoverBg);
+  await p.getByRole("button", { name: "Закрепить: Политология" }).click();
+  await p.waitForTimeout(300);
+  const firstN = (await p.locator(".ap-notes-subject").first().innerText()).trim();
+  want("тетради: булавка у открытого предмета закрепляет его", /^Политология/.test(firstN) && (await p.getByRole("button", { name: "Открепить: Политология" }).count()) >= 1, firstN);
+  await p.getByRole("button", { name: "Открепить: Политология" }).first().click();
+  await p.waitForTimeout(300);
+  want("тетради: и открепляет обратно", (await p.getByText("Закреплённые", { exact: true }).count()) === 0);
+
+  // «Самостоятельная подготовка»: тот же порядок, булавки и перетаскивание.
+  await p.evaluate(() => localStorage.setItem("planner-screen", "study"));
+  await p.reload();
+  await p.waitForTimeout(1800);
+  const studyOrder = async () =>
+    (await p.locator(".ap-study-row").allInnerTexts()).map((t) => t.split("\n")[0].trim()).filter((n) => ["Право", "Экономика", "Политология"].includes(n)).join(",");
+  want("подготовка: порядок как был", (await studyOrder()) === "Право,Экономика,Политология", await studyOrder());
+  await p.locator(".ap-study-row", { hasText: "Экономика" }).click();
+  await p.waitForTimeout(300);
+  const sOn = await bg(".ap-study-row.is-on");
+  const sOff = await bg(".ap-study-row:not(.is-on)");
+  want("подготовка: открытый предмет подсвечен", sOn !== sOff, sOn + " / " + sOff);
+  await p.getByRole("button", { name: "Закрепить: Экономика" }).click();
+  await p.waitForTimeout(300);
+  want("подготовка: булавка у открытого предмета — наверх", (await studyOrder()) === "Экономика,Право,Политология", await studyOrder());
+  await p.getByRole("button", { name: "Изменить порядок предметов" }).click();
+  await p.waitForTimeout(300);
+  const rows = p.locator("[data-study-subject]");
+  want("подготовка: карандаш — правка с ручками и булавками", (await rows.count()) === 3 && (await p.getByRole("button", { name: "Перетащить: Политология" }).count()) === 1);
+  const a = await p.locator('[data-study-subject="Политология"]').boundingBox();
+  const b = await p.locator('[data-study-subject="Право"]').boundingBox();
+  await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await p.mouse.down();
+  for (let k = 1; k <= 8; k += 1) await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2 + ((b.y + 2 - (a.y + a.height / 2)) * k) / 8);
+  const liftedStudy = await p.locator("[data-lifted]").getAttribute("data-sortable-item").catch(() => "");
+  want("подготовка: предмет поднят при перетаскивании", liftedStudy === "Политология", liftedStudy);
+  await p.mouse.up();
+  await p.waitForTimeout(300);
+  const order2 = await rows.evaluateAll((els) => els.map((e) => e.dataset.studySubject).join(","));
+  want("подготовка: перетащили — встал на новое место", order2 === "Экономика,Политология,Право", order2);
+  await p.getByRole("button", { name: "Закрепить: Право" }).click();
+  await p.waitForTimeout(300);
+  await p.getByRole("button", { name: "Готово" }).click();
+  await p.waitForTimeout(1500);
+  want("подготовка: закреплённые наверху", (await studyOrder()) === "Экономика,Право,Политология", await studyOrder());
+  await p.reload();
+  await p.waitForTimeout(1800);
+  want("подготовка: порядок пережил перезагрузку", (await studyOrder()) === "Экономика,Право,Политология", await studyOrder());
+  const stored = await p.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).studyOrder);
+  want("подготовка: порядок в записях", stored && stored.pinned && stored.pinned.join(",") === "c1,c0", JSON.stringify(stored));
+  if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + "/study-order.png" });
+  await p.emulateMedia({ colorScheme: "dark" });
+  await p.waitForTimeout(400);
+  if (process.env.SHOT_DIR) await p.screenshot({ path: process.env.SHOT_DIR + "/study-order-dark.png" });
+  want("подготовка и булавки: ошибок нет", errs.length === 0, errs[0] || "");
   await c.close();
 }
 

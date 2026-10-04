@@ -3,6 +3,7 @@ import RichText from "./rich-text.jsx";
 import MoreMenu from "./more-menu.jsx";
 import { Attachments } from "./notebook.jsx";
 import { removeAttachment } from "./files.js";
+import { dropFileTo, useFileDropTarget } from "./file-drag.js";
 
 // Тетрадь в две панели: слева оглавление (блоки и ветки), справа открытая
 // ветка на всю оставшуюся ширину. Раньше блоки и ветки раскрывались гармошкой
@@ -26,7 +27,9 @@ function isBranchEmpty(branch) {
 
 const newId = (p) => p + "-" + Date.now() + "-" + Math.round(Math.random() * 1000);
 
-export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, prefix, focus, compact }) {
+// dragKey — ключ тетради (как в notebooks): с ним файлы перетаскиваются мышью
+// между ветками, блоками и предметами (file-drag.js).
+export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, prefix, focus, compact, onPin, dragKey }) {
   const list = blocks || [];
   const [sel, setSel] = useState(null); // { blockId, branchId }
   const [view, setView] = useState("outline");
@@ -188,6 +191,21 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
             <div style={S.ownerRow}>
               <span style={{ ...S.ownerDot, background: owner.color }} />
               <span style={S.ownerName}>{owner.name}</span>
+              {onPin && (
+                <button
+                  type="button"
+                  onClick={onPin}
+                  aria-pressed={!!owner.pinned}
+                  aria-label={(owner.pinned ? "Открепить: " : "Закрепить: ") + owner.name}
+                  title={owner.pinned ? "Открепить — вернуть в общий список" : "Закрепить наверху списка"}
+                  style={{ ...S.ownerPin, ...(owner.pinned ? S.ownerPinOn : null) }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill={owner.pinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 3h6l-1 6 4 4H6l4-4-1-6z" />
+                    <path d="M12 13v8" />
+                  </svg>
+                </button>
+              )}
             </div>
             <div style={S.ownerMeta}>
               {list.length ? `${list.length} ${word(list.length, "блок", "блока", "блоков")} · ${branchCount} ${word(branchCount, "ветка", "ветки", "веток")}` : "Тетрадь пока пустая"}
@@ -218,7 +236,10 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
             const isOpen = q ? true : closed[block.id] !== true;
             return (
               <div key={block.id} data-focus-id={"block:" + block.id} style={S.block}>
-                <div style={S.blockHead}>
+                <DropZone
+                  onSpring={dragKey ? () => setClosed((p) => ({ ...p, [block.id]: false })) : null}
+                  render={(dp) => (
+                <div {...dp} style={S.blockHead}>
                   <button
                     type="button"
                     onClick={() => setClosed((p) => ({ ...p, [block.id]: isOpen }))}
@@ -260,13 +281,19 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
                     ]}
                   />
                 </div>
+                  )}
+                />
                 {isOpen && (
                   <div style={S.branches}>
                     {shown.map((r) => {
                       const on = current && current.branch.id === r.id;
                       return (
-                        <button
+                        <DropZone
                           key={r.id}
+                          onDrop={dragKey ? () => dropFileTo({ ownerKey: dragKey, blockId: block.id, branchId: r.id }) : null}
+                          render={(dp) => (
+                        <button
+                          {...dp}
                           type="button"
                           data-focus-id={"branch:" + r.id}
                           onClick={() => {
@@ -283,6 +310,8 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
                           </span>
                           {(r.files || []).length > 0 && <ClipIcon />}
                         </button>
+                          )}
+                        />
                       );
                     })}
                     {adding === block.id ? (
@@ -312,6 +341,7 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
         {current ? (
           <Editor
             key={current.branch.id}
+            dragKey={dragKey}
             owner={owner}
             block={current.block}
             branch={current.branch}
@@ -336,7 +366,14 @@ export default function NotebookWorkspace({ owner, blocks, onChange, onUndo, pre
   );
 }
 
-function Editor({ owner, block, branch, prefix, onUndo, onBack, onPatch, onRemove }) {
+// Цель для файла, перетаскиваемого мышью: render получает свойства, которые
+// надо повесить на элемент (ветку, заголовок блока).
+function DropZone({ onDrop, onSpring, render }) {
+  const [props] = useFileDropTarget({ onDrop, onSpring });
+  return render(onDrop || onSpring ? props : {});
+}
+
+function Editor({ owner, block, branch, prefix, onUndo, onBack, onPatch, onRemove, dragKey }) {
   const files = branch.files || [];
   return (
     <div style={S.editorInner}>
@@ -378,6 +415,8 @@ function Editor({ owner, block, branch, prefix, onUndo, onBack, onPatch, onRemov
           onUndo={onUndo}
           subject={owner ? owner.name : ""}
           where={(owner ? owner.name + " › " : "") + block.title + " › " + branch.title}
+          dragSource={dragKey ? { kind: "notebook", ownerKey: dragKey, blockId: block.id, branchId: branch.id } : null}
+          dropTarget={dragKey ? { ownerKey: dragKey, blockId: block.id, branchId: branch.id } : null}
         />
       </div>
     </div>
@@ -413,7 +452,12 @@ const S = {
   ownerHead: { padding: "0 6px" },
   ownerRow: { display: "flex", alignItems: "center", gap: 10 },
   ownerDot: { width: 10, height: 10, borderRadius: "50%", flexShrink: 0 },
-  ownerName: { fontFamily: "var(--serif)", fontSize: 23, lineHeight: 1.2 },
+  ownerName: { fontFamily: "var(--serif)", fontSize: 23, lineHeight: 1.2, flex: 1, minWidth: 0 },
+  ownerPin: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, padding: 0, flexShrink: 0,
+    border: "1px solid var(--line)", borderRadius: 9, background: "transparent", color: "var(--ink3)", cursor: "pointer",
+  },
+  ownerPinOn: { background: "var(--btnBg)", borderColor: "var(--btnBg)", color: "var(--btnInk)" },
   ownerMeta: { fontSize: 13, color: "var(--ink3)", marginTop: 4 },
   search: {
     display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px",

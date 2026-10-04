@@ -4,6 +4,7 @@ import { stampState, mergeStates, mergeSerialized } from "./sync-state.js";
 import Notebook, { Attachments, FileGrid, sameFile } from "./notebook.jsx";
 import NotebookSubjects, { Badges as SubjectBadges } from "./notebook-subjects.jsx";
 import { orderOwners, togglePin, moveOwner, ownerMeta, setSort } from "./notebook-order.js";
+import SortableList from "./sortable-list.jsx";
 import RichText from "./rich-text.jsx";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
@@ -12,7 +13,7 @@ import { sequenceItems } from "./calendar-seq.js";
 import { newFeedToken, publishFeed, feedUrls, removeFeed } from "./calendar-feed.js";
 import AutoGrow from "./auto-grow.jsx";
 import EventDetails from "./event-details.jsx";
-import { eventDescription, eventLinks, eventTime, linkLabel, splitLinks } from "./event-details.js";
+import { byDateTime, eventDescription, eventLinks, eventTime, linkLabel, splitLinks } from "./event-details.js";
 import CalendarHowTo, { CalendarSyncNote } from "./calendar-howto.jsx";
 import { Rail, ScreenHead, TabBar, Countdowns, Icon } from "./shell.jsx";
 import DesignIntroDialog, { DESIGN_INTRO_KEY, DESIGN_INTRO_VERSION } from "./design-intro.jsx";
@@ -42,6 +43,8 @@ import { BANK_SUBJECTS } from "./fipi-index.js";
 import { VOSH_SUBJECTS } from "./vosh-index.js";
 import { goalMinutesFor, withDaily } from "./budget-history.js";
 import { FileLibraryContext, PickExistingButton } from "./file-picker.jsx";
+import { setFileDropHandler } from "./file-drag.js";
+import { moveFile, undoMove } from "./file-move.js";
 import { collectFiles, fileId, fileInUse } from "./file-library.js";
 import { cheapestGoal, dayCounts, offerFor, subjectsByTask, trainerDays, trainerEntries } from "./trainer-time.js";
 import { loadFind } from "./bank-load.js";
@@ -622,12 +625,15 @@ export default function StudyPlanner() {
   const [notebooks, setNotebooks] = useState({});
   // Закреплённые предметы и порядок списка в «Тетрадях»: см. src/notebook-order.js.
   const [notebookOrder, setNotebookOrder] = useState({});
+  // Порядок и закреплённые предметы «Самостоятельной подготовки» — так же, как в тетрадях.
+  const [studyOrder, setStudyOrder] = useState({});
   // На телефоне: открыт ли список предметов для закрепления и перестановки.
   const [notesOrderOpen, setNotesOrderOpen] = useState(false);
   const [subjectTab, setSubjectTab] = useState({});
   const [openSubject, setOpenSubject] = useState(null);
   // «Подготовка» на телефоне — два шага: список предметов, потом предмет.
   const [studyView, setStudyView] = useState("list");
+  const [studyEditing, setStudyEditing] = useState(false);
   const studyGridRef = useRef(null);
   // Скрыть пройденные уроки — удобство этого устройства, в облако не едет.
   const [hideDone, setHideDone] = useState(() => {
@@ -856,6 +862,7 @@ export default function StudyPlanner() {
           if (parsed.events) setEvents(parsed.events);
           if (parsed.notebooks) setNotebooks(parsed.notebooks);
           if (parsed.notebookOrder) setNotebookOrder(parsed.notebookOrder);
+          if (parsed.studyOrder) setStudyOrder(parsed.studyOrder);
           if (parsed.customSubjects) setCustomSubjects(parsed.customSubjects);
           if (parsed.hiddenSubjects) setHiddenSubjects(parsed.hiddenSubjects);
           if (parsed.subjectColors) setSubjectColors(parsed.subjectColors);
@@ -983,6 +990,7 @@ export default function StudyPlanner() {
     events,
     notebooks,
     notebookOrder,
+    studyOrder,
     customSubjects,
     hiddenSubjects,
     subjectColors,
@@ -1043,7 +1051,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, notebookOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, trainerState, bankMarks, loaded]);
+  }, [data, journal, budget, events, notebooks, notebookOrder, studyOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, trainerState, bankMarks, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1094,10 +1102,10 @@ export default function StudyPlanner() {
   );
 
   // Событие сегодня — не строчка в списке «ближайших»: сегодня оно и есть день.
-  const todayEvents = useMemo(() => allEvents.filter((e) => e.date === todayStr()), [allEvents]);
+  const todayEvents = useMemo(() => allEvents.filter((e) => e.date === todayStr()).sort((a, b) => byDateTime(a, b)), [allEvents]);
 
   const upcomingEvents = useMemo(
-    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => a.date.localeCompare(b.date)),
+    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) >= 0).sort((a, b) => byDateTime(a, b)),
     [allEvents]
   );
 
@@ -1106,11 +1114,14 @@ export default function StudyPlanner() {
   const laterEvents = useMemo(() => upcomingEvents.filter((e) => e.date !== todayStr()), [upcomingEvents]);
 
   const pastEvents = useMemo(
-    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => b.date.localeCompare(a.date)),
+    () => allEvents.filter((e) => e.date && daysUntilDate(e.date) < 0).sort((a, b) => byDateTime(a, b, true)),
     [allEvents]
   );
 
   const nextEvent = upcomingEvents[0] || null;
+  // В «Отсчёте» крупно — все события ближайшего дня, по времени; ниже — остальные.
+  const leadEvents = useMemo(() => (nextEvent ? upcomingEvents.filter((e) => e.date === nextEvent.date) : []), [upcomingEvents, nextEvent]);
+  const restEvents = useMemo(() => (nextEvent ? upcomingEvents.filter((e) => e.date !== nextEvent.date) : []), [upcomingEvents, nextEvent]);
 
   // Planning is measured against the event that matters most, not the closest one: a minor
   // olympiad next week must not redefine how much time is left for the exam that counts.
@@ -2555,6 +2566,10 @@ export default function StudyPlanner() {
   }, [ALL_SUBJECTS, lyceumSubjectNames, subjectColors, lyceumSchedule, screen]);
 
   const orderedOwners = useMemo(() => orderOwners(notebookOwners, notebookOrder), [notebookOwners, notebookOrder]);
+  // Предметы подготовки в своём порядке: закреплённые наверху, дальше — как
+  // расставлены (те же правила, что у тетрадей, ключ — id предмета).
+  const studyOwners = useMemo(() => ALL_SUBJECTS.map((x) => ({ ...x, key: x.id })), [ALL_SUBJECTS]);
+  const orderedStudy = useMemo(() => orderOwners(studyOwners, studyOrder), [studyOwners, studyOrder]);
 
   // Все загруженные файлы — для окна «Выбрать из загруженных» у заданий и в
   // тетрадях. Файл хранится один раз, а показан может быть в нескольких местах.
@@ -2570,6 +2585,28 @@ export default function StudyPlanner() {
     setFileInUse((att) => !!liveState.current && fileInUse(liveState.current, att));
     return () => setFileInUse(null);
   }, []);
+
+  // Файл, перетащенный мышью на ветку или предмет тетради (file-drag.js). Из
+  // другой ветки он переезжает, от задания — появляется и в тетради, а у
+  // задания остаётся. Уведомление говорит, куда он встал, и «Вернуть» отменяет.
+  useEffect(() => {
+    setFileDropHandler((drag, target) => {
+      const res = moveFile((liveState.current && liveState.current.notebooks) || {}, drag, target);
+      if (!res) return;
+      setNotebooks(res.notebooks);
+      if (target.ownerKey !== notebookOwner && screen === "notes" && !target.inbox) setNotebookOwner(target.ownerKey);
+      const owner = notebookOwners.find((o) => o.key === target.ownerKey);
+      const where = [owner ? owner.name : "", res.placed.block.title, res.placed.branch.title || "Без названия"].filter(Boolean).join(" › ");
+      const name = "«" + (drag.file.name || "файл") + "»";
+      const msg = !res.added
+        ? `Файл ${name} уже был в «${where}»` + (res.moved ? " — из прежней ветки убран" : "")
+        : res.moved
+          ? `Файл ${name} перенесён в «${where}»`
+          : `Файл ${name} добавлен в «${where}» — у задания он тоже остался`;
+      showUndo(msg, () => setNotebooks((prev) => undoMove(prev, res)));
+    });
+  });
+  useEffect(() => () => setFileDropHandler(null), []);
   const currentNotebook = orderedOwners.find((o) => o.key === notebookOwner) || orderedOwners[0] || null;
 
   // Опись заданий банка для поиска: номер, предмет и начало условия. Она
@@ -2962,11 +2999,19 @@ export default function StudyPlanner() {
            строк подряд читались как сплошная рябь. Подчёркивание — под курсором. */
         .topic-row a.lesson-link { text-decoration: none; }
         .topic-row a.lesson-link:hover { text-decoration: underline; text-decoration-color: currentColor; }
-        .ap-study-row { background: transparent; transition: background .15s ease; }
-        .ap-study-row:hover, .ap-study-row.is-on { background: var(--neutralBg); }
+        .ap-study-row, .ap-notes-subject { background: transparent; transition: background .15s ease, box-shadow .15s ease; }
+        /* Под курсором — лёгкий фон, открытый — фон плотнее и полоска цветом
+           предмета слева. Прежний --neutralBg в ночной теме почти совпадал с
+           карточкой, и было не видно, какой предмет открыт. */
+        /* Цель для файла, который тащат мышью: ветка, предмет, открытая ветка. */
+        [data-drop-over="true"] { outline: 2px dashed var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 12%, transparent) !important; }
+        .ap-study-row:hover, .ap-notes-subject:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+        .ap-study-row.is-on, .ap-notes-subject[aria-current="true"] {
+          background: color-mix(in srgb, var(--ink) 11%, transparent);
+          box-shadow: inset 3px 0 0 var(--c, var(--accent));
+        }
         .ap-menu-item:hover { background: var(--neutralBg) !important; }
         .ap-nbw-branch:hover:not([aria-current]) { background: var(--line2) !important; }
-        .ap-notes-subject:hover { background: var(--line2); }
         .ap-nbw.is-compact { grid-template-columns: 264px minmax(0, 1fr) !important; }
         .ap-notes-chips { display: none; }
         .ap-notes-order { display: none; }
@@ -3579,31 +3624,45 @@ export default function StudyPlanner() {
               <div style={styles.cardTitle}>Отсчёт</div>
               {nextEvent ? (
                 <>
-                  <div
-                    style={{
-                      ...styles.countdownLead,
-                      borderLeftColor: priorityInfo(nextEvent.priority).strong,
-                      background: priorityInfo(nextEvent.priority).tint,
-                    }}
-                  >
-                    <div style={styles.countdownNum}>{daysUntilDate(nextEvent.date)}</div>
-                    <div style={styles.countdownLeadText}>
-                      <div style={styles.countdownLabel}>{daysWord(daysUntilDate(nextEvent.date))} до события</div>
-                      <div style={styles.countdownEvent}>
-                        <PriorityMark value={nextEvent.priority} height={13} />
-                        <span>{nextEvent.name}</span>
+                  {(() => {
+                    const top = leadEvents.reduce((best, e) => (Number(e.priority) > Number(best.priority) ? e : best), leadEvents[0]);
+                    const left = daysUntilDate(nextEvent.date);
+                    const many = leadEvents.length > 1;
+                    return (
+                      <div
+                        data-countdown-lead
+                        style={{
+                          ...styles.countdownLead,
+                          borderLeftColor: priorityInfo(top.priority).strong,
+                          background: priorityInfo(top.priority).tint,
+                        }}
+                      >
+                        <div style={styles.countdownNum}>{left}</div>
+                        <div style={styles.countdownLeadText}>
+                          <div style={styles.countdownLabel}>
+                            {daysWord(left)} {many ? "до событий · " + formatEventDate(nextEvent.date) : "до события"}
+                          </div>
+                          {leadEvents.map((e, i) => (
+                            <div key={e.id} data-countdown-event={e.name} style={many && i ? styles.countdownNextOne : null}>
+                              <div style={styles.countdownEvent}>
+                                <PriorityMark value={e.priority} height={13} />
+                                <span>{e.name}</span>
+                              </div>
+                              <div style={styles.countdownDate}>
+                                {many ? null : formatEventDate(e.date)}
+                                {eventTime(e) && <b style={styles.countdownTime}>{many ? "" : " · "}{eventTime(e)}</b>}
+                                {e.place && <span>{many && !eventTime(e) ? "" : " · "}{e.place}</span>}
+                                {mainEvent && mainEvent.id === e.id && <span style={styles.countdownPlan}>план</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div style={styles.countdownDate}>
-                        {formatEventDate(nextEvent.date)}
-                        {eventTime(nextEvent) && <b style={styles.countdownTime}> · {eventTime(nextEvent)}</b>}
-                        {nextEvent.place && <span> · {nextEvent.place}</span>}
-                        {mainEvent && mainEvent.id === nextEvent.id && <span style={styles.countdownPlan}>план</span>}
-                      </div>
-                    </div>
-                  </div>
-                  {upcomingEvents.length > 1 && (
+                    );
+                  })()}
+                  {restEvents.length > 0 && (
                     <div style={styles.countdownRest}>
-                      {upcomingEvents.slice(1).map((e) => {
+                      {restEvents.map((e) => {
                         const left = daysUntilDate(e.date);
                         return (
                           <div key={e.id} style={styles.countdownRestRow}>
@@ -3780,7 +3839,7 @@ export default function StudyPlanner() {
                 ширину. Раньше открытый предмет раскрывался внутри узкой карточки сетки
                 в три колонки, каждый урок занимал две строки, а рядом было пусто. */}
             {ALL_SUBJECTS.length > 0 && (() => {
-              const s = ALL_SUBJECTS.find((x) => x.id === openSubject) || ALL_SUBJECTS[0];
+              const s = ALL_SUBJECTS.find((x) => x.id === openSubject) || orderedStudy[0] || ALL_SUBJECTS[0];
               const st = stats.perSubject[s.id] || { done: 0, total: 0, pct: 0 };
               const allTopics = [
                 ...subjectData(data, s.id).topics.map((t) => ({ ...t, custom: false })),
@@ -3811,7 +3870,55 @@ export default function StudyPlanner() {
                 <div className="ap-study" data-view={studyView} ref={studyGridRef} style={styles.studyGrid}>
                   <div className="ap-study-list" style={styles.studyLeft}>
                     <nav aria-label="Предметы" className="ap-card" style={styles.studyList}>
-                      {ALL_SUBJECTS.map((x) => {
+                      <div style={styles.studyListHead}>
+                        <span style={styles.studyListTitle}>Предметы</span>
+                        <button
+                          type="button"
+                          onClick={() => setStudyEditing((v) => !v)}
+                          style={{ ...styles.studyEditBtn, ...(studyEditing ? styles.studyEditBtnOn : null) }}
+                          aria-pressed={studyEditing}
+                          aria-label={studyEditing ? "Готово" : "Изменить порядок предметов"}
+                          title={studyEditing ? "Готово" : "Закрепить и расставить предметы"}
+                        >
+                          {studyEditing ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z" /><path d="M13.5 6.5l4 4" /></svg>
+                          )}
+                        </button>
+                      </div>
+                      {studyEditing && (
+                        <>
+                          <div style={styles.studyEditHint}>Булавка поднимает предмет наверх. Порядок — перетаскиванием за ⋮⋮.</div>
+                          <SortableList
+                            items={orderedStudy}
+                            keyOf={(x) => x.id}
+                            labelOf={(x) => x.name}
+                            groupOf={(x) => (x.pinned ? 0 : 1)}
+                            gap={2}
+                            onMove={(from, to) => setStudyOrder((prev) => moveOwner(prev, studyOwners, from, to))}
+                            renderItem={(x, { handleProps }) => (
+                              <div data-study-subject={x.name} style={styles.studyEditRow}>
+                                <span {...handleProps}>⋮⋮</span>
+                                <span style={{ ...styles.dot, width: 9, height: 9, background: x.color }} />
+                                <span style={styles.studyRowName}>{x.name}</span>
+                                <button
+                                  type="button"
+                                  data-nodrag
+                                  onClick={() => setStudyOrder((prev) => togglePin(prev, studyOwners, x.id))}
+                                  style={{ ...styles.studyEditBtn, ...(x.pinned ? styles.studyEditBtnOn : null) }}
+                                  aria-pressed={x.pinned}
+                                  aria-label={(x.pinned ? "Открепить: " : "Закрепить: ") + x.name}
+                                  title={x.pinned ? "Открепить" : "Закрепить наверху"}
+                                >
+                                  <PinGlyph filled={x.pinned} />
+                                </button>
+                              </div>
+                            )}
+                          />
+                        </>
+                      )}
+                      {!studyEditing && orderedStudy.map((x, xi) => {
                         const xs = stats.perSubject[x.id] || { done: 0, total: 0, pct: 0 };
                         const on = x.id === s.id;
                         return (
@@ -3821,11 +3928,16 @@ export default function StudyPlanner() {
                             onClick={() => pickSubject(x.id)}
                             aria-current={on ? "true" : undefined}
                             className={"ap-study-row" + (on ? " is-on" : "")}
-                            style={styles.studyRow}
+                            style={{ "--c": x.color, ...styles.studyRow, ...(xi > 0 && !x.pinned && orderedStudy[xi - 1].pinned ? styles.studyAfterPinned : null) }}
                           >
                             <span style={styles.studyRowTop}>
                               <span style={{ ...styles.dot, width: 9, height: 9, background: x.color }} />
                               <span style={styles.studyRowName}>{x.name}</span>
+                              {x.pinned && (
+                                <span style={styles.studyPinMark} title="Закреплён" aria-label="закреплён">
+                                  <PinGlyph filled />
+                                </span>
+                              )}
                               <span style={styles.studyRowCount}>{xs.total ? xs.done + "/" + xs.total : "нет уроков"}</span>
                               <svg className="ap-mobile-only" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--mute)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
                             </span>
@@ -3865,6 +3977,21 @@ export default function StudyPlanner() {
                     <div style={styles.studyHead}>
                       <span style={{ ...styles.dot, width: 12, height: 12, background: s.color }} />
                       <h2 style={styles.studyTitle}>{s.name}</h2>
+                      {(() => {
+                        const pinned = !!(orderedStudy.find((x) => x.id === s.id) || {}).pinned;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setStudyOrder((prev) => togglePin(prev, studyOwners, s.id))}
+                            aria-pressed={pinned}
+                            aria-label={(pinned ? "Открепить: " : "Закрепить: ") + s.name}
+                            title={pinned ? "Открепить — вернуть в общий список" : "Закрепить наверху списка"}
+                            style={{ ...styles.studyEditBtn, ...styles.studyHeadPin, ...(pinned ? styles.studyEditBtnOn : null) }}
+                          >
+                            <PinGlyph filled={pinned} size={15} />
+                          </button>
+                        );
+                      })()}
                       <span className="ap-study-meta" style={styles.studyMeta}>
                         {st.total ? `${st.done} из ${st.total} · ${st.pct}%` : "уроков пока нет"}
                         {subjectHours ? ` · ${hoursLabel(subjectHours)}` : ""}
@@ -3998,6 +4125,7 @@ export default function StudyPlanner() {
                           owner={{ name: s.name, color: s.color }}
                           blocks={notebooks["subj:" + s.id] || []}
                           onChange={(blocks) => setNotebook("subj:" + s.id, blocks)}
+                          dragKey={"subj:" + s.id}
                           onUndo={showUndo}
                           prefix={"subj-" + s.id}
                         />
@@ -4435,6 +4563,8 @@ export default function StudyPlanner() {
               {currentNotebook ? (
                 <NotebookWorkspace
                   owner={currentNotebook}
+                  dragKey={currentNotebook.key}
+                  onPin={() => setNotebookOrder((prev) => togglePin(prev, notebookOwners, currentNotebook.key))}
                   blocks={notebooks[currentNotebook.key] || []}
                   focus={notebookFocus}
                   onChange={(blocks) => setNotebook(currentNotebook.key, blocks)}
@@ -5454,6 +5584,16 @@ function LessonTasks({ list, due, folded, onFold, onToggle }) {
   );
 }
 
+// Булавка «закрепить наверху» — в списке подготовки и у открытого предмета.
+function PinGlyph({ filled, size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 3h6l-1 6 4 4H6l4-4-1-6z" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
 // Что ленте «Лицея» (src/school-day.jsx) нужно отсюда: карточки правки,
 // формы добавления и то, как здесь выглядят важность, роль и экзамены.
 // Передаётся объектом, а не импортом: этот файл сам импортирует ленту.
@@ -6069,7 +6209,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, 
       </div>
       {(hw.attachments || []).length > 0 && (
         <div style={styles.attachmentsRow}>
-          <FileGrid files={hw.attachments} onDownload={onOpenAttachment} onRemove={onRemoveAttachment} />
+          <FileGrid files={hw.attachments} onDownload={onOpenAttachment} onRemove={onRemoveAttachment} dragSource={{ kind: "homework", id: hw.id }} />
         </div>
       )}
       <div style={styles.hwReminderRow}>
@@ -6203,6 +6343,21 @@ const styles = {
   studyRow: { display: "block", width: "100%", padding: "11px 12px 12px", border: "none", borderRadius: 12, textAlign: "left", color: "var(--ink)", cursor: "pointer" },
   studyRowTop: { display: "flex", alignItems: "center", gap: 10 },
   studyRowName: { flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500 },
+  studyListHead: { display: "flex", alignItems: "center", gap: 8, padding: "4px 6px 6px 12px" },
+  studyListTitle: { flex: 1, fontSize: 12, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
+  studyEditBtn: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, padding: 0, flexShrink: 0,
+    border: "1px solid var(--line)", borderRadius: 8, background: "transparent", color: "var(--ink3)", cursor: "pointer",
+  },
+  studyEditBtnOn: { background: "var(--btnBg)", borderColor: "var(--btnBg)", color: "var(--btnInk)" },
+  studyEditHint: { fontSize: 12, color: "var(--ink3)", lineHeight: 1.45, padding: "0 10px 8px" },
+  studyEditRow: {
+    display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 2px", border: "1px solid var(--line2)", borderRadius: 10,
+    background: "var(--panel)",
+  },
+  studyPinMark: { display: "inline-flex", color: "var(--ink3)" },
+  studyHeadPin: { width: 40, height: 40, borderRadius: 10 },
+  studyAfterPinned: { marginTop: 6, boxShadow: "inset 0 1px 0 var(--line2)", borderRadius: "0 0 12px 12px" },
   studyRowCount: { fontSize: 12.5, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
   studyRowTrack: { display: "block", height: 4, borderRadius: 999, background: "var(--line2)", margin: "8px 0 0 19px", overflow: "hidden" },
   studyRowFill: { display: "block", height: "100%", borderRadius: 999 },
@@ -6541,6 +6696,7 @@ const styles = {
   },
   countdownDate: { fontSize: 12, color: "var(--ink3)", marginTop: 3 },
   countdownTime: { color: "var(--ink2)" },
+  countdownNextOne: { marginTop: 9, paddingTop: 9, borderTop: "1px solid var(--line2)" },
   countdownRest: { marginTop: 12, display: "flex", flexDirection: "column" },
   countdownRestRow: {
     display: "flex",
