@@ -735,8 +735,8 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                           <div style={S.rosterName}>
                             <div style={S.rosterText}>
                               <div style={S.nameRow}>
-                                <input value={st.last ?? ""} placeholder="Фамилия" onChange={(e) => editStudent(st.id, { last: e.target.value })} aria-label={"Фамилия: " + studentName(st)} style={{ ...S.nameInput, width: "auto", flex: "0 1 auto", fieldSizing: "content", minWidth: 48, maxWidth: "70%" }} />
-                                <input value={st.first ?? ""} placeholder="Имя" onChange={(e) => editStudent(st.id, { first: e.target.value })} aria-label={"Имя: " + studentName(st)} style={{ ...S.nameInput, fontWeight: 500 }} />
+                                <input value={st.last ?? ""} placeholder="Фамилия" onChange={(e) => editStudent(st.id, { last: e.target.value })} aria-label={"Фамилия: " + studentName(st)} style={S.nameInput} />
+                                <input value={st.first ?? ""} placeholder="Имя" onChange={(e) => editStudent(st.id, { first: e.target.value })} aria-label={"Имя: " + studentName(st)} style={{ ...S.nameInput, fontWeight: 500, fontSize: 13 }} />
                               </div>
                               <input
                                 value={st.email}
@@ -1106,7 +1106,8 @@ const S = {
   td: { padding: "6px 5px", borderBottom: "1px solid var(--line2, var(--line))", textAlign: "center" },
   sticky: { position: "sticky", left: 0, zIndex: 2, background: "var(--menuBg)", borderRight: "1px solid var(--line)", boxShadow: "4px 0 6px -4px rgba(0,0,0,.18)" },
   nameCell: { textAlign: "left", minWidth: 170, maxWidth: 230 },
-  nameRow: { display: "flex", gap: 2 },
+  // Фамилия и имя — двумя строками: в узком столбце имя иначе обрезалось.
+  nameRow: { display: "flex", flexDirection: "column" },
   rosterName: { display: "flex", alignItems: "center", gap: 4, padding: "2px 4px" },
   rosterText: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, fontSize: 13.5 },
   rosterEmail: { fontSize: 11.5, color: "var(--ink3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
