@@ -1,0 +1,28 @@
+[
+  {
+    "kind": "probe",
+    "subject": "Обществознание",
+    "title": "Пробник ЕГЭ (лицейский)",
+    "date": "2026-09-27",
+    "scale": "primsec",
+    "primary": 46,
+    "primaryMax": 58,
+    "secondary": 78,
+    "secondaryMax": 100,
+    "note": "Демо: так выглядит результат, выложенный обновлением."
+  },
+  {
+    "kind": "olympiad",
+    "subject": "Право",
+    "title": "Высшая проба",
+    "date": "2026-10-05",
+    "stage": "Отборочный",
+    "scale": "points",
+    "parts": [
+      { "name": "Тест", "score": 38, "max": 50 },
+      { "name": "Задачи", "score": 21, "max": 50 }
+    ],
+    "status": "next",
+    "threshold": 55
+  }
+]

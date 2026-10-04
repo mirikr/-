@@ -45,6 +45,13 @@ const ICON_PATHS = {
     </>
   ),
   school: <path d="M3 20.5h18M5 20.5V10l7-5 7 5v10.5M10 20.5v-5h4v5" />,
+  results: (
+    <>
+      <path d="M8 21h8M12 17v4" />
+      <path d="M7 4h10v5a5 5 0 0 1-10 0V4z" />
+      <path d="M7 6H4.5a2.5 2.5 0 0 0 2.6 3.9M17 6h2.5a2.5 2.5 0 0 1-2.6 3.9" />
+    </>
+  ),
   budget: (
     <>
       <circle cx="12" cy="12" r="8.5" />
@@ -104,7 +111,7 @@ export function Icon({ name, size = 18, strokeWidth = 1.7 }) {
 const RAIL_GROUPS = [
   { label: null, keys: ["today", "events", "journal"] },
   // Тетради — сразу за «Подготовкой»: это одна работа, конспект к пройденному уроку.
-  { label: "Учёба", keys: ["study", "notes", "trainer"] },
+  { label: "Учёба", keys: ["study", "notes", "trainer", "results"] },
   { label: "Лицей и план", keys: ["school", "budget"] },
 ];
 const RAIL_APART = ["search", "settings", "prefs"];

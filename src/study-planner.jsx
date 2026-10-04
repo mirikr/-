@@ -236,6 +236,11 @@ const SCHEDULE_NEWS_KEY = "planner-schedule-news";
 // ключи Supabase). Всё, что в ней делают, остаётся в ней и не трогает данные
 // в облаке; на сайте плашки нет.
 const SANDBOX = import.meta.env.VITE_SANDBOX === "1";
+// Раздел «Результаты» пока проверяется в предпросмотре: на сайте его нет, пока
+// не включат (VITE_RESULTS=1 или сборка предпросмотра).
+const RESULTS_ON = SANDBOX || import.meta.env.VITE_RESULTS === "1";
+// На сайте, пока раздел выключен, его код в сборку не попадает.
+const ResultsScreen = RESULTS_ON ? lazy(() => import("./results-screen.jsx")) : null;
 const TASK_FOLDS_KEY = "planner-task-folds";
 function readTaskFolds() {
   try {
@@ -717,6 +722,8 @@ export default function StudyPlanner() {
   // позвать дважды подряд.
   const [showcase, setShowcase] = useState(null);
   const [homework, setHomework] = useState([]);
+  // Свои результаты: КТ, экзамены, олимпиады, оценки за уроки (results-model.js).
+  const [results, setResults] = useState([]);
   // Тренажёр: журнал попыток и отметки о сверке ключей с банком. И то и другое —
   // список записей со своими id: так правки с телефона и ноутбука сливаются, а не
   // затирают друг друга.
@@ -737,6 +744,7 @@ export default function StudyPlanner() {
   // до чтения переменных дело не доходило.
   const [notebookOwner, setNotebookOwner] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountId, setAccountId] = useState("");
   const [accountReady, setAccountReady] = useState(false);
 
   // Готовый курс по обществознанию — личная подготовка автора приложения, а не
@@ -812,7 +820,9 @@ export default function StudyPlanner() {
   // сидит в расписании, на ноутбуке в конспектах.
   const [screen, setScreen] = useState(() => {
     try {
-      return localStorage.getItem(SCREEN_KEY) || "today";
+      const saved = localStorage.getItem(SCREEN_KEY) || "today";
+      // Раздел, выключенный в этой сборке, не открываем пустым.
+      return saved === "results" && !RESULTS_ON ? "today" : saved;
     } catch (e) {
       return "today";
     }
@@ -875,6 +885,7 @@ export default function StudyPlanner() {
           if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
+          if (parsed.results) setResults(parsed.results);
           if (parsed.trainerLog) setTrainerLog(parsed.trainerLog);
           if (parsed.trainerState) setTrainerState(parsed.trainerState);
           if (parsed.bankMarks) setBankMarks(parsed.bankMarks);
@@ -1003,6 +1014,7 @@ export default function StudyPlanner() {
     weekPlanned,
     openSections,
     homework,
+    results,
     trainerLog,
     trainerState,
     bankMarks,
@@ -1049,7 +1061,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, notebookOrder, studyOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, trainerLog, trainerState, bankMarks, loaded]);
+  }, [data, journal, budget, events, notebooks, notebookOrder, studyOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, results, trainerLog, trainerState, bankMarks, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1501,6 +1513,7 @@ export default function StudyPlanner() {
       if (parsed.weekPlanned) setWeekPlanned(parsed.weekPlanned);
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
+      if (parsed.results) setResults(parsed.results);
       // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
       // данные ушли в облако как свежие и победили то, что там лежит.
       syncSnapshot.current = null;
@@ -2808,6 +2821,7 @@ export default function StudyPlanner() {
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
     { key: "notes", label: "Тетради", hint: "" },
+    ...(RESULTS_ON ? [{ key: "results", label: "Результаты", hint: results.length ? String(results.length) : "" }] : []),
     { key: "search", label: "Поиск", hint: "" },
     { key: "settings", label: "Синхронизация", short: "Облако", hint: saveErr ? "!" : "" },
     // Настройки отделены от облака: тема и установка на устройство — это не
@@ -2824,6 +2838,7 @@ export default function StudyPlanner() {
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
+    results: ["Результаты", "КТ, экзамены, олимпиады и оценки за уроки — свои записи и официальные"],
     search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка — в том числе по номеру задания"],
     settings: ["Синхронизация", "Облако и резервная копия записей"],
     prefs: ["Настройки", "Оформление, установка на устройство и версия приложения"],
@@ -2890,10 +2905,12 @@ export default function StudyPlanner() {
       if (!alive) return;
       const user = currentUser();
       setAccountEmail(user ? user.email || "" : "");
+      setAccountId(user ? user.id || "" : "");
       setAccountReady(true);
     });
     const off = onAuthChange((session) => {
       setAccountEmail(session && session.user ? session.user.email || "" : "");
+      setAccountId(session && session.user ? session.user.id || "" : "");
     });
     return () => {
       alive = false;
@@ -4169,6 +4186,22 @@ export default function StudyPlanner() {
               );
             })()}
           </section>
+        )}
+
+        {RESULTS_ON && screen === "results" && (
+          <Suspense fallback={<section style={styles.plainBlock}><p style={styles.muted}>Загружаю…</p></section>}>
+            <ResultsScreen
+              results={results}
+              setResults={setResults}
+              subjects={Array.from(new Set([...ALL_SUBJECTS.map((x) => x.name), ...lyceumSubjectNames]))}
+              accountId={accountId}
+              accountEmail={accountEmail}
+              sandbox={SANDBOX}
+              onUndo={showUndo}
+              // Пока раздел в разработке — полностью только у владельца.
+              allowed={SANDBOX || isOwnerEmail(accountEmail)}
+            />
+          </Suspense>
         )}
 
         {screen === "trainer" && (
