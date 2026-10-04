@@ -8,7 +8,20 @@ import { KINDS, expandResults, gradeOf, kindName, olympiadStages, percentOfGrade
 // предметы — чипами сверху, под ними сводка с графиком и записи.
 
 const NARROW = "(max-width: 760px)";
+const MID = "(max-width: 1180px)";
 const DONE_STATUSES = ["next", "prize", "winner"];
+
+function useMedia(query) {
+  const [on, setOn] = useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(query).matches);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const h = () => setOn(mq.matches);
+    mq.addEventListener ? mq.addEventListener("change", h) : mq.addListener(h);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", h) : mq.removeListener(h));
+  }, [query]);
+  return on;
+}
 
 function useNarrow() {
   const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(NARROW).matches);
@@ -131,6 +144,7 @@ function olympiadState(r) {
 // при каждом переходе, чтобы повторный переход сработал.
 export default function StudentView({ items, hiddenIds, showHidden, setShowHidden, onHide, onEdit, onRemove, onAdd, mode, setMode, colorOf, onCode, focus }) {
   const narrow = useNarrow();
+  const mid = useMedia(MID);
   const [sel, setSel] = useState(() => (focus && focus.subject ? { type: "subject", name: focus.subject } : { type: "all" }));
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -325,7 +339,7 @@ export default function StudentView({ items, hiddenIds, showHidden, setShowHidde
   return (
     <div style={S.wrap} className="ap-results-b" data-layout="desktop">
       {top}
-      <div style={S.grid}>
+      <div style={{ ...S.grid, ...(mid ? { gridTemplateColumns: "240px minmax(0, 1fr)", gap: 14 } : null) }}>
         <nav aria-label="Предметы и олимпиады" className="ap-card" style={S.nav}>
           {search}
           <div style={S.navLabel}>Предметы</div>
@@ -383,7 +397,7 @@ function OlympiadNavItem({ r, color, on, onPick }) {
   const st = olympiadState(r);
   return (
     <button type="button" onClick={onPick} aria-current={on ? "true" : undefined} className="ap-rb-nav" style={{ ...S.navItem, ...S.navOlymp, ...(on ? S.navOn : null) }} data-nav-olympiad={r.title}>
-      <span style={S.navRow}>
+      <span style={{ ...S.navRow, flexWrap: "wrap", rowGap: 4 }}>
         <span style={{ ...S.dot, ...S.diamond, background: color }} />
         <span style={{ ...S.navName, fontSize: 14 }}>{r.title || "Олимпиада"}</span>
         <span style={{ ...S.badge, ...(st.badge.tone === "good" ? S.badgeGood : st.badge.tone === "bad" ? S.badgeBad : S.badgeWait) }} data-olympiad-badge>
@@ -395,7 +409,24 @@ function OlympiadNavItem({ r, color, on, onPick }) {
   );
 }
 
+// Ширина элемента — строки записей перестраиваются по месту, которое им
+// досталось, а не по ширине экрана (окно поуже, планшет).
+function useWidth() {
+  const ref = useRef(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    if (!ref.current || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver((entries) => setW(Math.round(entries[0].contentRect.width)));
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w];
+}
+
 function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubject, hidden, onEdit, onRemove, onHide, narrow, footer }) {
+  const [recRef, recWidth] = useWidth();
+  // Строке в пять столбцов нужно около 520 px; уже — как на телефоне.
+  const compactRows = narrow || (recWidth > 0 && recWidth < 520);
   const st = pageStats(list, mode);
   const grades = mode === "grades";
   const kindsHere = KINDS.filter((k) => list.some((r) => r.kind === k.id));
@@ -413,7 +444,7 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
 
   const chart = <ScoreChart rows={st.rows} mode={mode} color={color === "var(--ink)" ? "var(--ink2)" : color} height={narrow ? 120 : 176} compact={narrow} />;
   const list_ = (
-    <div style={S.records} data-records>
+    <div style={S.records} data-records ref={recRef}>
       {!narrow && (
         <div style={S.recordsHead}>
           <span style={S.recordsTitle}>Записи</span>
@@ -434,7 +465,7 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
       {rows.length === 0 ? (
         <p style={S.muted}>Записей этого вида нет.</p>
       ) : (
-        rows.map((r) => <RecordRow key={r.id} r={r} mode={mode} withSubject={withSubject} hidden={hidden.has(r.id)} onEdit={onEdit} onRemove={onRemove} onHide={onHide} narrow={narrow} />)
+        rows.map((r) => <RecordRow key={r.id} r={r} mode={mode} withSubject={withSubject} hidden={hidden.has(r.id)} onEdit={onEdit} onRemove={onRemove} onHide={onHide} narrow={compactRows} />)
       )}
       {footer}
     </div>
@@ -749,7 +780,7 @@ const S = {
   navOlymp: { gap: 3, padding: "9px 12px" },
   navOn: { background: "color-mix(in srgb, var(--ink) 9%, transparent)" },
   navRow: { display: "flex", alignItems: "center", gap: 9, width: "100%" },
-  navName: { flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, overflowWrap: "anywhere" },
+  navName: { flex: "1 1 90px", minWidth: 0, fontSize: 14.5, fontWeight: 600, overflowWrap: "break-word" },
   navValue: { fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   navBarRow: { display: "flex", alignItems: "center", gap: 8, width: "100%", paddingLeft: 18, boxSizing: "border-box" },
   navTrack: { flex: 1, height: 5, borderRadius: 3, background: "var(--line2, var(--line))", overflow: "hidden" },
@@ -763,12 +794,12 @@ const S = {
   badgeBad: { background: "var(--redBg)", color: "var(--red)" },
   badgeWait: { background: "var(--neutralBg)", color: "var(--ink3)" },
   page: { display: "flex", flexDirection: "column", gap: 14, minWidth: 0, padding: "20px 24px", borderRadius: 18, border: "1px solid var(--line)", background: "var(--panel)" },
-  pageHead: { display: "flex", alignItems: "center", gap: 12 },
-  pageTitle: { margin: 0, flex: 1, minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 28, lineHeight: 1.2 },
+  pageHead: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  pageTitle: { margin: 0, flex: "1 1 180px", minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 28, lineHeight: 1.2, overflowWrap: "break-word" },
   seg: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 10, background: "color-mix(in srgb, var(--ink) 8%, transparent)", alignSelf: "flex-start" },
   segBtn: { height: 30, padding: "0 10px", border: "none", borderRadius: 8, background: "transparent", color: "var(--ink2)", font: "inherit", fontSize: 13, cursor: "pointer" },
   segOn: { background: "var(--panel2)", color: "var(--ink)", fontWeight: 600, boxShadow: "0 1px 2px rgba(0,0,0,.08)" },
-  tiles: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 },
+  tiles: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 },
   tile: { padding: "10px 14px", borderRadius: 12, background: "color-mix(in srgb, var(--ink) 3%, var(--panel2))", border: "1px solid var(--line2, var(--line))", minWidth: 0 },
   tileLabel: { fontSize: 12, color: "var(--ink3)" },
   tileValue: { fontFamily: "var(--serif)", fontSize: 24, lineHeight: 1.25, fontVariantNumeric: "tabular-nums" },
@@ -783,7 +814,7 @@ const S = {
   row5: { display: "grid", gridTemplateColumns: "56px 96px minmax(0, 1fr) 110px 30px", gap: 12, alignItems: "center", padding: "11px 0", borderTop: "1px solid var(--line2, var(--line))" },
   rowDate: { fontSize: 13.5, color: "var(--ink2)", fontVariantNumeric: "tabular-nums" },
   kindTag: { height: 22, padding: "0 8px", borderRadius: 11, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", whiteSpace: "nowrap" },
-  rowTitle: { display: "block", fontSize: 14.5, fontWeight: 600, overflowWrap: "anywhere" },
+  rowTitle: { display: "block", fontSize: 14.5, fontWeight: 600, overflowWrap: "break-word" },
   rowSub: { display: "block", fontSize: 12.5, color: "var(--ink3)" },
   rowScore: { textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" },
   scoreBig: { fontFamily: "var(--serif)", fontSize: 20, lineHeight: 1.15, fontVariantNumeric: "tabular-nums" },

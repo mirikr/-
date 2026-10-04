@@ -348,5 +348,9 @@ export function withStudents(gb, classes) {
 export function journalTitle(gb, classes) {
   if (!gb) return "";
   const cls = gb.classId && (classes || []).find((c) => c.id === gb.classId);
-  return [cls ? cls.name : gb.name, gb.subject].filter(Boolean).join(" · ") || "Журнал";
+  const head = cls ? cls.name : String(gb.name || "").trim();
+  const subject = String(gb.subject || "").trim();
+  // Свой список часто называют по предмету — тогда не повторяем его дважды.
+  if (!cls && head && subject && head.toLowerCase().replace(/ё/g, "е") === subject.toLowerCase().replace(/ё/g, "е")) return head;
+  return [head, subject].filter(Boolean).join(" · ") || "Журнал";
 }

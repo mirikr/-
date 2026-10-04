@@ -539,12 +539,14 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
           каждом шаге прокрутки. */}
       <section className="ap-card" style={{ ...S.card, ...S.cardSolid }}>
         <div style={S.cardHead}>
-          <h3 style={S.cardTitle}>
-            {gb.name}{" "}
-            <span style={S.cardMeta}>
+          {/* Название — своей строкой, когда места мало; кнопки — под ним. */}
+          <div style={S.cardTitleBox}>
+            <h3 style={S.cardTitle}>{gb.name}</h3>
+            <div style={S.cardMeta}>
               {gb.students.length} {word(gb.students.length, "ученик", "ученика", "учеников")} · {dates.length} {word(dates.length, "урок", "урока", "уроков")}
-            </span>
-          </h3>
+            </div>
+          </div>
+          <div style={S.cardTools}>
           {gb.scale === 100 && (
             <span style={S.segWrap} role="group" aria-label="Показывать">
               {[
@@ -568,6 +570,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
               По алфавиту
             </button>
           )}
+          </div>
         </div>
 
         {dateOpen && (
@@ -1044,8 +1047,10 @@ const S = {
   vsep: { width: 1, height: 22, background: "var(--line)" },
   summaryBtn: { display: "inline-flex", alignItems: "center", gap: 8, height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13, cursor: "pointer" },
   cardHead: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  cardTitle: { margin: 0, flex: 1, minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 21 },
-  cardMeta: { fontFamily: "var(--sans, inherit)", fontSize: 13, color: "var(--ink3)" },
+  cardTitleBox: { flex: "1 1 260px", minWidth: 0, display: "flex", flexDirection: "column", gap: 2 },
+  cardTitle: { margin: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 21, lineHeight: 1.2, overflowWrap: "anywhere" },
+  cardMeta: { fontSize: 13, color: "var(--ink3)" },
+  cardTools: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
   segWrap: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 10, background: "color-mix(in srgb, var(--ink) 8%, transparent)" },
   segBtn: { height: 30, padding: "0 10px", border: "none", borderRadius: 8, background: "transparent", color: "var(--ink2)", font: "inherit", fontSize: 13, cursor: "pointer" },
   segBtnOn: { background: "var(--panel2)", color: "var(--ink)", fontWeight: 600, boxShadow: "0 1px 2px rgba(0,0,0,.08)" },
