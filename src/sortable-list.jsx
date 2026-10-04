@@ -9,10 +9,16 @@ import React, { useEffect, useRef, useState } from "react";
 // (handleProps), чтобы по остальной строке список по-прежнему прокручивался.
 // Стрелки ↑/↓ на ручке переставляют с клавиатуры. groupOf делит список на
 // группы (закреплённые и остальные): между группами перетащить нельзя.
+//
+// Мышью перетаскивание начинается, только когда сдвинули на несколько пикселей:
+// простое нажатие остаётся нажатием (галочка, ссылка, выбор строки), а клик
+// сразу после перетаскивания гасится — строка не открывается от того, что её
+// отпустили.
 export default function SortableList({ items, keyOf, groupOf = () => 0, onMove, renderItem, gap = 4, style, labelOf }) {
   const rows = useRef([]);
   const [drag, setDrag] = useState(null);
   const live = useRef(null);
+  const pending = useRef(null);
   live.current = drag;
 
   // Пока тянут, список может прокрутиться (сам у края или колесом) — строка
@@ -32,11 +38,34 @@ export default function SortableList({ items, keyOf, groupOf = () => 0, onMove, 
     return window.scrollY + (scroller ? scroller.scrollTop : 0);
   }
 
-  function start(e, index) {
+  // Мышь: запоминаем нажатие, а тянуть начинаем после сдвига на 4 px.
+  function press(e, index) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (e.target.closest && e.target.closest("[data-nodrag], input, textarea, select, [contenteditable='true']")) return;
+    pending.current = { index, x: e.clientX, y: e.clientY, el: e.currentTarget, pointerId: e.pointerId };
+  }
+
+  function start(e, index, el) {
     if (e.button !== undefined && e.button !== 0) return;
     if (e.target.closest && e.target.closest("[data-nodrag]")) return;
-    e.preventDefault();
-    if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+    if (e.cancelable) e.preventDefault();
+    const holder = el || e.currentTarget;
+    if (holder && holder.setPointerCapture && e.pointerId !== undefined) {
+      try {
+        holder.setPointerCapture(e.pointerId);
+      } catch (err) {
+        /* указатель уже отпущен */
+      }
+    }
+    // Клик, который придёт, когда отпустят, — не нажатие на строку.
+    const swallow = (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    window.addEventListener("click", swallow, true);
+    const release = () => setTimeout(() => window.removeEventListener("click", swallow, true), 0);
+    window.addEventListener("pointerup", release, { once: true, capture: true });
+    window.addEventListener("pointercancel", release, { once: true, capture: true });
     const scroller = scrollParent(rows.current[index]);
     const off = offsetOf(scroller);
     const rects = items.map((_, i) => {
@@ -67,6 +96,13 @@ export default function SortableList({ items, keyOf, groupOf = () => 0, onMove, 
   }
 
   function move(e) {
+    const p = pending.current;
+    if (p && !live.current) {
+      if (Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y) < 4) return;
+      pending.current = null;
+      start({ ...e, clientY: p.y, pointerId: p.pointerId, target: e.target, button: 0, cancelable: false, currentTarget: p.el }, p.index, p.el);
+      return;
+    }
     const d = live.current;
     if (!d) return;
     // У края списка (или экрана) он подъезжает сам — иначе длинный список не
@@ -82,6 +118,7 @@ export default function SortableList({ items, keyOf, groupOf = () => 0, onMove, 
   }
 
   function end() {
+    pending.current = null;
     const d = live.current;
     if (!d) return;
     setDrag(null);
@@ -126,7 +163,7 @@ export default function SortableList({ items, keyOf, groupOf = () => 0, onMove, 
             ref={(el) => (rows.current[i] = el)}
             data-sortable-item={label}
             data-lifted={dragging ? "true" : undefined}
-            onPointerDown={(e) => e.pointerType === "mouse" && start(e, i)}
+            onPointerDown={(e) => e.pointerType === "mouse" && press(e, i)}
             style={{
               position: "relative",
               borderRadius: 10,

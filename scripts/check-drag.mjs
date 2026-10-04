@@ -152,6 +152,112 @@ want("а у задания он остался", after.homework[0].attachments.m
 want("уведомление: «у задания он тоже остался»", /у задания он тоже остался/.test(await toast()), await toast());
 want("ошибок нет", errors.length === 0, errors[0] || "");
 
+// 5. Блоки и ветки тетради перетаскиваются: ветка — внутри блока и в другой
+// блок, блок — на новое место. Простое нажатие по-прежнему открывает ветку.
+{
+  const st = {
+    journal: [],
+    customSubjects: [{ id: "c0", name: "Право", color: "#C0563B", topics: [] }],
+    data: { c0: { topics: [], custom: [
+      { id: "t1", name: "Власть", done: false, duration: 40, notes: [] },
+      { id: "t2", name: "Государство", done: false, duration: 40, notes: [] },
+      { id: "t3", name: "Режим", done: false, duration: 40, notes: [] },
+    ] } },
+    notebooks: {
+      "subj:c0": [
+        { id: "b1", title: "Теория", branches: [{ id: "r1", title: "Признаки", html: "<p>текст</p>", files: [PDF] }, { id: "r2", title: "Функции", html: "", files: [] }] },
+        { id: "b2", title: "Конституция", branches: [{ id: "r3", title: "Основы строя", html: "", files: [] }] },
+        { id: "b3", title: "Права человека", branches: [] },
+      ],
+    },
+  };
+  const c2 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const p2 = await c2.newPage();
+  p2.setDefaultTimeout(6000);
+  const errs = [];
+  p2.on("pageerror", (e) => errs.push(e.message));
+  await p2.addInitScript(([st]) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "notes");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, [st]);
+  await p2.goto(URL0);
+  await p2.waitForTimeout(2000);
+  const nb = async () => (JSON.parse(JSON.parse(await p2.evaluate(() => localStorage.getItem("planner:planner-state-v5"))).value).notebooks["subj:c0"] || [])
+    .map((b) => b.id + ":" + (b.branches || []).map((r) => r.id).join(",")).join(" | ");
+  const mid = async (sel) => { const b = await p2.locator(sel).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2, b }; };
+  async function pull(fromSel, toY, check) {
+    const a = await mid(fromSel);
+    await p2.mouse.move(a.x, a.y);
+    await p2.mouse.down();
+    await p2.mouse.move(a.x, a.y + 8, { steps: 2 });
+    await p2.mouse.move(a.x, toY, { steps: 12 });
+    await p2.waitForTimeout(150);
+    if (check) await check();
+    await p2.mouse.up();
+    await p2.waitForTimeout(1600);
+  }
+
+  // Ветку «Функции» — над «Признаками».
+  const r1 = await mid('[data-ol-branch="r1"]');
+  await pull('[data-ol-branch="r2"]', r1.b.y + 4, async () => {
+    const info = await p2.evaluate(() => ({ lifted: document.querySelector("[data-ol-lifted]") && document.querySelector("[data-ol-lifted]").getAttribute("data-ol-branch"), line: !!document.querySelector("[data-outline-dragging] > [aria-hidden]") }));
+    want("ветка поднята и едет за мышью, линия показывает место", info.lifted === "r2" && info.line, JSON.stringify(info));
+    if (process.env.SHOT_DIR) await p2.screenshot({ path: process.env.SHOT_DIR + "/drag-branch.png" });
+  });
+  want("ветка — на новое место в блоке", (await nb()).startsWith("b1:r2,r1 |"), await nb());
+
+  // «Признаки» (с файлом) — в блок «Конституция», под «Основы строя».
+  const r3 = await mid('[data-ol-branch="r3"]');
+  await pull('[data-ol-branch="r1"]', r3.b.y + r3.b.height - 3);
+  want("ветка — в другой блок", (await nb()) === "b1:r2 | b2:r3,r1 | b3:", await nb());
+  const moved = JSON.parse(JSON.parse(await p2.evaluate(() => localStorage.getItem("planner:planner-state-v5"))).value).notebooks["subj:c0"][1].branches[1];
+  want("ветка переехала с конспектом и файлом", moved.html === "<p>текст</p>" && moved.files.length === 1);
+
+  // Блок «Права человека» — первым.
+  const b1 = await mid('[data-ol-head="b1"]');
+  await pull('[data-ol-head="b3"]', b1.b.y + 2);
+  want("блок — на новое место", (await nb()).startsWith("b3:"), await nb());
+
+  // Простое нажатие — открывает ветку, а не тащит её.
+  await p2.locator('[data-ol-branch="r3"]').click();
+  await p2.waitForTimeout(400);
+  want("нажатие на ветку открывает её", (await p2.locator('[data-ol-branch="r3"][aria-current="true"]').count()) === 1 && (await nb()).includes("b2:r3,r1"));
+  want("после перетаскивания ничего не висит", (await p2.locator("[data-ol-lifted]").count()) === 0);
+
+  // 6. Уроки в «Самостоятельной подготовке» переставляются.
+  await p2.evaluate(() => localStorage.setItem("planner-screen", "study"));
+  await p2.reload();
+  await p2.waitForTimeout(2000);
+  const topics = async () => (await p2.locator('[data-sortable-item]').evaluateAll((els) => els.map((e) => e.getAttribute("data-sortable-item")))).filter((n) => ["Власть", "Государство", "Режим"].includes(n)).join(",");
+  want("уроки — в прежнем порядке", (await topics()) === "Власть,Государство,Режим", await topics());
+  const t1 = await mid('[data-sortable-item="Власть"]');
+  const t3 = await mid('[data-sortable-item="Режим"]');
+  await p2.mouse.move(t3.x, t3.y);
+  await p2.mouse.down();
+  await p2.mouse.move(t3.x, t3.y - 6, { steps: 2 });
+  await p2.mouse.move(t3.x, t1.b.y + 4, { steps: 12 });
+  await p2.waitForTimeout(150);
+  want("урок поднят при перетаскивании", (await p2.locator('[data-lifted]').getAttribute("data-sortable-item")) === "Режим");
+  await p2.mouse.up();
+  await p2.waitForTimeout(1600);
+  want("урок встал первым", (await topics()) === "Режим,Власть,Государство", await topics());
+  const order = JSON.parse(JSON.parse(await p2.evaluate(() => localStorage.getItem("planner:planner-state-v5"))).value).data.c0.order;
+  want("порядок уроков в записях", JSON.stringify(order) === JSON.stringify(["t3", "t1", "t2"]), JSON.stringify(order));
+  // Галочка по-прежнему ставится обычным нажатием.
+  await p2.getByRole("checkbox", { name: /Отметить пройденным: Власть/ }).click();
+  await p2.waitForTimeout(400);
+  want("галочка урока ставится, порядок не сбился", (await p2.getByRole("checkbox", { name: /Пройден: Власть/ }).count()) === 1 && (await topics()) === "Режим,Власть,Государство");
+  await p2.reload();
+  await p2.waitForTimeout(2000);
+  want("порядок уроков пережил перезагрузку", (await topics()) === "Режим,Власть,Государство", await topics());
+  want("блоки, ветки, уроки: ошибок нет", errs.length === 0, errs[0] || "");
+  await c2.close();
+}
+
 await browser.close();
 server.close();
 if (bad) {
