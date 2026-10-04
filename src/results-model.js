@@ -42,6 +42,24 @@ export const STATUSES = [
 
 export const STAGES = ["Школьный", "Муниципальный", "Региональный", "Заключительный", "Отборочный", "Финал"];
 
+// Шкала уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5.
+export const GRADE_BANDS = [
+  { grade: 5, from: 90 },
+  { grade: 4, from: 70 },
+  { grade: 3, from: 50 },
+  { grade: 2, from: 0 },
+];
+
+export function gradeFromPercent(p) {
+  if (p === null || p === undefined || !Number.isFinite(Number(p))) return null;
+  const v = Number(p);
+  return (GRADE_BANDS.find((b) => v >= b.from) || GRADE_BANDS[GRADE_BANDS.length - 1]).grade;
+}
+
+// Оценка без баллов в 100-балльной шкале — середина своего промежутка, чтобы
+// обратно она переводилась в ту же оценку: 5 → 95, 4 → 80, 3 → 60, 2 → 25.
+export const GRADE_TO_100 = { 2: 25, 3: 60, 4: 80, 5: 95 };
+
 const num = (v) => {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(String(v).replace(",", "."));
@@ -73,6 +91,7 @@ export function summarize(r) {
   let main = "";
   let sub = "";
   let percent = null;
+  let gradeOnly = false;
   if (scale === "points") {
     const score = parts ? parts.score : num(res.score);
     const max = parts && parts.max !== null ? parts.max : num(res.max);
@@ -100,13 +119,16 @@ export function summarize(r) {
     const g = num(res.grade);
     if (g !== null) {
       main = `оценка ${fmt(g)}`;
-      percent = Math.max(0, Math.min(100, ((g - 2) / 3) * 100));
+      percent = GRADE_TO_100[Math.max(2, Math.min(5, Math.round(g)))];
     }
     const score = parts ? parts.score : num(res.score);
     const max = parts && parts.max !== null ? parts.max : num(res.max);
     if (score !== null) {
       sub = max ? `${fmt(score)} из ${fmt(max)} б.` : `${fmt(score)} б.`;
       if (max) percent = (score / max) * 100;
+    } else if (g !== null) {
+      // Только оценка — процент под ней не пишем: он условный.
+      gradeOnly = true;
     }
   } else if (scale === "percent") {
     const p = num(res.percent);
@@ -123,7 +145,9 @@ export function summarize(r) {
       percent = 0;
     }
   }
-  if (percent !== null && scale !== "percent" && scale !== "pass" && !sub) sub = `${fmt(percent)} %`;
+  if (gradeOnly) {
+    /* без процента */
+  } else if (percent !== null && scale !== "percent" && scale !== "pass" && !sub) sub = `${fmt(percent)} %`;
   else if (percent !== null && scale !== "percent" && scale !== "pass" && sub && !/%/.test(sub)) sub += ` · ${fmt(percent)} %`;
 
   // Проходной балл — в тех же единицах, что главное число.
@@ -137,10 +161,24 @@ export function summarize(r) {
   return { main: main || "нет баллов", sub, percent: percent === null ? null : Math.max(0, Math.min(100, percent)), passedThreshold };
 }
 
-// Сводка по предмету: сколько записей, средний и последний процент.
-export function subjectSummary(results) {
+// Оценка записи (2–5): поставленная оценкой — она и есть, остальное — по
+// шкале уроков от процента. Зачёт и записи без баллов — без оценки.
+export function gradeOf(r) {
+  if (!r) return null;
+  if (r.scale === "grade" && num(r.grade) !== null && num(r.score) === null) return num(r.grade);
+  if (r.scale === "pass") return null;
+  return gradeFromPercent(summarize(r).percent);
+}
+
+// Значение записи для подсчётов: процент (100-балльная) или оценка.
+export function valueOf(r, mode = "points") {
+  return mode === "grades" ? gradeOf(r) : summarize(r).percent;
+}
+
+// Сводка по предмету: сколько записей, средний и последний — в баллах или оценках.
+export function subjectSummary(results, mode = "points") {
   const list = (results || []).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-  const withPct = list.map((r) => ({ r, p: summarize(r).percent })).filter((x) => x.p !== null);
+  const withPct = list.map((r) => ({ r, p: valueOf(r, mode) })).filter((x) => x.p !== null);
   const avg = withPct.length ? withPct.reduce((s, x) => s + x.p, 0) / withPct.length : null;
   const last = withPct.length ? withPct[withPct.length - 1] : null;
   const prev = withPct.length > 1 ? withPct[withPct.length - 2] : null;
@@ -157,9 +195,9 @@ export function subjectSummary(results) {
 // Общая статистика по нескольким результатам. Всё переводится в 100-балльную
 // шкалу (процент от максимума, вторичные баллы, оценка, зачёт), и средний балл —
 // среднее арифметическое. Записи без баллов в подсчёт не входят.
-export function overallStats(results) {
+export function overallStats(results, mode = "points") {
   const rows = (results || [])
-    .map((r) => ({ r, p: summarize(r).percent }))
+    .map((r) => ({ r, p: valueOf(r, mode) }))
     .filter((x) => x.p !== null)
     .sort((a, b) => String(a.r.date || "").localeCompare(String(b.r.date || "")));
   const mean = (list) => (list.length ? list.reduce((s, x) => s + x.p, 0) / list.length : null);

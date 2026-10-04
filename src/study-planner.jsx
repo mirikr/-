@@ -724,6 +724,8 @@ export default function StudyPlanner() {
   const [homework, setHomework] = useState([]);
   // Свои результаты: КТ, экзамены, олимпиады, оценки за уроки (results-model.js).
   const [results, setResults] = useState([]);
+  // Журналы учителя (gradebook.js): ученики, даты уроков, отметки.
+  const [gradebooks, setGradebooks] = useState([]);
   // Тренажёр: журнал попыток и отметки о сверке ключей с банком. И то и другое —
   // список записей со своими id: так правки с телефона и ноутбука сливаются, а не
   // затирают друг друга.
@@ -886,6 +888,7 @@ export default function StudyPlanner() {
           if (parsed.openSections) setOpenSections(parsed.openSections);
           if (parsed.homework) setHomework(parsed.homework);
           if (parsed.results) setResults(parsed.results);
+          if (parsed.gradebooks) setGradebooks(parsed.gradebooks);
           if (parsed.trainerLog) setTrainerLog(parsed.trainerLog);
           if (parsed.trainerState) setTrainerState(parsed.trainerState);
           if (parsed.bankMarks) setBankMarks(parsed.bankMarks);
@@ -1015,6 +1018,7 @@ export default function StudyPlanner() {
     openSections,
     homework,
     results,
+    gradebooks,
     trainerLog,
     trainerState,
     bankMarks,
@@ -1061,7 +1065,7 @@ export default function StudyPlanner() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, journal, budget, events, notebooks, notebookOrder, studyOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, results, trainerLog, trainerState, bankMarks, loaded]);
+  }, [data, journal, budget, events, notebooks, notebookOrder, studyOrder, customSubjects, hiddenSubjects, subjectColors, showSunday, calendarToken, lyceumSchedule, presetChoices, examPicks, voshPicks, lyceumRevision, mainEventId, weekPlanned, openSections, homework, results, gradebooks, trainerLog, trainerState, bankMarks, loaded]);
 
   // Считать цель дня приходится на каждый столбец графика, поэтому функция должна
   // меняться только вместе с бюджетом, иначе график пересчитывается на каждый рендер.
@@ -1514,6 +1518,7 @@ export default function StudyPlanner() {
       if (parsed.openSections) setOpenSections(parsed.openSections);
       if (parsed.homework) setHomework(parsed.homework);
       if (parsed.results) setResults(parsed.results);
+      if (parsed.gradebooks) setGradebooks(parsed.gradebooks);
       // Импорт — сознательная замена всего: снимок сбрасываем, чтобы вставленные
       // данные ушли в облако как свежие и победили то, что там лежит.
       syncSnapshot.current = null;
@@ -4200,6 +4205,9 @@ export default function StudyPlanner() {
               onUndo={showUndo}
               // Пока раздел в разработке — полностью только у владельца.
               allowed={SANDBOX || isOwnerEmail(accountEmail)}
+              gradebooks={gradebooks}
+              setGradebooks={setGradebooks}
+              schedule={lyceumSchedule}
             />
           </Suspense>
         )}

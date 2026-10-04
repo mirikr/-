@@ -98,3 +98,47 @@ export async function unpublish(id) {
   const { error } = await supabase().from("results_inbox").delete().eq("id", id);
   return error ? { ok: false, error: error.message } : { ok: true };
 }
+
+// Отметки журнала: put — выложить или заменить (по ключу), del — убрать у
+// ученика. changes: [{ action, email, key, payload }]. Возвращает выполненные.
+export async function publishItems(changes, authorName) {
+  const done = [];
+  if (!cloudConfigured) {
+    let rows = demoRead();
+    changes.forEach((c) => {
+      const recipient = norm(c.email);
+      rows = rows.filter((row) => !(row.recipient === recipient && row.item_key === c.itemKey));
+      if (c.action === "put") {
+        rows.push({
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          recipient,
+          item_key: c.itemKey,
+          author_name: authorName || "Учитель",
+          payload: c.payload,
+          created_at: new Date().toISOString(),
+        });
+      }
+      done.push(c);
+    });
+    demoWrite(rows);
+    return { ok: true, done };
+  }
+  const user = currentUser();
+  if (!user) return { ok: false, error: "Нужно войти в аккаунт", done };
+  const puts = changes.filter((c) => c.action === "put");
+  if (puts.length) {
+    const { error } = await supabase()
+      .from("results_inbox")
+      .upsert(
+        puts.map((c) => ({ recipient: norm(c.email), item_key: c.itemKey, payload: c.payload, author_name: authorName || "", author_id: user.id, author_email: norm(user.email) })),
+        { onConflict: "author_id,recipient,item_key" }
+      );
+    if (error) return { ok: false, error: "Не удалось выложить: " + error.message, done };
+    done.push(...puts);
+  }
+  for (const c of changes.filter((x) => x.action === "del")) {
+    const { error } = await supabase().from("results_inbox").delete().eq("author_id", user.id).eq("recipient", norm(c.email)).eq("item_key", c.itemKey);
+    if (!error) done.push(c);
+  }
+  return { ok: true, done };
+}

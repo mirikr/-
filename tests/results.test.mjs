@@ -1,7 +1,7 @@
 // Результаты: шкалы подсчёта и лента «только для своего аккаунта».
 import assert from "node:assert";
 import { readFile } from "node:fs/promises";
-import { blankResult, cleanResult, overallStats, partsTotal, subjectSummary, summarize } from "../src/results-model.js";
+import { blankResult, cleanResult, gradeFromPercent, gradeOf, overallStats, partsTotal, subjectSummary, summarize } from "../src/results-model.js";
 import { decryptFeed, encryptFor, recipientCode } from "../src/results-feed.js";
 
 let passed = 0;
@@ -30,7 +30,8 @@ await check("первичные и вторичные: процент — по �
 
 await check("оценка, с баллами и без", () => {
   assert.equal(summarize({ scale: "grade", grade: 5 }).main, "оценка 5");
-  assert.equal(summarize({ scale: "grade", grade: 5 }).percent, 100);
+  assert.equal(summarize({ scale: "grade", grade: 5 }).percent, 95);
+  assert.equal(summarize({ scale: "grade", grade: 5 }).sub, "");
   const s = summarize({ scale: "grade", grade: 4, score: 15, max: 20 });
   assert.equal(s.sub, "15 из 20 б. · 75 %");
   assert.equal(s.percent, 75);
@@ -73,13 +74,37 @@ await check("общая статистика: средний балл — сре
   ]);
   assert.equal(st.count, 5);
   assert.equal(st.scored, 4);
-  assert.equal(st.avg, (90 + 70 + 100 + 76) / 4);
-  assert.equal(st.best, 100);
+  assert.equal(st.avg, (90 + 70 + 95 + 76) / 4);
+  assert.equal(st.best, 95);
   assert.equal(st.worst, 70);
   assert.equal(st.last, 76);
-  assert.equal(st.trend, -24);
+  assert.equal(st.trend, -19);
   assert.deepEqual(st.byKind.lesson, { count: 2, avg: 80 });
   assert.equal(blankResult("lesson").max, "100");
+});
+
+await check("шкала уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5", () => {
+  const cases = [[0, 2], [49, 2], [49.9, 2], [50, 3], [69, 3], [70, 4], [89, 4], [90, 5], [100, 5]];
+  cases.forEach(([p, g]) => assert.equal(gradeFromPercent(p), g, p + " → " + g));
+  assert.equal(gradeOf({ scale: "points", score: 72, max: 100 }), 4);
+  assert.equal(gradeOf({ scale: "grade", grade: 3 }), 3);
+  assert.equal(gradeOf({ scale: "grade", grade: 4, score: 19, max: 20 }), 5);
+  assert.equal(gradeOf({ scale: "pass", passed: true }), null);
+  // Оценка → 100 → снова та же оценка.
+  [2, 3, 4, 5].forEach((g) => assert.equal(gradeOf({ scale: "points", score: summarize({ scale: "grade", grade: g }).percent, max: 100 }), g));
+});
+
+await check("в оценках: средняя — среднее арифметическое оценок", () => {
+  const list = [
+    { kind: "lesson", date: "2026-09-01", scale: "points", score: 95, max: 100 },
+    { kind: "lesson", date: "2026-09-02", scale: "points", score: 72, max: 100 },
+    { kind: "lesson", date: "2026-09-03", scale: "points", score: 40, max: 100 },
+    { kind: "kt", date: "2026-09-04", scale: "grade", grade: 5 },
+  ];
+  const st = overallStats(list, "grades");
+  assert.equal(st.avg, (5 + 4 + 2 + 5) / 4);
+  assert.equal(st.worst, 2);
+  assert.equal(subjectSummary(list, "grades").avg, 4);
 });
 
 await check("перед сохранением: числа — числами, пустое убрано", () => {

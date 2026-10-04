@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { KINDS, SCALES, STAGES, STATUSES, blankResult, cleanResult, kindName, overallStats, statusName, subjectSummary, summarize } from "./results-model.js";
+import { KINDS, SCALES, STAGES, STATUSES, blankResult, cleanResult, gradeOf, kindName, overallStats, statusName, subjectSummary, summarize } from "./results-model.js";
 import { decryptFeed, recipientCode } from "./results-feed.js";
 import { canPublish, fetchInbox, fetchPublished, inboxIsDemo, publish, unpublish } from "./results-inbox.js";
+import GradebookPanel from "./gradebook-panel.jsx";
 import FEED from "./results-feed.json";
 import DEMO_FEED from "./results-demo-feed.json";
 
@@ -44,11 +45,27 @@ const fmtDate = (iso) => {
 
 // allowed — открыт ли раздел этому аккаунту: пока он в разработке, полностью
 // его видит только владелец (и предпросмотр); остальным — заглушка.
-export default function ResultsScreen({ results, setResults, subjects, accountId, accountEmail, sandbox, onUndo, allowed = true }) {
+export default function ResultsScreen({ results, setResults, subjects, accountId, accountEmail, sandbox, onUndo, allowed = true, gradebooks, setGradebooks, schedule }) {
   const [role, setRole] = useState("student");
   const [kind, setKind] = useState("all");
   // Официальные (выложены учителем или обновлением, не правятся) и свои.
   const [origin, setOrigin] = useState("all");
+  // Показывать баллами или оценками (шкала уроков: 0–49 → 2 … 90–100 → 5).
+  const [mode, setModeState] = useState(() => {
+    try {
+      return localStorage.getItem("planner-results-view") === "grades" ? "grades" : "points";
+    } catch (e) {
+      return "points";
+    }
+  });
+  const setMode = (v) => {
+    setModeState(v);
+    try {
+      localStorage.setItem("planner-results-view", v);
+    } catch (e) {
+      /* приватное окно */
+    }
+  };
   const [subject, setSubject] = useState("");
   const [editing, setEditing] = useState(null); // запись или null
   const [published, setPublished] = useState([]);
@@ -110,9 +127,9 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
       map.get(key).push(r);
     });
     return Array.from(map.entries())
-      .map(([name, list]) => ({ name, ...subjectSummary(list) }))
+      .map(([name, list]) => ({ name, ...subjectSummary(list, mode) }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"));
-  }, [visible, kind]);
+  }, [visible, kind, mode]);
 
   function save(r) {
     const clean = cleanResult({ ...r, id: r.id || newId() });
@@ -186,7 +203,14 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
           </p>
         </section>
       ) : role === "teacher" && teacherAllowed ? (
-        <TeacherPanel subjects={subjectList} sandbox={sandbox} onPublished={() => setReload((n) => n + 1)} />
+        <TeacherPanel
+          subjects={subjectList}
+          sandbox={sandbox}
+          onPublished={() => setReload((n) => n + 1)}
+          gradebooks={gradebooks}
+          setGradebooks={setGradebooks}
+          schedule={schedule}
+        />
       ) : (
         <>
           <div style={S.originRow} role="group" aria-label="Чьи результаты">
@@ -198,6 +222,17 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
               <button key={id} type="button" aria-pressed={origin === id} onClick={() => setOrigin(id)} style={{ ...S.originBtn, ...(origin === id ? S.originOn : null) }}>
                 {id === "official" ? "🔒 " : ""}
                 {label} <span style={S.chipCount}>{n}</span>
+              </button>
+            ))}
+          </div>
+          <div style={S.modeRow} role="group" aria-label="Показывать">
+            <span style={S.label}>Показывать:</span>
+            {[
+              ["points", "Баллы"],
+              ["grades", "Оценки"],
+            ].map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} style={{ ...S.seg, ...(mode === id ? S.segOn : null) }}>
+                {label}
               </button>
             ))}
           </div>
@@ -228,24 +263,28 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
             </button>
           </div>
 
-          {shown.length >= 2 && <StatsCard stats={overallStats(shown)} />}
+          {shown.length >= 2 && <StatsCard stats={overallStats(shown, mode)} mode={mode} />}
 
           {bySubject.length > 0 && !subject && (
             <div style={S.summaryGrid}>
               {bySubject.slice(0, 8).map((s) => (
                 <button key={s.name} type="button" onClick={() => setSubject(s.name === "Без предмета" ? "" : s.name)} className="ap-card" style={S.summary}>
                   <span style={S.summaryName}>{s.name}</span>
-                  <span style={S.summaryBig}>{s.avg === null ? "—" : Math.round(s.avg) + " %"}</span>
+                  <span style={S.summaryBig}>{s.avg === null ? "—" : mode === "grades" ? f1(s.avg) : Math.round(s.avg) + " %"}</span>
                   <span style={S.summaryMeta}>
                     {s.count} {word(s.count, "результат", "результата", "результатов")}
-                    {s.last !== null ? " · последний " + Math.round(s.last) + " %" : ""}
+                    {s.last !== null ? " · последний " + (mode === "grades" ? f1(s.last) : Math.round(s.last) + " %") : ""}
                     {s.trend !== null && Math.round(s.trend) !== 0 ? (
-                      <b style={{ color: s.trend > 0 ? "var(--green, #3F8F6A)" : "var(--red)" }}> {s.trend > 0 ? "▲" : "▼"} {Math.abs(Math.round(s.trend))}</b>
+                      <b style={{ color: s.trend > 0 ? "var(--green, #3F8F6A)" : "var(--red)" }}> {s.trend > 0 ? "▲" : "▼"} {mode === "grades" ? f1(Math.abs(s.trend)) : Math.abs(Math.round(s.trend))}</b>
                     ) : null}
                   </span>
                 </button>
               ))}
             </div>
+          )}
+
+          {shown.some((r) => r.kind === "lesson") && (
+            <LessonMarks list={shown.filter((r) => r.kind === "lesson")} onEdit={(r) => setEditing(r)} mode={mode} />
           )}
 
           <div style={S.list}>
@@ -258,10 +297,11 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
                 </p>
               </div>
             ) : (
-              shown.map((r) => (
+              shown.filter((r) => r.kind !== "lesson").map((r) => (
                 <ResultCard
                   key={r.id}
                   r={r}
+                  mode={mode}
                   hidden={hidden.includes(r.id)}
                   onEdit={() => setEditing(r)}
                   onRemove={() => remove(r)}
@@ -291,14 +331,15 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
 
 // Общая статистика по тому, что сейчас показано (с учётом фильтров).
 const f1 = (n) => (n === null ? "—" : String(Math.round(n * 10) / 10).replace(".", ","));
-function StatsCard({ stats }) {
+function StatsCard({ stats, mode }) {
+  const grades = mode === "grades";
   const kinds = KINDS.filter((k) => stats.byKind[k.id]);
   return (
     <section className="ap-card" style={S.stats} aria-label="Статистика" data-results-stats>
       <div style={S.statMain}>
-        <span style={S.statLabel}>Средний балл</span>
+        <span style={S.statLabel}>{grades ? "Средняя оценка" : "Средний балл"}</span>
         <span style={S.statBig} data-results-avg>{f1(stats.avg)}</span>
-        <span style={S.statUnit}>из 100</span>
+        <span style={S.statUnit}>{grades ? "из 5" : "из 100"}</span>
       </div>
       <div style={S.statGrid}>
         <Stat label="Записей" value={stats.count + (stats.scored < stats.count ? " (с баллами " + stats.scored + ")" : "")} />
@@ -325,7 +366,11 @@ function StatsCard({ stats }) {
           ))}
         </div>
       )}
-      <p style={S.statNote}>Всё в 100-балльной шкале: баллы — процентом от максимума, ЕГЭ — тестовым баллом, оценка 5 = 100, 4 ≈ 67, 3 ≈ 33. Средний — среднее арифметическое.</p>
+      <p style={S.statNote}>
+        {grades
+          ? "Оценки по шкале уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5 (от процента набранного). Средняя — среднее арифметическое оценок; зачёты не считаются."
+          : "Всё в 100-балльной шкале: баллы — процентом от максимума, ЕГЭ — тестовым баллом, оценка без баллов — серединой своего промежутка (5 → 95, 4 → 80, 3 → 60, 2 → 25). Средний — среднее арифметическое."}
+      </p>
     </section>
   );
 }
@@ -339,6 +384,64 @@ function Stat({ label, value }) {
   );
 }
 
+// Оценки за уроки — не карточкой на каждую, а строкой по предмету: даты и
+// отметки, средний балл. Свои отметки открываются на правку, официальные — нет.
+function LessonMarks({ list, onEdit, mode }) {
+  const grades = mode === "grades";
+  const bySubject = new Map();
+  list
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .forEach((r) => {
+      const key = r.subject || "Без предмета";
+      if (!bySubject.has(key)) bySubject.set(key, []);
+      bySubject.get(key).push(r);
+    });
+  return (
+    <section className="ap-card" style={S.lessons} aria-label="Оценки за уроки" data-lesson-marks>
+      <div style={S.codeTitle}>Оценки за уроки</div>
+      {Array.from(bySubject.entries()).map(([name, rows]) => {
+        const st = subjectSummary(rows, mode);
+        return (
+          <div key={name} style={S.lessonRow} data-lesson-subject={name}>
+            <div style={S.lessonHead}>
+              <span style={S.lessonName}>{name}</span>
+              <span style={S.lessonAvg} data-lesson-avg={name}>
+                {grades ? "средняя оценка " : "средний балл "}
+                {f1(st.avg)}
+              </span>
+            </div>
+            <div style={S.lessonChips}>
+              {rows.map((r) => {
+                const s = summarize(r);
+                const value = grades ? gradeOf(r) : r.scale === "grade" ? r.grade : r.scale === "points" && Number(r.max) === 100 ? r.score : s.main;
+                const mine = r.source === "self";
+                const g = gradeOf(r);
+                const tone = g === null ? null : g === 5 ? S.markGood : g >= 4 ? S.markMid : g === 3 ? null : S.markLow;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    disabled={!mine}
+                    onClick={() => mine && onEdit(r)}
+                    title={(r.title || "Урок") + (mine ? " · своя запись — нажмите, чтобы изменить" : " · 🔒 " + (r.source === "teacher" ? "от учителя" + (r.author ? " · " + r.author : "") : "официальная"))}
+                    data-mark={(r.date || "") + ":" + value}
+                    style={{ ...S.mark, ...tone, ...(mine ? S.markOwn : null) }}
+                  >
+                    <span style={S.markValue}>{value ?? "—"}</span>
+                    <span style={S.markDate}>{fmtDate(r.date).slice(0, 5) || "без даты"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      <p style={S.statNote}>Пунктирная рамка — ваша запись, остальные выставил учитель.</p>
+    </section>
+  );
+}
+
 function word(n, one, few, many) {
   const a = n % 10;
   const b = n % 100;
@@ -348,8 +451,9 @@ function word(n, one, few, many) {
   return many;
 }
 
-function ResultCard({ r, hidden, onEdit, onRemove, onHide }) {
+function ResultCard({ r, hidden, onEdit, onRemove, onHide, mode }) {
   const s = summarize(r);
+  const grade = mode === "grades" && !(r.scale === "grade" && (r.score === undefined || r.score === null || r.score === "")) ? gradeOf(r) : null;
   const mine = r.source === "self";
   const title = r.title || kindName(r.kind) + (r.subject ? " · " + r.subject : "");
   const threshold = r.threshold !== undefined && r.threshold !== null && r.threshold !== "";
@@ -377,6 +481,7 @@ function ResultCard({ r, hidden, onEdit, onRemove, onHide }) {
         <div style={S.score}>
           <div style={S.scoreMain}>{s.main}</div>
           {s.sub && <div style={S.scoreSub}>{s.sub}</div>}
+          {grade !== null && <div style={S.scoreGrade}>оценка {grade}</div>}
         </div>
       </div>
       {s.percent !== null && (
@@ -450,7 +555,20 @@ export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel,
       {extra}
       <div role="group" aria-label="Что это" style={S.segRow}>
         {KINDS.map((k) => (
-          <button key={k.id} type="button" aria-pressed={r.kind === k.id} onClick={() => set({ kind: k.id })} style={{ ...S.seg, ...(r.kind === k.id ? S.segOn : null) }}>
+          <button
+            key={k.id}
+            type="button"
+            aria-pressed={r.kind === k.id}
+            // У новой записи шкала подстраивается под вид: урок — из 100, КТ — оценка, экзамен — первичные и вторичные.
+            onClick={() =>
+              set(
+                r.id
+                  ? { kind: k.id }
+                  : { kind: k.id, scale: blankResult(k.id).scale, max: k.id === "lesson" ? "100" : r.kind === "lesson" && String(r.max) === "100" ? "" : r.max }
+              )
+            }
+            style={{ ...S.seg, ...(r.kind === k.id ? S.segOn : null) }}
+          >
             {k.name}
           </button>
         ))}
@@ -692,9 +810,25 @@ function CodePanel({ code, sandbox, signedIn }) {
 }
 
 // Учитель: выложить результат нескольким ученикам по почте и убрать выложенное.
-function TeacherPanel({ subjects, sandbox, onPublished }) {
+function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebooks, schedule }) {
+  const [tab, setTab] = useState("journal");
   const [recipients, setRecipients] = useState(sandbox ? DEMO_EMAIL : "");
-  const [author, setAuthor] = useState("");
+  // Подпись учителя помнится на устройстве: её видят ученики у каждой отметки.
+  const [author, setAuthorState] = useState(() => {
+    try {
+      return localStorage.getItem("planner-teacher-name") || "";
+    } catch (e) {
+      return "";
+    }
+  });
+  const setAuthor = (v) => {
+    setAuthorState(v);
+    try {
+      localStorage.setItem("planner-teacher-name", v);
+    } catch (e) {
+      /* приватное окно */
+    }
+  };
   const [msg, setMsg] = useState("");
   const [mine, setMine] = useState([]);
   const [formKey, setFormKey] = useState(0);
@@ -715,8 +849,38 @@ function TeacherPanel({ subjects, sandbox, onPublished }) {
     }
   }
 
+  const authorField = (
+    <label style={{ ...S.field, maxWidth: 360 }}>
+      <span style={S.label}>Подпись (как вас увидят ученики)</span>
+      <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Например: Иванова А. Б." style={S.input} />
+    </label>
+  );
+
   return (
     <div style={S.teacher}>
+      <div style={S.originRow} role="group" aria-label="Что выложить">
+        {[
+          ["journal", "Журнал"],
+          ["single", "Отдельный результат"],
+        ].map(([id, label]) => (
+          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)} style={{ ...S.originBtn, ...(tab === id ? S.originOn : null) }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {authorField}
+      {tab === "journal" ? (
+        <GradebookPanel
+          gradebooks={gradebooks}
+          setGradebooks={setGradebooks}
+          schedule={schedule}
+          subjects={subjects}
+          authorName={author.trim()}
+          onPublished={onPublished}
+          demoEmail={sandbox ? DEMO_EMAIL : ""}
+        />
+      ) : (
+      <>
       <section className="ap-card" style={S.teacherCard}>
         <div style={S.codeTitle}>Выложить результат</div>
         <p style={S.codeText}>
@@ -728,10 +892,6 @@ function TeacherPanel({ subjects, sandbox, onPublished }) {
             <span style={S.label}>Почты учеников (через запятую или с новой строки)</span>
             <textarea value={recipients} onChange={(e) => setRecipients(e.target.value)} rows={2} style={{ ...S.input, resize: "vertical" }} aria-label="Почты учеников" />
           </label>
-          <label style={S.field}>
-            <span style={S.label}>Подпись (как вас показать)</span>
-            <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Например: Иванова А. Б." style={S.input} />
-          </label>
         </div>
         <ResultForm key={formKey} initial={{ ...blankResult("kt"), date: todayIso() }} subjects={subjects} submitLabel="Выложить" onSubmit={send} />
         {msg && (
@@ -742,10 +902,10 @@ function TeacherPanel({ subjects, sandbox, onPublished }) {
       </section>
       <section className="ap-card" style={S.teacherCard}>
         <div style={S.codeTitle}>Уже выложено</div>
-        {mine.length === 0 ? (
-          <p style={S.codeText}>Пока ничего.</p>
+        {mine.filter((row) => !row.payload.journal).length === 0 ? (
+          <p style={S.codeText}>Пока ничего. Отметки из журнала здесь не показываются — они в самом журнале.</p>
         ) : (
-          mine.map((row) => {
+          mine.filter((row) => !row.payload.journal).map((row) => {
             const s = summarize(row.payload);
             return (
               <div key={row.id} style={S.pubRow}>
@@ -768,6 +928,8 @@ function TeacherPanel({ subjects, sandbox, onPublished }) {
           })
         )}
       </section>
+      </>
+      )}
     </div>
   );
 }
@@ -808,6 +970,24 @@ const S = {
   statKinds: { display: "flex", flexWrap: "wrap", gap: 8, flexBasis: "100%" },
   statKind: { fontSize: 12.5, padding: "3px 9px", borderRadius: 999, background: "var(--panel2)", border: "1px solid var(--line2, var(--line))" },
   statNote: { margin: 0, flexBasis: "100%", fontSize: 12, color: "var(--mute)" },
+  modeRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  scoreGrade: { fontSize: 12.5, fontWeight: 700, color: "var(--ink2)" },
+  lessons: { display: "flex", flexDirection: "column", gap: 12, padding: "14px 16px", borderRadius: 14, border: "1px solid var(--line)", background: "var(--panel)" },
+  lessonRow: { display: "flex", flexDirection: "column", gap: 6 },
+  lessonHead: { display: "flex", alignItems: "baseline", gap: 10 },
+  lessonName: { fontSize: 15, fontWeight: 600 },
+  lessonAvg: { fontSize: 13, color: "var(--ink3)" },
+  lessonChips: { display: "flex", flexWrap: "wrap", gap: 6 },
+  mark: {
+    display: "inline-flex", flexDirection: "column", alignItems: "center", minWidth: 46, padding: "4px 6px", borderRadius: 9,
+    border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--ink)", font: "inherit", cursor: "default",
+  },
+  markOwn: { borderStyle: "dashed", cursor: "pointer" },
+  markGood: { borderColor: "color-mix(in srgb, var(--green, #3F8F6A) 55%, transparent)" },
+  markMid: { borderColor: "color-mix(in srgb, var(--accent) 55%, transparent)" },
+  markLow: { borderColor: "color-mix(in srgb, var(--red) 55%, transparent)" },
+  markValue: { fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 },
+  markDate: { fontSize: 10.5, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
   summaryGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 180px), 1fr))", gap: 10 },
   summary: {
     display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, padding: "12px 14px", borderRadius: 14,
