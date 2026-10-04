@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { KINDS, SCALES, STAGES, STATUSES, blankResult, cleanResult, gradeOf, kindName, overallStats, statusName, subjectSummary, summarize } from "./results-model.js";
+import { KINDS, SCALES, STAGES, STATUSES, blankResult, blankStage, cleanResult, gradeOf, kindName, olympiadStages, overallStats, stageSummary, statusName, subjectSummary, summarize } from "./results-model.js";
 import { decryptFeed, recipientCode } from "./results-feed.js";
 import { canPublish, fetchInbox, fetchPublished, inboxIsDemo, publish, unpublish } from "./results-inbox.js";
 import GradebookPanel from "./gradebook-panel.jsx";
+import { CLASSES } from "./school-roster.js";
+import { studentName } from "./gradebook.js";
 import FEED from "./results-feed.json";
 import DEMO_FEED from "./results-demo-feed.json";
 
@@ -461,7 +463,7 @@ function ResultCard({ r, hidden, onEdit, onRemove, onHide, mode }) {
     <article className="ap-card" style={{ ...S.card, ...(hidden ? { opacity: 0.55 } : null) }} data-result={title}>
       <div style={S.cardTop}>
         <span style={{ ...S.kind, ...(r.kind === "olympiad" ? S.kindOlymp : r.kind === "exam" ? S.kindExam : null) }}>{kindName(r.kind)}</span>
-        {r.stage && <span style={S.meta}>{r.stage}</span>}
+        {r.kind !== "olympiad" && r.stage && <span style={S.meta}>{r.stage}</span>}
         {r.subject && <span style={S.meta}>{r.subject}</span>}
         {r.date && <span style={S.meta}>{fmtDate(r.date)}</span>}
         {mine ? (
@@ -475,8 +477,8 @@ function ResultCard({ r, hidden, onEdit, onRemove, onHide, mode }) {
       <div style={S.cardMain}>
         <div style={S.cardText}>
           <div style={S.title}>{title}</div>
-          {r.status && <span style={{ ...S.status, ...(r.status === "winner" || r.status === "prize" ? S.statusWin : null) }}>{statusName(r.status)}</span>}
-          {r.place ? <span style={S.meta}> · {r.place} место</span> : null}
+          {r.kind !== "olympiad" && r.status && <span style={{ ...S.status, ...(r.status === "winner" || r.status === "prize" ? S.statusWin : null) }}>{statusName(r.status)}</span>}
+          {r.kind !== "olympiad" && r.place ? <span style={S.meta}> · {r.place} место</span> : null}
         </div>
         <div style={S.score}>
           <div style={S.scoreMain}>{s.main}</div>
@@ -484,19 +486,20 @@ function ResultCard({ r, hidden, onEdit, onRemove, onHide, mode }) {
           {grade !== null && <div style={S.scoreGrade}>оценка {grade}</div>}
         </div>
       </div>
-      {s.percent !== null && (
+      {r.kind === "olympiad" && <OlympiadStages r={r} />}
+      {r.kind !== "olympiad" && s.percent !== null && (
         <div style={S.track} aria-hidden="true">
           <span style={{ ...S.fill, width: s.percent + "%", background: s.percent >= 80 ? "var(--green, #3F8F6A)" : s.percent >= 50 ? "var(--accent)" : "var(--red)" }} />
         </div>
       )}
-      {threshold && (
+      {r.kind !== "olympiad" && threshold && (
         <div style={S.threshold}>
           Проходной — {String(r.threshold).replace(".", ",")}
           {s.passedThreshold === true && <b style={{ color: "var(--green, #3F8F6A)" }}> · набран ✓</b>}
           {s.passedThreshold === false && <b style={{ color: "var(--red)" }}> · не набран</b>}
         </div>
       )}
-      {(r.parts || []).length > 0 && (
+      {r.kind !== "olympiad" && (r.parts || []).length > 0 && (
         <div style={S.parts}>
           {r.parts.map((p, i) => (
             <span key={i} style={S.part}>
@@ -527,12 +530,180 @@ function ResultCard({ r, hidden, onEdit, onRemove, onHide, mode }) {
   );
 }
 
+// Этапы олимпиады: у каждого — туры (баллы складываются), сумма, проходной,
+// статус. Этапы друг с другом не складываются.
+function OlympiadStages({ r }) {
+  const stages = olympiadStages(r);
+  return (
+    <div style={S.stages} data-olympiad-stages>
+      {stages.map((st, i) => {
+        const s = stageSummary(st);
+        const hasThreshold = st.threshold !== undefined && st.threshold !== null && st.threshold !== "";
+        return (
+          <div key={st.id || i} style={S.stage} data-stage={st.name || "Этап " + (i + 1)}>
+            <div style={S.stageHead}>
+              <span style={S.stageName}>{st.name || "Этап " + (i + 1)}</span>
+              {st.date && <span style={S.meta}>{fmtDate(st.date)}</span>}
+              <span style={S.stageSum} data-stage-sum>
+                {s.main}
+              </span>
+            </div>
+            {(st.tours || []).length > 0 && (
+              <div style={S.parts}>
+                {st.tours.map((t, j) => (
+                  <span key={j} style={S.part}>
+                    {t.name || "Тур " + (j + 1)}: <b>{t.score ?? "—"}</b>
+                    {t.max !== null && t.max !== undefined && t.max !== "" ? " из " + t.max : ""}
+                  </span>
+                ))}
+                {st.tours.length > 1 && <span style={{ ...S.part, fontWeight: 700 }}>сумма {s.main}</span>}
+              </div>
+            )}
+            {s.percent !== null && (
+              <div style={S.track} aria-hidden="true">
+                <span style={{ ...S.fill, width: s.percent + "%", background: s.percent >= 80 ? "var(--green, #3F8F6A)" : s.percent >= 50 ? "var(--accent)" : "var(--red)" }} />
+              </div>
+            )}
+            <div style={S.threshold}>
+              {hasThreshold && (
+                <>
+                  Проходной — {String(st.threshold).replace(".", ",")}
+                  {s.passedThreshold === true && <b style={{ color: "var(--green, #3F8F6A)" }}> · набран ✓</b>}
+                  {s.passedThreshold === false && <b style={{ color: "var(--red)" }}> · не набран</b>}
+                </>
+              )}
+              {st.status && (
+                <span style={{ ...S.status, ...(st.status === "winner" || st.status === "prize" ? S.statusWin : null), marginLeft: hasThreshold ? 8 : 0 }}>{statusName(st.status)}</span>
+              )}
+              {st.place ? <span style={S.meta}> · {st.place} место</span> : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Поля этапов олимпиады в форме: этапы, у этапа туры (или баллы целиком).
+function OlympiadFields({ stages, onChange }) {
+  const list = stages && stages.length ? stages : [blankStage("Отборочный")];
+  const setStage = (i, change) => onChange(list.map((st, j) => (j === i ? { ...st, ...change } : st)));
+  return (
+    <div style={S.stagesForm}>
+      <div style={S.label}>Олимпиада — только в баллах. Баллы туров складываются; этапы считаются отдельно.</div>
+      {list.map((st, i) => {
+        const tours = st.tours || [];
+        const sum = stageSummary(st);
+        return (
+          <div key={st.id || i} style={S.stageForm} data-stage-form={i}>
+            <div style={S.stageFormHead}>
+              <input
+                list="results-stages"
+                value={st.name || ""}
+                placeholder={"Этап " + (i + 1)}
+                aria-label={"Этап " + (i + 1)}
+                onChange={(e) => setStage(i, { name: e.target.value })}
+                style={{ ...S.input, flex: 2, fontWeight: 600 }}
+              />
+              <input type="date" value={st.date || ""} aria-label={"Дата этапа " + (i + 1)} onChange={(e) => setStage(i, { date: e.target.value })} style={{ ...S.input, flex: 1 }} />
+              {list.length > 1 && (
+                <button type="button" aria-label={"Убрать этап " + (i + 1)} onClick={() => onChange(list.filter((_, j) => j !== i))} style={S.iconBtn}>
+                  ×
+                </button>
+              )}
+            </div>
+            {tours.length === 0 ? (
+              <div style={S.partRow}>
+                <input value={st.score ?? ""} placeholder="баллы этапа" inputMode="decimal" aria-label={"Баллы этапа " + (i + 1)} onChange={(e) => setStage(i, { score: e.target.value })} style={{ ...S.input, flex: 1 }} />
+                <input value={st.max ?? ""} placeholder="из" inputMode="decimal" aria-label={"Максимум этапа " + (i + 1)} onChange={(e) => setStage(i, { max: e.target.value })} style={{ ...S.input, flex: 1 }} />
+              </div>
+            ) : (
+              tours.map((t, j) => (
+                <div key={j} style={S.partRow}>
+                  <input
+                    value={t.name || ""}
+                    placeholder={"Тур " + (j + 1)}
+                    aria-label={`Этап ${i + 1}, тур ${j + 1}`}
+                    onChange={(e) => setStage(i, { tours: tours.map((x, k) => (k === j ? { ...x, name: e.target.value } : x)) })}
+                    style={{ ...S.input, flex: 2 }}
+                  />
+                  <input
+                    value={t.score ?? ""}
+                    placeholder="баллы"
+                    inputMode="decimal"
+                    aria-label={`Этап ${i + 1}, баллы тура ${j + 1}`}
+                    onChange={(e) => setStage(i, { tours: tours.map((x, k) => (k === j ? { ...x, score: e.target.value } : x)) })}
+                    style={{ ...S.input, flex: 1 }}
+                  />
+                  <input
+                    value={t.max ?? ""}
+                    placeholder="из"
+                    inputMode="decimal"
+                    aria-label={`Этап ${i + 1}, максимум тура ${j + 1}`}
+                    onChange={(e) => setStage(i, { tours: tours.map((x, k) => (k === j ? { ...x, max: e.target.value } : x)) })}
+                    style={{ ...S.input, flex: 1 }}
+                  />
+                  <button type="button" aria-label={`Убрать тур ${j + 1}`} onClick={() => setStage(i, { tours: tours.filter((_, k) => k !== j) })} style={S.iconBtn}>
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
+            <div style={S.partRow}>
+              <button
+                type="button"
+                onClick={() => setStage(i, { tours: tours.length ? [...tours, { name: "", score: "", max: "" }] : [{ name: "Тур 1", score: st.score ?? "", max: st.max ?? "" }, { name: "Тур 2", score: "", max: "" }] })}
+                style={S.linkBtn}
+              >
+                + Тур
+              </button>
+              {tours.length > 0 && <span style={S.label}>Сумма этапа: {sum.main}</span>}
+            </div>
+            <div style={S.grid2}>
+              <label style={S.field}>
+                <span style={S.label}>Проходной на следующий этап</span>
+                <input value={st.threshold ?? ""} inputMode="decimal" onChange={(e) => setStage(i, { threshold: e.target.value })} style={S.input} aria-label={"Проходной, этап " + (i + 1)} />
+              </label>
+              <label style={S.field}>
+                <span style={S.label}>Статус</span>
+                <select value={st.status || ""} onChange={(e) => setStage(i, { status: e.target.value })} style={S.input} aria-label={"Статус, этап " + (i + 1)}>
+                  {STATUSES.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={S.field}>
+                <span style={S.label}>Место</span>
+                <input value={st.place ?? ""} inputMode="decimal" onChange={(e) => setStage(i, { place: e.target.value })} style={S.input} aria-label={"Место, этап " + (i + 1)} />
+              </label>
+            </div>
+          </div>
+        );
+      })}
+      <datalist id="results-stages">
+        {STAGES.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
+      <button type="button" onClick={() => onChange([...list, blankStage(STAGES[Math.min(list.length, STAGES.length - 1)] || "")])} style={S.secondary}>
+        + Этап
+      </button>
+    </div>
+  );
+}
+
 // Поля результата — и в окне ученика, и в форме учителя.
 export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel, extra }) {
-  const [r, setR] = useState(() => ({ ...blankResult(initial && initial.kind), ...initial, parts: (initial && initial.parts) || [] }));
+  const [r, setR] = useState(() => {
+    const base = { ...blankResult(initial && initial.kind), ...initial, parts: (initial && initial.parts) || [] };
+    // Олимпиада старого вида (этап строкой, туры в parts) — открывается этапами.
+    return base.kind === "olympiad" ? { ...base, stages: olympiadStages(base), parts: [] } : base;
+  });
   const [withParts, setWithParts] = useState(() => !!(initial && initial.parts && initial.parts.length));
   const set = (patch) => setR((prev) => ({ ...prev, ...patch }));
-  const s = summarize({ ...r, parts: withParts ? r.parts : [] });
+  const s = summarize(r.kind === "olympiad" ? r : { ...r, parts: withParts ? r.parts : [] });
   const partsAllowed = r.scale === "points" || r.scale === "grade" || r.scale === "primsec";
 
   function field(label, key, props = {}) {
@@ -564,7 +735,12 @@ export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel,
               set(
                 r.id
                   ? { kind: k.id }
-                  : { kind: k.id, scale: blankResult(k.id).scale, max: k.id === "lesson" ? "100" : r.kind === "lesson" && String(r.max) === "100" ? "" : r.max }
+                  : {
+                      kind: k.id,
+                      scale: blankResult(k.id).scale,
+                      max: k.id === "lesson" ? "100" : r.kind === "lesson" && String(r.max) === "100" ? "" : r.max,
+                      stages: k.id === "olympiad" ? r.stages || blankResult("olympiad").stages : r.stages,
+                    }
               )
             }
             style={{ ...S.seg, ...(r.kind === k.id ? S.segOn : null) }}
@@ -587,8 +763,8 @@ export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel,
           placeholder:
             r.kind === "olympiad" ? "Например: Высшая проба" : r.kind === "lesson" ? "Например: тема урока" : r.kind === "exam" ? "Например: ЕГЭ по обществознанию" : r.kind === "probe" ? "Например: пробник ЕГЭ, октябрь" : "Например: КТ №2 по ТГП",
         })}
-        {field("Дата", "date", { type: "date" })}
-        {(r.kind === "olympiad" || r.stage) && (
+        {r.kind !== "olympiad" && field("Дата", "date", { type: "date" })}
+        {r.kind !== "olympiad" && r.stage && (
           <label style={S.field}>
             <span style={S.label}>Этап</span>
             <input list="results-stages" value={r.stage || ""} onChange={(e) => set({ stage: e.target.value })} style={S.input} />
@@ -601,6 +777,10 @@ export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel,
         )}
       </div>
 
+      {r.kind === "olympiad" ? (
+        <OlympiadFields stages={r.stages} onChange={(stages) => set({ stages })} />
+      ) : (
+      <>
       <label style={S.field}>
         <span style={S.label}>Как считается</span>
         <select value={r.scale} onChange={(e) => set({ scale: e.target.value })} style={S.input} aria-label="Как считается">
@@ -702,23 +882,9 @@ export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel,
         </div>
       )}
 
-      {r.kind === "olympiad" && (
-        <div style={S.grid2}>
-          <label style={S.field}>
-            <span style={S.label}>Статус</span>
-            <select value={r.status || ""} onChange={(e) => set({ status: e.target.value })} style={S.input} aria-label="Статус">
-              {STATUSES.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {numField("Проходной балл", "threshold")}
-          {numField("Место", "place")}
-        </div>
+      {numField("Проходной или порог (если есть)", "threshold")}
+      </>
       )}
-      {r.kind !== "olympiad" && numField("Проходной или порог (если есть)", "threshold")}
 
       <label style={S.field}>
         <span style={S.label}>Заметка</span>
@@ -726,7 +892,8 @@ export function ResultForm({ initial, subjects, submitLabel, onSubmit, onCancel,
       </label>
 
       <div style={S.preview} aria-live="polite">
-        Итог: <b>{s.main}</b>
+        {r.kind === "olympiad" ? "Итог последнего этапа: " : "Итог: "}
+        <b>{s.main}</b>
         {s.sub ? " · " + s.sub : ""}
         {s.passedThreshold === true ? " · проходной набран" : s.passedThreshold === false ? " · проходной не набран" : ""}
       </div>
@@ -809,10 +976,90 @@ function CodePanel({ code, sandbox, signedIn }) {
   );
 }
 
+// Выбор учеников: класс из списка — галочки по ученикам (без почты выбрать
+// нельзя: результат не дойдёт), поиск, «весь класс»; кого нет в списках —
+// почтой вручную.
+function StudentPicker({ value, onChange, classes = CLASSES }) {
+  const [classId, setClassId] = useState(classes[0] ? classes[0].id : "");
+  const [query, setQuery] = useState("");
+  const [manual, setManual] = useState("");
+  const chosen = new Set(value || []);
+  const cls = classes.find((c) => c.id === classId);
+  const q = query.trim().toLowerCase().replace(/ё/g, "е");
+  const students = (cls ? cls.students : []).filter((st) => !q || (studentName(st) + " " + st.email).toLowerCase().replace(/ё/g, "е").includes(q));
+  const byEmail = new Map(classes.flatMap((c) => c.students.filter((st) => st.email).map((st) => [st.email.toLowerCase(), studentName(st) + " · " + c.name])));
+  const toggle = (email, on) => onChange(on ? Array.from(new Set([...(value || []), email])) : (value || []).filter((x) => x !== email));
+  const withEmail = students.filter((st) => st.email);
+  return (
+    <div style={S.picker} data-student-picker>
+      <span style={S.label}>Кому</span>
+      {classes.length > 0 && (
+        <>
+          <div style={S.segRow} role="group" aria-label="Класс учеников">
+            {classes.map((c) => (
+              <button key={c.id} type="button" aria-pressed={classId === c.id} onClick={() => setClassId(c.id)} style={{ ...S.seg, ...(classId === c.id ? S.segOn : null) }}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+          <div style={S.pickerTools}>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Найти ученика" aria-label="Найти ученика" style={{ ...S.input, flex: 1 }} />
+            {withEmail.length > 0 && (
+              <button type="button" onClick={() => onChange(Array.from(new Set([...(value || []), ...withEmail.map((st) => st.email.toLowerCase())])))} style={S.secondary}>
+                Весь класс
+              </button>
+            )}
+          </div>
+          <div style={S.pickerList}>
+            {students.map((st) => {
+              const email = String(st.email || "").toLowerCase();
+              return (
+                <label key={st.id} style={{ ...S.pickerRow, ...(email ? null : { opacity: 0.55 }) }} title={email ? email : "Нет почты — результат не дойдёт"}>
+                  <input type="checkbox" disabled={!email} checked={!!email && chosen.has(email)} onChange={(e) => toggle(email, e.target.checked)} aria-label={studentName(st)} />
+                  <span>{studentName(st)}</span>
+                  {!email && <span style={S.label}>нет почты</span>}
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+      <div style={S.pickerTools}>
+        <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Нет в списке — почта ученика" aria-label="Почта ученика вручную" style={{ ...S.input, flex: 1 }} />
+        <button
+          type="button"
+          onClick={() => {
+            const e = manual.trim().toLowerCase();
+            if (!/^[^@\s]+@[^@\s]+$/.test(e)) return;
+            toggle(e, true);
+            setManual("");
+          }}
+          style={S.secondary}
+        >
+          Добавить
+        </button>
+      </div>
+      {(value || []).length > 0 && (
+        <div style={S.segRow} aria-label="Выбрано">
+          {(value || []).map((email) => (
+            <span key={email} style={S.chosen} data-chosen={email}>
+              {byEmail.get(email) || email}
+              <button type="button" onClick={() => toggle(email, false)} aria-label={"Убрать: " + (byEmail.get(email) || email)} style={S.chosenX}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Учитель: выложить результат нескольким ученикам по почте и убрать выложенное.
 function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebooks, schedule }) {
   const [tab, setTab] = useState("journal");
-  const [recipients, setRecipients] = useState(sandbox ? DEMO_EMAIL : "");
+  // Кому выложить: почты выбранных учеников (из списков классов или вручную).
+  const [recipients, setRecipients] = useState(() => (sandbox ? [DEMO_EMAIL] : []));
   // Подпись учителя помнится на устройстве: её видят ученики у каждой отметки.
   const [author, setAuthorState] = useState(() => {
     try {
@@ -839,11 +1086,12 @@ function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebook
   }, []);
 
   async function send(r) {
-    const list = recipients.split(/[\s,;]+/).filter(Boolean);
+    const list = recipients;
     const res = await publish(list, cleanResult(r), author.trim());
     setMsg(res.ok ? `Выложено: ${res.count} ${word(res.count, "ученику", "ученикам", "ученикам")}` : res.error);
     if (res.ok) {
       setFormKey((k) => k + 1);
+      if (!sandbox) setRecipients([]);
       load();
       onPublished();
     }
@@ -887,12 +1135,7 @@ function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebook
           Ученик увидит результат в своём разделе «Результаты» — только тот, чья почта указана.
           {inboxIsDemo ? " В предпросмотре облака нет: выложенное хранится на этом устройстве, а «ученик» — " + DEMO_EMAIL + "." : ""}
         </p>
-        <div style={S.grid2}>
-          <label style={S.field}>
-            <span style={S.label}>Почты учеников (через запятую или с новой строки)</span>
-            <textarea value={recipients} onChange={(e) => setRecipients(e.target.value)} rows={2} style={{ ...S.input, resize: "vertical" }} aria-label="Почты учеников" />
-          </label>
-        </div>
+        <StudentPicker value={recipients} onChange={setRecipients} />
         <ResultForm key={formKey} initial={{ ...blankResult("kt"), date: todayIso() }} subjects={subjects} submitLabel="Выложить" onSubmit={send} />
         {msg && (
           <div style={S.preview} role="status">
@@ -970,6 +1213,20 @@ const S = {
   statKinds: { display: "flex", flexWrap: "wrap", gap: 8, flexBasis: "100%" },
   statKind: { fontSize: 12.5, padding: "3px 9px", borderRadius: 999, background: "var(--panel2)", border: "1px solid var(--line2, var(--line))" },
   statNote: { margin: 0, flexBasis: "100%", fontSize: 12, color: "var(--mute)" },
+  stages: { display: "flex", flexDirection: "column", gap: 10 },
+  stage: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px solid var(--line2, var(--line))", background: "var(--panel2)" },
+  stageHead: { display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" },
+  stageName: { fontSize: 14, fontWeight: 600 },
+  stageSum: { marginLeft: "auto", fontFamily: "var(--serif)", fontSize: 18, fontVariantNumeric: "tabular-nums" },
+  stagesForm: { display: "flex", flexDirection: "column", gap: 10 },
+  stageForm: { display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line2, var(--line))" },
+  stageFormHead: { display: "flex", gap: 6, alignItems: "center" },
+  picker: { display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line2, var(--line))" },
+  pickerTools: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
+  pickerList: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: 4, maxHeight: 220, overflowY: "auto" },
+  pickerRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, padding: "4px 6px", borderRadius: 8, cursor: "pointer" },
+  chosen: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, padding: "3px 4px 3px 10px", borderRadius: 999, background: "var(--panel2)", border: "1px solid var(--line)" },
+  chosenX: { border: "none", background: "none", color: "var(--ink3)", cursor: "pointer", fontSize: 14, padding: "0 4px" },
   modeRow: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
   scoreGrade: { fontSize: 12.5, fontWeight: 700, color: "var(--ink2)" },
   lessons: { display: "flex", flexDirection: "column", gap: 12, padding: "14px 16px", borderRadius: 14, border: "1px solid var(--line)", background: "var(--panel)" },

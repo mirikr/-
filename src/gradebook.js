@@ -162,6 +162,19 @@ export function markPublished(gb, done) {
   return { ...gb, published };
 }
 
+// Как назвать ученика: «Фамилия Имя»; у старых записей — name, в крайнем
+// случае почта.
+export function studentName(st) {
+  if (!st) return "";
+  const full = [st.last, st.first].map((x) => String(x || "").trim()).filter(Boolean).join(" ");
+  return full || String(st.name || "").trim() || String(st.email || "").trim() || "Без имени";
+}
+
+// По алфавиту фамилий.
+export function sortStudents(list) {
+  return (list || []).slice().sort((a, b) => studentName(a).localeCompare(studentName(b), "ru"));
+}
+
 // Список учеников из вставленного текста: по строке на ученика, имя и почта
 // в любом порядке, через запятую, точку с запятой, табуляцию или пробел.
 export function parseStudents(text) {
@@ -173,9 +186,11 @@ export function parseStudents(text) {
       const found = (line.match(/[^\s,;<>]+@[^\s,;<>]+/) || [""])[0];
       const email = found.toLowerCase();
       const name = (found ? line.replace(found, "") : line).replace(/[<>,;\t]+/g, " ").replace(/\s+/g, " ").trim();
-      return { name: name || email, email };
+      // Первое слово — фамилия, остальное — имя.
+      const words = name.split(" ").filter(Boolean);
+      return { last: words[0] || "", first: words.slice(1).join(" "), email };
     })
-    .filter((s) => s.name || s.email);
+    .filter((s) => s.last || s.email);
 }
 
 // Оценка за отметку журнала: в 100-балльном — по шкале уроков
@@ -242,4 +257,28 @@ export function classStats(gb, dates, today = null) {
     best: best ? best.student : null,
     per,
   };
+}
+
+// Ученики журнала: класс из списка (без убранных из этого журнала) и
+// добавленные учителем. У журнала без класса (старого вида) — свой список.
+export function journalStudents(gb, classes) {
+  if (!gb) return [];
+  const added = gb.addedStudents || [];
+  if (!gb.classId) return [...(gb.students || []), ...added];
+  const cls = (classes || []).find((c) => c.id === gb.classId);
+  const excluded = new Set(gb.excluded || []);
+  const fromClass = ((cls && cls.students) || []).filter((st) => !excluded.has(st.id)).map((st) => ({ ...st, fromClass: true }));
+  return [...fromClass, ...added.filter((st) => !fromClass.some((x) => x.id === st.id))];
+}
+
+// Журнал вместе с учениками — для подсчётов и выкладки.
+export function withStudents(gb, classes) {
+  return gb ? { ...gb, students: journalStudents(gb, classes) } : gb;
+}
+
+// Название журнала: «10Б · Право».
+export function journalTitle(gb, classes) {
+  if (!gb) return "";
+  const cls = gb.classId && (classes || []).find((c) => c.id === gb.classId);
+  return [cls ? cls.name : gb.name, gb.subject].filter(Boolean).join(" · ") || "Журнал";
 }

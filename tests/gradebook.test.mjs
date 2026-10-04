@@ -1,6 +1,6 @@
 // Журнал учителя: даты из расписания, отметки, что выложить ученикам.
 import assert from "node:assert";
-import { classStats, markGrade, studentStats, dateAverage, daysFromSchedule, lessonDates, markPublished, markValue, newGradebook, parseStudents, payloadFor, pendingChanges, studentAverage } from "../src/gradebook.js";
+import { classStats, markGrade, sortStudents, studentName, studentStats, dateAverage, daysFromSchedule, lessonDates, markPublished, markValue, newGradebook, parseStudents, payloadFor, pendingChanges, studentAverage } from "../src/gradebook.js";
 
 let passed = 0;
 function check(name, fn) {
@@ -91,10 +91,14 @@ check("что увидит ученик: урок по 100-балльной ил
 check("список учеников из вставленного текста", () => {
   const list = parseStudents("Иванов Иван, Ivanov@Mail.ru\npetrova@mail.ru\tПетрова Анна\nСидоров\n\n");
   assert.deepEqual(list, [
-    { name: "Иванов Иван", email: "ivanov@mail.ru" },
-    { name: "Петрова Анна", email: "petrova@mail.ru" },
-    { name: "Сидоров", email: "" },
+    { last: "Иванов", first: "Иван", email: "ivanov@mail.ru" },
+    { last: "Петрова", first: "Анна", email: "petrova@mail.ru" },
+    { last: "Сидоров", first: "", email: "" },
   ]);
+  assert.equal(studentName({ last: "Иванов", first: "Иван" }), "Иванов Иван");
+  assert.equal(studentName({ name: "Старая запись" }), "Старая запись");
+  assert.equal(studentName({ email: "a@b.ru" }), "a@b.ru");
+  assert.deepEqual(sortStudents([{ last: "Петрова" }, { last: "Иванов" }, { last: "Сидоров" }]).map((x) => x.last), ["Иванов", "Петрова", "Сидоров"]);
 });
 
 check("статистика: средний балл, средняя оценка, пропуски, распределение", () => {

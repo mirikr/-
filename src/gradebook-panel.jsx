@@ -4,23 +4,29 @@ import {
   DAY_SHORT,
   classStats,
   markGrade,
-  studentStats,
   dayOf,
   daysFromSchedule,
   itemKey,
+  journalTitle,
   lessonDates,
   markPublished,
   markValue,
   newGradebook,
   parseStudents,
   payloadFor,
+  sortStudents,
+  studentName,
   pendingChanges,
+  withStudents,
 } from "./gradebook.js";
+import { CLASSES, allStudents } from "./school-roster.js";
 import { publishItems } from "./results-inbox.js";
 
-// Журнал учителя (gradebook.js): ученики строками, даты уроков из расписания
-// столбцами, отметки в клетках. Отметки уходят ученикам кнопкой «Выложить
-// изменения» — только новые, исправленные и стёртые.
+// Журнал учителя (gradebook.js): класс из списка (school-roster.js) — ученики
+// строками, даты уроков из расписания — столбцами, отметки в клетках. Отметки
+// уходят ученикам кнопкой «Выложить изменения» — только новые, исправленные и
+// стёртые. Недостающего ученика учитель добавляет в журнал сам: из другого
+// класса или вручную; лишнего — убирает из этого журнала.
 
 const f1 = (n) => (n === null || n === undefined ? "—" : String(Math.round(n * 10) / 10).replace(".", ","));
 const ddmm = (iso) => iso.slice(8, 10) + "." + iso.slice(5, 7);
@@ -31,15 +37,23 @@ const todayIso = () => {
 };
 const VIEW_KEY = "planner-gradebook-view";
 
-export default function GradebookPanel({ gradebooks, setGradebooks, schedule, subjects, authorName, onPublished, demoEmail }) {
+export default function GradebookPanel({ gradebooks, setGradebooks, schedule, subjects, authorName, onPublished, demoEmail, classes = CLASSES }) {
   const list = gradebooks || [];
-  const [openId, setOpenId] = useState(() => (list[0] ? list[0].id : ""));
+  const hasLegacy = list.some((g) => !g.classId);
+  const [classId, setClassId] = useState(() => (list[0] ? list[0].classId || "" : classes[0] ? classes[0].id : ""));
+  const inClass = list.filter((g) => (g.classId || "") === classId);
+  const [openId, setOpenId] = useState(() => (inClass[0] ? inClass[0].id : ""));
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pasteOpen, setPasteOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [paste, setPaste] = useState("");
+  const [query, setQuery] = useState("");
+  const [manual, setManual] = useState({ last: "", first: "", email: "" });
   const [extraDate, setExtraDate] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  // Удаление журнала — подтверждением здесь же: системное окно confirm() в
+  // предпросмотре (и во встроенных окнах) заблокировано и молча отвечает «нет».
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const tableRef = useRef(null);
   // Как показывать отметки: баллами (как ставят) или оценками по шкале уроков.
   const [view, setViewState] = useState(() => {
@@ -57,18 +71,26 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
       /* приватное окно */
     }
   };
-  const gb = list.find((g) => g.id === openId) || list[0] || null;
+  const raw = inClass.find((g) => g.id === openId) || inClass[0] || null;
+  const currentClass = classes.find((c) => c.id === classId) || null;
+  // Журнал вместе с учениками (класс + добавленные − убранные), по фамилии.
+  const gb = useMemo(() => {
+    if (!raw) return null;
+    const full = withStudents(raw, classes);
+    return { ...full, students: raw.classId ? sortStudents(full.students) : full.students, name: journalTitle(raw, classes) };
+  }, [raw, classes]);
 
   function patch(fn) {
-    if (!gb) return;
-    setGradebooks((prev) => (prev || []).map((g) => (g.id === gb.id ? fn(g) : g)));
+    if (!raw) return;
+    setGradebooks((prev) => (prev || []).map((g) => (g.id === raw.id ? fn(g) : g)));
   }
 
   function create() {
-    const subject = (subjects || [])[0] || "";
-    const fresh = newGradebook(subject, schedule);
-    // В предпросмотре — сразу учебный ученик, чтобы можно было проверить, что он увидит.
-    if (demoEmail) fresh.students = [{ id: uid(), name: "Учебный ученик", email: demoEmail }];
+    const used = new Set(inClass.map((g) => g.subject));
+    const subject = (subjects || []).find((n) => !used.has(n)) || (subjects || [])[0] || "";
+    const fresh = { ...newGradebook(subject, schedule), classId, addedStudents: [], excluded: [] };
+    // Журнал без класса из списка — со своим списком; в предпросмотре сразу учебный ученик.
+    if (!classId) fresh.students = demoEmail ? [{ id: uid(), last: "Учебный", first: "ученик", email: demoEmail }] : [];
     setGradebooks((prev) => [...(prev || []), fresh]);
     setOpenId(fresh.id);
     setSettingsOpen(true);
@@ -81,6 +103,38 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   const asGrades = gb && (gb.scale === 5 || view === "grades");
   const fromSchedule = gb ? daysFromSchedule(schedule, gb.subject) : [];
   const noEmail = gb ? gb.students.filter((s) => !String(s.email || "").trim()).length : 0;
+
+  // Правка ученика: добавленного в журнал или из своего списка старого журнала.
+  // Учеников из списка класса правит разработчик, здесь они только читаются.
+  function editStudent(id, change) {
+    patch((g) => ({
+      ...g,
+      addedStudents: (g.addedStudents || []).map((x) => (x.id === id ? { ...x, ...change } : x)),
+      students: (g.students || []).map((x) => (x.id === id ? { ...x, ...change } : x)),
+    }));
+  }
+
+  function removeStudent(st) {
+    patch((g) => ({
+      ...g,
+      excluded: st.fromClass ? Array.from(new Set([...(g.excluded || []), st.id])) : g.excluded || [],
+      addedStudents: (g.addedStudents || []).filter((x) => x.id !== st.id),
+      students: (g.students || []).filter((x) => x.id !== st.id),
+    }));
+  }
+
+  function addStudent(st) {
+    patch((g) => {
+      // Убранного из этого журнала ученика класса — просто вернуть.
+      if ((g.excluded || []).includes(st.id) && currentClass && currentClass.students.some((x) => x.id === st.id)) {
+        return { ...g, excluded: g.excluded.filter((x) => x !== st.id) };
+      }
+      // Из списков классов — помечаем: такой ученик в таблице только читается.
+      const entry = { id: st.id || uid(), last: st.last || "", first: st.first || "", email: st.email || "", ...(st.className ? { fromRoster: true, className: st.className } : null) };
+      if (!g.classId) return { ...g, students: [...(g.students || []), entry] };
+      return { ...g, addedStudents: [...(g.addedStudents || []), entry] };
+    });
+  }
 
   function setMark(studentId, date, value) {
     patch((g) => ({ ...g, marks: { ...g.marks, [studentId]: { ...((g.marks || {})[studentId] || {}), [date]: value } } }));
@@ -120,53 +174,99 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     if (onPublished) onPublished();
   }
 
+  // Выбор класса и предмета — сверху всегда.
+  const picker = (
+    <>
+      {(classes.length > 0 || hasLegacy) && (
+        <div style={S.row} role="group" aria-label="Класс">
+          <span style={S.label}>Класс:</span>
+          {classes.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={classId === c.id}
+              onClick={() => {
+                setClassId(c.id);
+                const first = list.find((g) => g.classId === c.id);
+                setOpenId(first ? first.id : "");
+                setMsg("");
+              }}
+              style={{ ...S.seg, ...(classId === c.id ? S.segOn : null) }}
+            >
+              {c.name}
+            </button>
+          ))}
+          {(hasLegacy || !classes.length) && (
+            <button type="button" aria-pressed={classId === ""} onClick={() => { setClassId(""); const first = list.find((g) => !g.classId); setOpenId(first ? first.id : ""); }} style={{ ...S.seg, ...(classId === "" ? S.segOn : null) }}>
+              Свой список
+            </button>
+          )}
+        </div>
+      )}
+      {classes.length === 0 && (
+        <p style={S.text}>Списки классов добавляет разработчик. Пока их нет — журнал можно вести своим списком учеников.</p>
+      )}
+    </>
+  );
+
   if (!gb) {
     return (
       <section className="ap-card" style={S.card}>
         <div style={S.title}>Журнал</div>
+        {picker}
         <p style={S.text}>
+          {currentClass ? `У класса ${currentClass.name} журналов пока нет. ` : ""}
           Ученики — строками, уроки по датам из расписания — столбцами. Ставьте отметки, а потом нажмите «Выложить изменения»: каждый
           ученик увидит свои отметки в разделе «Результаты».
         </p>
         <button type="button" onClick={create} style={S.primary}>
-          + Новый журнал
+          {currentClass ? "+ Журнал " + currentClass.name : "+ Новый журнал"}
         </button>
       </section>
     );
   }
 
   const changedKeys = new Set(changes.map((c) => c.key));
+  const inJournal = new Set(gb.students.map((st) => st.id));
+  const q = query.trim().toLowerCase().replace(/ё/g, "е");
+  const candidates = allStudents(classes)
+    .filter((st) => !inJournal.has(st.id))
+    .filter((st) => !q || (studentName(st) + " " + st.email + " " + st.className).toLowerCase().replace(/ё/g, "е").includes(q))
+    .slice(0, 30);
 
   return (
     <section className="ap-card" style={S.card} data-gradebook={gb.name}>
+      {picker}
       <div style={S.head}>
-        <select value={gb.id} onChange={(e) => setOpenId(e.target.value)} aria-label="Журнал" style={S.select}>
-          {list.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
+        <div style={S.row} role="group" aria-label="Журналы класса">
+          {inClass.map((g) => (
+            <button key={g.id} type="button" aria-pressed={g.id === raw.id} onClick={() => { setOpenId(g.id); setMsg(""); }} style={{ ...S.seg, ...(g.id === raw.id ? S.segOn : null) }}>
+              {g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}
+            </button>
           ))}
-        </select>
+          <button type="button" onClick={create} style={S.secondary}>
+            {classId ? "+ Предмет" : "+ Журнал"}
+          </button>
+        </div>
         <button type="button" onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} style={S.secondary}>
           {settingsOpen ? "Скрыть настройки" : "Настройки журнала"}
-        </button>
-        <button type="button" onClick={create} style={S.secondary}>
-          + Журнал
         </button>
       </div>
 
       {settingsOpen && (
         <div style={S.settings}>
           <div style={S.grid}>
-            <label style={S.field}>
-              <span style={S.label}>Название (класс, группа)</span>
-              <input value={gb.name} onChange={(e) => patch((g) => ({ ...g, name: e.target.value }))} style={S.input} aria-label="Название журнала" />
-            </label>
+            {!raw.classId && (
+              <label style={S.field}>
+                <span style={S.label}>Название (класс, группа)</span>
+                <input value={raw.name} onChange={(e) => patch((g) => ({ ...g, name: e.target.value }))} style={S.input} aria-label="Название журнала" />
+              </label>
+            )}
             <label style={S.field}>
               <span style={S.label}>Предмет</span>
               <input
                 list="gb-subjects"
-                value={gb.subject}
+                value={raw.subject}
                 aria-label="Предмет журнала"
                 onChange={(e) => {
                   const subject = e.target.value;
@@ -183,11 +283,11 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             </label>
             <label style={S.field}>
               <span style={S.label}>С</span>
-              <input type="date" value={gb.from} onChange={(e) => patch((g) => ({ ...g, from: e.target.value }))} style={S.input} aria-label="Начало периода" />
+              <input type="date" value={raw.from} onChange={(e) => patch((g) => ({ ...g, from: e.target.value }))} style={S.input} aria-label="Начало периода" />
             </label>
             <label style={S.field}>
               <span style={S.label}>По</span>
-              <input type="date" value={gb.to} onChange={(e) => patch((g) => ({ ...g, to: e.target.value }))} style={S.input} aria-label="Конец периода" />
+              <input type="date" value={raw.to} onChange={(e) => patch((g) => ({ ...g, to: e.target.value }))} style={S.input} aria-label="Конец периода" />
             </label>
           </div>
           <div style={S.field}>
@@ -197,7 +297,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             </span>
             <div style={S.row} role="group" aria-label="Дни уроков">
               {DAY_KEYS.map((d) => {
-                const on = (gb.days || []).includes(d);
+                const on = (raw.days || []).includes(d);
                 return (
                   <button
                     key={d}
@@ -223,29 +323,42 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
               [100, "100-балльная"],
               [5, "5-балльная"],
             ].map(([v, label]) => (
-              <button key={v} type="button" aria-pressed={gb.scale === v} onClick={() => patch((g) => ({ ...g, scale: v }))} style={{ ...S.seg, ...(gb.scale === v ? S.segOn : null) }}>
+              <button key={v} type="button" aria-pressed={raw.scale === v} onClick={() => patch((g) => ({ ...g, scale: v }))} style={{ ...S.seg, ...(raw.scale === v ? S.segOn : null) }}>
                 {label}
               </button>
             ))}
             <span style={{ flex: 1 }} />
-            <button
-              type="button"
-              onClick={() => {
-                if (!window.confirm(`Удалить журнал «${gb.name}»? Уже выложенные отметки у учеников останутся.`)) return;
-                setGradebooks((prev) => (prev || []).filter((g) => g.id !== gb.id));
-                setOpenId("");
-              }}
-              style={{ ...S.link, color: "var(--red)" }}
-            >
-              Удалить журнал
-            </button>
+            {confirmDelete ? (
+              <span style={S.confirm} role="alertdialog" aria-label="Удалить журнал?">
+                Удалить журнал «{gb.name}»? Выложенные отметки у учеников останутся.
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGradebooks((prev) => (prev || []).filter((g) => g.id !== raw.id));
+                    setOpenId("");
+                    setConfirmDelete(false);
+                    setMsg("");
+                  }}
+                  style={{ ...S.secondary, color: "var(--red)", borderColor: "var(--red)" }}
+                >
+                  Да, удалить
+                </button>
+                <button type="button" onClick={() => setConfirmDelete(false)} style={S.secondary}>
+                  Нет
+                </button>
+              </span>
+            ) : (
+              <button type="button" onClick={() => setConfirmDelete(true)} style={{ ...S.link, color: "var(--red)" }}>
+                Удалить журнал
+              </button>
+            )}
           </div>
         </div>
       )}
 
       <div style={S.row}>
         <span style={S.label}>
-          Ученики: {gb.students.length} · уроков: {dates.length}
+          {currentClass && raw.classId ? currentClass.name + " · " : ""}Ученики: {gb.students.length} · уроков: {dates.length}
         </span>
         {gb.scale === 100 && (
           <span style={S.viewSwitch} role="group" aria-label="Показывать">
@@ -259,40 +372,72 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             ))}
           </span>
         )}
-        <button type="button" onClick={() => setPasteOpen(!pasteOpen)} style={S.link} aria-expanded={pasteOpen}>
-          + Ученики
+        <button type="button" onClick={() => setAddOpen(!addOpen)} style={S.link} aria-expanded={addOpen}>
+          + Ученик
         </button>
+        {!raw.classId && gb.students.length > 1 && (
+          <button type="button" onClick={() => patch((g) => ({ ...g, students: sortStudents(g.students) }))} style={S.link} title="Расставить учеников по фамилии">
+            По алфавиту
+          </button>
+        )}
       </div>
-      {pasteOpen && (
-        <div style={S.paste}>
-          <textarea
-            value={paste}
-            onChange={(e) => setPaste(e.target.value)}
-            rows={4}
-            placeholder={"По ученику на строку: имя и почта\nИванов Иван, ivanov@mail.ru\nПетрова Анна petrova@mail.ru"}
-            style={{ ...S.input, resize: "vertical" }}
-            aria-label="Список учеников"
-          />
+      {addOpen && (
+        <div style={S.paste} data-add-student>
+          {classes.length > 0 && (
+            <>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Найти ученика в списках классов: фамилия, имя, класс"
+                aria-label="Найти ученика"
+                style={S.input}
+              />
+              <div style={S.candidates}>
+                {candidates.length === 0 ? (
+                  <span style={S.label}>{q ? "Никого не нашлось — добавьте вручную ниже." : "Все ученики из списков уже в журнале."}</span>
+                ) : (
+                  candidates.map((st) => (
+                    <button key={st.id} type="button" onClick={() => addStudent(st)} style={S.candidate} data-candidate={studentName(st)}>
+                      <b>{studentName(st)}</b> <span style={S.label}>· {st.className}{st.email ? "" : " · без почты"}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          <div style={S.label}>Нет в списке — вручную:</div>
           <div style={S.row}>
+            <input value={manual.last} onChange={(e) => setManual({ ...manual, last: e.target.value })} placeholder="Фамилия" aria-label="Фамилия нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 120px" }} />
+            <input value={manual.first} onChange={(e) => setManual({ ...manual, first: e.target.value })} placeholder="Имя" aria-label="Имя нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 120px" }} />
+            <input value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value.trim() })} placeholder="почта (можно позже)" aria-label="Почта нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 160px" }} />
             <button
               type="button"
               onClick={() => {
-                const add = parseStudents(paste);
-                if (!add.length) return;
-                patch((g) => {
-                  const known = new Set(g.students.map((s) => String(s.email || "").toLowerCase()).filter(Boolean));
-                  const fresh = add.filter((s) => !s.email || !known.has(s.email)).map((s) => ({ id: uid(), ...s }));
-                  return { ...g, students: [...g.students, ...fresh] };
-                });
-                setPaste("");
-                setPasteOpen(false);
+                if (!manual.last.trim() && !manual.first.trim()) return;
+                addStudent({ id: uid(), last: manual.last.trim(), first: manual.first.trim(), email: manual.email.toLowerCase() });
+                setManual({ last: "", first: "", email: "" });
               }}
               style={S.primary}
             >
               Добавить
             </button>
-            <span style={S.label}>Почта нужна, чтобы ученик увидел отметки у себя.</span>
           </div>
+          {!raw.classId && (
+            <>
+              <div style={S.label}>Или сразу списком — по ученику на строку: фамилия, имя, почта.</div>
+              <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={3} placeholder={"Иванов Иван, ivanov@mail.ru\nПетрова Анна"} style={{ ...S.input, resize: "vertical" }} aria-label="Список учеников" />
+              <button
+                type="button"
+                onClick={() => {
+                  parseStudents(paste).forEach((st) => addStudent({ ...st, id: uid() }));
+                  setPaste("");
+                }}
+                style={{ ...S.secondary, alignSelf: "flex-start" }}
+              >
+                Добавить списком
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -328,21 +473,57 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
               {gb.students.map((st, row) => {
                 const ss = stats.per[row];
                 return (
-                  <tr key={st.id} data-student={st.name}>
+                  <tr key={st.id} data-student={studentName(st)}>
                     <td style={{ ...S.td, ...S.sticky, ...S.nameCell }}>
-                      <input
-                        value={st.name}
-                        onChange={(e) => patch((g) => ({ ...g, students: g.students.map((x) => (x.id === st.id ? { ...x, name: e.target.value } : x)) }))}
-                        aria-label="Имя ученика"
-                        style={S.nameInput}
-                      />
+                      {/* Ученик — фамилией и именем; почта ниже мелко: по ней
+                          отметки доходят. Ученик из списка класса — только
+                          читается (список ведёт разработчик); добавленного
+                          учителем можно править. */}
+                      {st.fromClass || st.fromRoster ? (
+                        <div style={S.rosterName}>
+                          <span style={S.rosterText}>
+                            <b>{studentName(st)}</b>
+                            <span style={{ ...S.rosterEmail, ...(st.email ? null : S.emailMissing) }}>
+                              {st.fromRoster && st.className ? st.className + " · " : ""}
+                              {st.email || "нет почты — отметки не дойдут"}
+                            </span>
+                          </span>
+                          <button type="button" onClick={() => removeStudent(st)} title="Убрать из этого журнала" aria-label={"Убрать из журнала: " + studentName(st)} style={S.hideBtn}>
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                      <div style={S.rosterName}>
+                      <div style={S.rosterText}>
+                      <div style={S.nameRow}>
+                        <input
+                          value={st.last ?? ""}
+                          placeholder="Фамилия"
+                          onChange={(e) => editStudent(st.id, { last: e.target.value })}
+                          aria-label={"Фамилия: " + studentName(st)}
+                          style={S.nameInput}
+                        />
+                        <input
+                          value={st.first ?? ""}
+                          placeholder="Имя"
+                          onChange={(e) => editStudent(st.id, { first: e.target.value })}
+                          aria-label={"Имя: " + studentName(st)}
+                          style={{ ...S.nameInput, fontWeight: 500 }}
+                        />
+                      </div>
                       <input
                         value={st.email}
-                        placeholder="почта"
-                        onChange={(e) => patch((g) => ({ ...g, students: g.students.map((x) => (x.id === st.id ? { ...x, email: e.target.value.trim() } : x)) }))}
-                        aria-label={"Почта: " + st.name}
+                        placeholder="почта — чтобы отметки дошли"
+                        onChange={(e) => editStudent(st.id, { email: e.target.value.trim() })}
+                        aria-label={"Почта: " + studentName(st)}
                         style={{ ...S.emailInput, ...(st.email ? null : S.emailMissing) }}
                       />
+                      </div>
+                      <button type="button" onClick={() => removeStudent(st)} title="Убрать из этого журнала" aria-label={"Убрать из журнала: " + studentName(st)} style={S.hideBtn}>
+                        ×
+                      </button>
+                      </div>
+                      )}
                     </td>
                     {dates.map((d, col) => {
                       const raw = ((gb.marks || {})[st.id] || {})[d] ?? "";
@@ -366,7 +547,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                             data-cell={row + ":" + col}
                             value={raw}
                             inputMode="decimal"
-                            aria-label={`${st.name}, ${ddmm(d)}`}
+                            aria-label={`${studentName(st)}, ${ddmm(d)}`}
                             onChange={(e) => setMark(st.id, d, e.target.value)}
                             onKeyDown={(e) => onCellKey(e, row, col)}
                             onFocus={(e) => e.target.select()}
@@ -377,18 +558,18 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                       );
                     })}
                     {gb.scale === 100 && (
-                      <td style={{ ...S.td, ...S.avgCell }} data-avg={st.name}>
+                      <td style={{ ...S.td, ...S.avgCell }} data-avg={studentName(st)}>
                         {f1(ss.avg)}
                       </td>
                     )}
-                    <td style={{ ...S.td, ...S.avgCell, ...(ss.avgGrade !== null && ss.avgGrade < 3 ? { color: "var(--red)" } : null) }} data-avg-grade={st.name}>
+                    <td style={{ ...S.td, ...S.avgCell, ...(ss.avgGrade !== null && ss.avgGrade < 3 ? { color: "var(--red)" } : null) }} data-avg-grade={studentName(st)}>
                       {f1(ss.avgGrade)}
                     </td>
                     <td style={{ ...S.td, ...S.statCell }}>{ss.count}</td>
-                    <td style={{ ...S.td, ...S.statCell, ...(ss.missing ? { color: "var(--red)" } : null) }} data-missing={st.name}>
+                    <td style={{ ...S.td, ...S.statCell, ...(ss.missing ? { color: "var(--red)" } : null) }} data-missing={studentName(st)}>
                       {ss.missing}
                     </td>
-                    <td style={{ ...S.td, ...S.statCell, whiteSpace: "nowrap" }} data-dist={st.name}>
+                    <td style={{ ...S.td, ...S.statCell, whiteSpace: "nowrap" }} data-dist={studentName(st)}>
                       {[5, 4, 3, 2].map((g) => ss.dist[g]).join(" · ")}
                     </td>
                   </tr>
@@ -443,8 +624,8 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             })}
           </div>
           <div style={S.label}>
-            {stats.best ? "Лучший средний: " + stats.best.name + ". " : ""}
-            {stats.risk.length ? "Средняя оценка ниже 3: " + stats.risk.map((x) => x.name).join(", ") + "." : "Средняя оценка ниже 3 — ни у кого."}
+            {stats.best ? "Лучший средний: " + studentName(stats.best) + ". " : ""}
+            {stats.risk.length ? "Средняя оценка ниже 3: " + stats.risk.map(studentName).join(", ") + "." : "Средняя оценка ниже 3 — ни у кого."}
           </div>
           {gb.scale === 100 && <div style={S.label}>Шкала уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5. Средние — среднее арифметическое.</div>}
         </div>
@@ -538,12 +719,21 @@ const S = {
   // колонка подстраивается под содержимое), а заполняет его и листается внутри.
   tableWrap: { overflowX: "auto", width: 0, minWidth: "100%", border: "1px solid var(--line)", borderRadius: 10 },
   table: { borderCollapse: "separate", borderSpacing: 0, fontSize: 13.5, minWidth: "100%" },
-  th: { position: "sticky", top: 0, padding: "6px 4px", background: "var(--panel2)", borderBottom: "1px solid var(--line)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap", zIndex: 1 },
+  // Закреплённые шапка и столбец — непрозрачные: карточки в теме полупрозрачны,
+  // и прокрученные клетки просвечивали бы сквозь имя ученика.
+  th: { position: "sticky", top: 0, padding: "6px 4px", background: "var(--menuBg)", borderBottom: "1px solid var(--line)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap", zIndex: 1 },
   td: { padding: "3px 4px", borderBottom: "1px solid var(--line2, var(--line))", textAlign: "center" },
-  sticky: { position: "sticky", left: 0, zIndex: 2, background: "var(--panel)", borderRight: "1px solid var(--line)" },
-  nameCell: { textAlign: "left", minWidth: 150, maxWidth: 200 },
-  nameInput: { display: "block", width: "100%", border: "none", background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 13.5, fontWeight: 600, padding: "2px 4px" },
-  emailInput: { display: "block", width: "100%", border: "none", background: "transparent", color: "var(--ink3)", font: "inherit", fontSize: 11.5, padding: "0 4px 2px" },
+  sticky: { position: "sticky", left: 0, zIndex: 2, background: "var(--menuBg)", borderRight: "1px solid var(--line)", boxShadow: "4px 0 6px -4px rgba(0,0,0,.18)" },
+  nameCell: { textAlign: "left", minWidth: 170, maxWidth: 230 },
+  nameRow: { display: "flex", gap: 2 },
+  rosterName: { display: "flex", alignItems: "center", gap: 4, padding: "2px 4px" },
+  rosterText: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0, fontSize: 13.5 },
+  rosterEmail: { fontSize: 11.5, color: "var(--ink3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  candidates: { display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 180, overflowY: "auto" },
+  candidate: { border: "1px solid var(--line)", borderRadius: 999, background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13, padding: "4px 10px", cursor: "pointer" },
+  confirm: { display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 8, fontSize: 13, color: "var(--ink2)" },
+  nameInput: { display: "block", width: "100%", minWidth: 0, flex: 1, border: "none", background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 13.5, fontWeight: 600, padding: "0 2px", height: 20, minHeight: 0, lineHeight: "20px", boxShadow: "none", borderRadius: 4 },
+  emailInput: { display: "block", width: "100%", border: "none", background: "transparent", color: "var(--ink3)", font: "inherit", fontSize: 11.5, padding: "0 2px", height: 16, minHeight: 0, lineHeight: "16px", boxShadow: "none", borderRadius: 4 },
   emailMissing: { color: "var(--red)" },
   dateTop: { fontSize: 13, fontVariantNumeric: "tabular-nums" },
   dateDay: { display: "flex", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 11, fontWeight: 400, color: "var(--mute)" },

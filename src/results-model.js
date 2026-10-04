@@ -82,9 +82,80 @@ export function partsTotal(parts) {
   return { score, max };
 }
 
+// Олимпиада — только в баллах. У неё несколько этапов (отборочный,
+// заключительный…), у этапа — туры: баллы туров складываются, этапы считаются
+// отдельно. Старые записи (этап строкой, туры в parts) читаются как один этап.
+export function olympiadStages(r) {
+  const res = r || {};
+  if (Array.isArray(res.stages) && res.stages.length) return res.stages;
+  return [
+    {
+      id: "st1",
+      name: res.stage || "",
+      date: res.date || "",
+      tours: res.parts || [],
+      score: res.score,
+      max: res.max,
+      threshold: res.threshold,
+      status: res.status || "",
+      place: res.place,
+    },
+  ];
+}
+
+// Итог этапа: сумма туров (или баллы этапа целиком), проходной.
+export function stageSummary(stage) {
+  return summarizeFlat({ scale: "points", parts: (stage && stage.tours) || [], score: stage && stage.score, max: stage && stage.max, threshold: stage && stage.threshold });
+}
+
+// Этапы олимпиады — отдельными результатами (для статистики и сводок).
+export function expandResults(list) {
+  const out = [];
+  (list || []).forEach((r) => {
+    if (!r || r.kind !== "olympiad") {
+      out.push(r);
+      return;
+    }
+    olympiadStages(r).forEach((st, i) => {
+      out.push({
+        ...r,
+        id: r.id + ":" + (st.id || i),
+        scale: "points",
+        parts: st.tours || [],
+        score: st.score,
+        max: st.max,
+        threshold: st.threshold,
+        status: st.status,
+        place: st.place,
+        date: st.date || r.date,
+        stageName: st.name || "",
+        stages: undefined,
+      });
+    });
+  });
+  return out;
+}
+
+export function blankStage(name = "") {
+  return { id: "st-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, date: "", tours: [], score: "", max: "", threshold: "", status: "", place: "" };
+}
+
+// Итог записи для показа и подсчётов: у олимпиады — по последнему этапу с
+// баллами (этапы не складываются).
+export function summarize(r) {
+  if (r && r.kind === "olympiad") {
+    const stages = olympiadStages(r);
+    const scored = stages.filter((st) => stageSummary(st).percent !== null || stageSummary(st).main !== "нет баллов");
+    const last = scored.length ? scored[scored.length - 1] : stages[stages.length - 1];
+    const s = stageSummary(last || {});
+    return { ...s, sub: [last && last.name, s.sub].filter(Boolean).join(" · "), stages: stages.length };
+  }
+  return summarizeFlat(r);
+}
+
 // Итог записи для показа и подсчётов: главное число, подпись, процент (0–100
 // или null, если его не из чего посчитать) и прошёл ли проходной.
-export function summarize(r) {
+function summarizeFlat(r) {
   const res = r || {};
   const scale = res.scale || "points";
   const parts = partsTotal(res.parts);
@@ -165,6 +236,8 @@ export function summarize(r) {
 // шкале уроков от процента. Зачёт и записи без баллов — без оценки.
 export function gradeOf(r) {
   if (!r) return null;
+  // Олимпиады — только в баллах: оценкой не переводятся.
+  if (r.kind === "olympiad") return null;
   if (r.scale === "grade" && num(r.grade) !== null && num(r.score) === null) return num(r.grade);
   if (r.scale === "pass") return null;
   return gradeFromPercent(summarize(r).percent);
@@ -177,7 +250,7 @@ export function valueOf(r, mode = "points") {
 
 // Сводка по предмету: сколько записей, средний и последний — в баллах или оценках.
 export function subjectSummary(results, mode = "points") {
-  const list = (results || []).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const list = expandResults(results).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   const withPct = list.map((r) => ({ r, p: valueOf(r, mode) })).filter((x) => x.p !== null);
   const avg = withPct.length ? withPct.reduce((s, x) => s + x.p, 0) / withPct.length : null;
   const last = withPct.length ? withPct[withPct.length - 1] : null;
@@ -196,7 +269,8 @@ export function subjectSummary(results, mode = "points") {
 // шкалу (процент от максимума, вторичные баллы, оценка, зачёт), и средний балл —
 // среднее арифметическое. Записи без баллов в подсчёт не входят.
 export function overallStats(results, mode = "points") {
-  const rows = (results || [])
+  const expanded = expandResults(results);
+  const rows = expanded
     .map((r) => ({ r, p: valueOf(r, mode) }))
     .filter((x) => x.p !== null)
     .sort((a, b) => String(a.r.date || "").localeCompare(String(b.r.date || "")));
@@ -210,7 +284,7 @@ export function overallStats(results, mode = "points") {
   const last = rows.length ? rows[rows.length - 1].p : null;
   const prev = rows.length > 1 ? rows[rows.length - 2].p : null;
   return {
-    count: (results || []).length,
+    count: expanded.length,
     scored: rows.length,
     avg: mean(rows),
     best: rows.length ? Math.max(...rows.map((x) => x.p)) : null,
@@ -231,6 +305,8 @@ export function blankResult(kind = "kt") {
     date: "",
     stage: "",
     scale: kind === "exam" ? "primsec" : kind === "kt" ? "grade" : "points",
+    // Олимпиада начинается с одного этапа; туры и следующие этапы добавляются.
+    stages: kind === "olympiad" ? [blankStage("Отборочный")] : undefined,
     score: "",
     // Оценки за уроки — по 100-балльной шкале.
     max: kind === "lesson" ? "100" : "",
@@ -251,7 +327,9 @@ export function blankResult(kind = "kt") {
 
 // Чистит запись перед сохранением: числа — числами, пустое — убирается.
 export function cleanResult(r) {
+  if (r && r.kind === "olympiad") return cleanOlympiad(r);
   const out = { ...r };
+  delete out.stages;
   ["score", "max", "primary", "primaryMax", "secondary", "secondaryMax", "grade", "percent", "threshold", "place"].forEach((k) => {
     const n = num(out[k]);
     if (n === null) delete out[k];
@@ -267,6 +345,38 @@ export function cleanResult(r) {
   });
   if (!out.status) delete out.status;
   if (out.passed !== true && out.passed !== false) delete out.passed;
+  return out;
+}
+
+function cleanOlympiad(r) {
+  const out = { id: r.id, kind: "olympiad", scale: "points" };
+  ["title", "subject", "note"].forEach((k) => {
+    const v = String(r[k] || "").trim();
+    if (v) out[k] = v;
+  });
+  if (r.source) out.source = r.source;
+  out.stages = olympiadStages(r)
+    .map((st, i) => {
+      const s = { id: st.id || "st" + (i + 1), name: String(st.name || "").trim() };
+      if (st.date) s.date = st.date;
+      const tours = (st.tours || [])
+        .map((t) => ({ name: String(t.name || "").trim(), score: num(t.score), max: num(t.max) }))
+        .filter((t) => t.name || t.score !== null || t.max !== null);
+      if (tours.length) s.tours = tours;
+      else {
+        if (num(st.score) !== null) s.score = num(st.score);
+        if (num(st.max) !== null) s.max = num(st.max);
+      }
+      if (num(st.threshold) !== null) s.threshold = num(st.threshold);
+      if (num(st.place) !== null) s.place = num(st.place);
+      if (st.status) s.status = st.status;
+      return s;
+    })
+    .filter((s) => s.name || s.date || s.tours || s.score !== undefined || s.status);
+  if (!out.stages.length) out.stages = [{ id: "st1", name: "" }];
+  // Дата олимпиады — дата первого этапа: по ней запись встаёт в список.
+  const dated = out.stages.map((s) => s.date).filter(Boolean).sort();
+  if (dated.length) out.date = dated[dated.length - 1];
   return out;
 }
 
