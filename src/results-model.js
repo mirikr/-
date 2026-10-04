@@ -158,6 +158,8 @@ export function summarize(r) {
 function summarizeFlat(r) {
   const res = r || {};
   const scale = res.scale || "points";
+  // «н» из журнала — не был на уроке: без баллов и без оценки.
+  if (scale === "absent") return { main: "н", sub: "не был", percent: null, passedThreshold: null };
   const parts = partsTotal(res.parts);
   let main = "";
   let sub = "";
@@ -236,8 +238,8 @@ function summarizeFlat(r) {
 // шкале уроков от процента. Зачёт и записи без баллов — без оценки.
 export function gradeOf(r) {
   if (!r) return null;
-  // Олимпиады — только в баллах: оценкой не переводятся.
-  if (r.kind === "olympiad") return null;
+  // Олимпиады — только в баллах: оценкой не переводятся. «н» — без оценки.
+  if (r.kind === "olympiad" || r.scale === "absent") return null;
   if (r.scale === "grade" && num(r.grade) !== null && num(r.score) === null) return num(r.grade);
   if (r.scale === "pass") return null;
   return gradeFromPercent(summarize(r).percent);

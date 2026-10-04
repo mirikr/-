@@ -17,6 +17,7 @@ import {
   sortStudents,
   studentName,
   pendingChanges,
+  isAbsent,
   withStudents,
 } from "./gradebook.js";
 import { CLASSES, allStudents } from "./school-roster.js";
@@ -37,7 +38,7 @@ const todayIso = () => {
 };
 const VIEW_KEY = "planner-gradebook-view";
 
-export default function GradebookPanel({ gradebooks, setGradebooks, schedule, subjects, authorName, onPublished, demoEmail, classes = CLASSES }) {
+export default function GradebookPanel({ gradebooks, setGradebooks, schedule, subjects, authorName, onPublished, demoEmail, classes = CLASSES, authorField = null }) {
   const list = gradebooks || [];
   const hasLegacy = list.some((g) => !g.classId);
   const [classId, setClassId] = useState(() => (list[0] ? list[0].classId || "" : classes[0] ? classes[0].id : ""));
@@ -45,6 +46,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   const [openId, setOpenId] = useState(() => (inClass[0] ? inClass[0].id : ""));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [dateOpen, setDateOpen] = useState(false);
   const [paste, setPaste] = useState("");
   const [query, setQuery] = useState("");
   const [manual, setManual] = useState({ last: "", first: "", email: "" });
@@ -175,11 +177,25 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   }
 
   // Выбор класса и предмета — сверху всегда.
-  const picker = (
-    <>
+  const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  // Сводка настроек на кнопке: «Октябрь · пн, чт · 100-балльная».
+  const settingsSummary = raw
+    ? (() => {
+        const f = raw.from || "";
+        const t = raw.to || "";
+        const wholeMonth = f.slice(0, 7) === t.slice(0, 7) && f.slice(8) === "01" && Number(t.slice(8)) >= 28;
+        const period = wholeMonth ? MONTHS[Number(f.slice(5, 7)) - 1] : f && t ? ddmm(f) + "–" + ddmm(t) : "период не задан";
+        const days = (raw.days || []).map((d) => DAY_SHORT[d].toLowerCase()).join(", ") || "дни не выбраны";
+        return [period, days, raw.scale === 5 ? "5-балльная" : "100-балльная"].join(" · ");
+      })()
+    : "";
+
+  // Класс и предмет — чипами в одну строку, справа — сводка настроек.
+  const topRow = (
+    <div style={S.topRow}>
       {(classes.length > 0 || hasLegacy) && (
-        <div style={S.row} role="group" aria-label="Класс">
-          <span style={S.label}>Класс:</span>
+        <div style={S.chipGroup} role="group" aria-label="Класс">
+          <span style={S.label}>Класс</span>
           {classes.map((c) => (
             <button
               key={c.id}
@@ -190,39 +206,70 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                 const first = list.find((g) => g.classId === c.id);
                 setOpenId(first ? first.id : "");
                 setMsg("");
+                setSettingsOpen(false);
               }}
-              style={{ ...S.seg, ...(classId === c.id ? S.segOn : null) }}
+              style={{ ...S.chip, ...(classId === c.id ? S.chipOn : null) }}
             >
               {c.name}
             </button>
           ))}
           {(hasLegacy || !classes.length) && (
-            <button type="button" aria-pressed={classId === ""} onClick={() => { setClassId(""); const first = list.find((g) => !g.classId); setOpenId(first ? first.id : ""); }} style={{ ...S.seg, ...(classId === "" ? S.segOn : null) }}>
+            <button
+              type="button"
+              aria-pressed={classId === ""}
+              onClick={() => {
+                setClassId("");
+                const first = list.find((g) => !g.classId);
+                setOpenId(first ? first.id : "");
+              }}
+              style={{ ...S.chip, ...(classId === "" ? S.chipOn : null) }}
+            >
               Свой список
             </button>
           )}
         </div>
       )}
-      {classes.length === 0 && (
-        <p style={S.text}>Списки классов добавляет разработчик. Пока их нет — журнал можно вести своим списком учеников.</p>
+      {raw && <span style={S.vsep} aria-hidden="true" />}
+      {raw && (
+        <div style={S.chipGroup} role="group" aria-label="Журналы класса">
+          <span style={S.label}>{classId ? "Предмет" : "Журнал"}</span>
+          {inClass.map((g) => (
+            <button key={g.id} type="button" aria-pressed={g.id === raw.id} onClick={() => { setOpenId(g.id); setMsg(""); }} style={{ ...S.chip, ...(g.id === raw.id ? S.chipOn : null) }}>
+              {g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}
+            </button>
+          ))}
+          <button type="button" onClick={create} style={{ ...S.chip, ...S.chipDashed }}>
+            {classId ? "+ Предмет" : "+ Журнал"}
+          </button>
+        </div>
       )}
-    </>
+      {raw && <span style={{ flex: 1 }} />}
+      {raw && (
+        <button type="button" onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} aria-label="Настройки журнала" title="Настройки журнала: период, дни уроков, шкала" style={S.summaryBtn} data-settings-summary>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
+          {settingsSummary}
+        </button>
+      )}
+    </div>
   );
 
   if (!gb) {
     return (
-      <section className="ap-card" style={S.card}>
-        <div style={S.title}>Журнал</div>
-        {picker}
-        <p style={S.text}>
-          {currentClass ? `У класса ${currentClass.name} журналов пока нет. ` : ""}
-          Ученики — строками, уроки по датам из расписания — столбцами. Ставьте отметки, а потом нажмите «Выложить изменения»: каждый
-          ученик увидит свои отметки в разделе «Результаты».
-        </p>
-        <button type="button" onClick={create} style={S.primary}>
-          {currentClass ? "+ Журнал " + currentClass.name : "+ Новый журнал"}
-        </button>
-      </section>
+      <div style={S.outer}>
+        {topRow}
+        {classes.length === 0 && <p style={S.text}>Списки классов добавляет разработчик. Пока их нет — журнал можно вести своим списком учеников.</p>}
+        <section className="ap-card" style={S.card}>
+          <div style={S.title}>Журнал</div>
+          <p style={S.text}>
+            {currentClass ? `У класса ${currentClass.name} журналов пока нет. ` : ""}
+            Ученики — строками, уроки по датам из расписания — столбцами. Ставьте отметки, а потом нажмите «Выложить изменения»: каждый
+            ученик увидит свои отметки в разделе «Результаты».
+          </p>
+          <button type="button" onClick={create} style={{ ...S.primary, alignSelf: "flex-start" }}>
+            {currentClass ? "+ Журнал " + currentClass.name : "+ Новый журнал"}
+          </button>
+        </section>
+      </div>
     );
   }
 
@@ -233,28 +280,24 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     .filter((st) => !inJournal.has(st.id))
     .filter((st) => !q || (studentName(st) + " " + st.email + " " + st.className).toLowerCase().replace(/ё/g, "е").includes(q))
     .slice(0, 30);
+  const today = todayIso();
+  const noEmailNames = gb.students.filter((s) => !String(s.email || "").trim()).map(studentName);
+  const word = (n, one, few, many) => (n % 100 >= 11 && n % 100 <= 14 ? many : n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many);
+
+  // Цвет клетки по оценке; «н» — серым; пустая — пунктиром.
+  const toneOf = (rawValue) => {
+    if (String(rawValue ?? "").trim() === "") return S.cellEmpty;
+    if (isAbsent(rawValue)) return S.cellAbsent;
+    const g = markGrade(gb, markValue(rawValue, gb.scale));
+    return g ? CELL_TONE[g] : null;
+  };
 
   return (
-    <section className="ap-card" style={S.card} data-gradebook={gb.name}>
-      {picker}
-      <div style={S.head}>
-        <div style={S.row} role="group" aria-label="Журналы класса">
-          {inClass.map((g) => (
-            <button key={g.id} type="button" aria-pressed={g.id === raw.id} onClick={() => { setOpenId(g.id); setMsg(""); }} style={{ ...S.seg, ...(g.id === raw.id ? S.segOn : null) }}>
-              {g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}
-            </button>
-          ))}
-          <button type="button" onClick={create} style={S.secondary}>
-            {classId ? "+ Предмет" : "+ Журнал"}
-          </button>
-        </div>
-        <button type="button" onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} style={S.secondary}>
-          {settingsOpen ? "Скрыть настройки" : "Настройки журнала"}
-        </button>
-      </div>
+    <div style={S.outer} data-gradebook={gb.name}>
+      {topRow}
 
       {settingsOpen && (
-        <div style={S.settings}>
+        <div style={S.settings} data-settings>
           <div style={S.grid}>
             {!raw.classId && (
               <label style={S.field}>
@@ -289,6 +332,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
               <span style={S.label}>По</span>
               <input type="date" value={raw.to} onChange={(e) => patch((g) => ({ ...g, to: e.target.value }))} style={S.input} aria-label="Конец периода" />
             </label>
+            {authorField}
           </div>
           <div style={S.field}>
             <span style={S.label}>
@@ -327,6 +371,16 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                 {label}
               </button>
             ))}
+            {(gb.skip || []).length > 0 && (
+              <span style={S.label}>
+                · скрытые даты:{" "}
+                {gb.skip.slice().sort().map((d) => (
+                  <button key={d} type="button" onClick={() => patch((g) => ({ ...g, skip: g.skip.filter((x) => x !== d) }))} style={S.link} title="Вернуть дату">
+                    {ddmm(d)} ↺
+                  </button>
+                ))}
+              </span>
+            )}
             <span style={{ flex: 1 }} />
             {confirmDelete ? (
               <span style={S.confirm} role="alertdialog" aria-label="Удалить журнал?">
@@ -337,6 +391,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                     setGradebooks((prev) => (prev || []).filter((g) => g.id !== raw.id));
                     setOpenId("");
                     setConfirmDelete(false);
+                    setSettingsOpen(false);
                     setMsg("");
                   }}
                   style={{ ...S.secondary, color: "var(--red)", borderColor: "var(--red)" }}
@@ -356,252 +411,276 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
         </div>
       )}
 
-      <div style={S.row}>
-        <span style={S.label}>
-          {currentClass && raw.classId ? currentClass.name + " · " : ""}Ученики: {gb.students.length} · уроков: {dates.length}
-        </span>
-        {gb.scale === 100 && (
-          <span style={S.viewSwitch} role="group" aria-label="Показывать">
-            {[
-              ["points", "Баллы"],
-              ["grades", "Оценки"],
-            ].map(([id, label]) => (
-              <button key={id} type="button" aria-pressed={view === id} onClick={() => setView(id)} style={{ ...S.seg, ...(view === id ? S.segOn : null) }}>
-                {label}
-              </button>
-            ))}
-          </span>
-        )}
-        <button type="button" onClick={() => setAddOpen(!addOpen)} style={S.link} aria-expanded={addOpen}>
-          + Ученик
-        </button>
-        {!raw.classId && gb.students.length > 1 && (
-          <button type="button" onClick={() => patch((g) => ({ ...g, students: sortStudents(g.students) }))} style={S.link} title="Расставить учеников по фамилии">
-            По алфавиту
-          </button>
-        )}
-      </div>
-      {addOpen && (
-        <div style={S.paste} data-add-student>
-          {classes.length > 0 && (
-            <>
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Найти ученика в списках классов: фамилия, имя, класс"
-                aria-label="Найти ученика"
-                style={S.input}
-              />
-              <div style={S.candidates}>
-                {candidates.length === 0 ? (
-                  <span style={S.label}>{q ? "Никого не нашлось — добавьте вручную ниже." : "Все ученики из списков уже в журнале."}</span>
-                ) : (
-                  candidates.map((st) => (
-                    <button key={st.id} type="button" onClick={() => addStudent(st)} style={S.candidate} data-candidate={studentName(st)}>
-                      <b>{studentName(st)}</b> <span style={S.label}>· {st.className}{st.email ? "" : " · без почты"}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
+      <section className="ap-card" style={S.card}>
+        <div style={S.cardHead}>
+          <h3 style={S.cardTitle}>
+            {gb.name}{" "}
+            <span style={S.cardMeta}>
+              {gb.students.length} {word(gb.students.length, "ученик", "ученика", "учеников")} · {dates.length} {word(dates.length, "урок", "урока", "уроков")}
+            </span>
+          </h3>
+          {gb.scale === 100 && (
+            <span style={S.segWrap} role="group" aria-label="Показывать">
+              {[
+                ["points", "Баллы"],
+                ["grades", "Оценки"],
+              ].map(([id, label]) => (
+                <button key={id} type="button" aria-pressed={view === id} onClick={() => setView(id)} style={{ ...S.segBtn, ...(view === id ? S.segBtnOn : null) }}>
+                  {label}
+                </button>
+              ))}
+            </span>
           )}
-          <div style={S.label}>Нет в списке — вручную:</div>
+          <button type="button" onClick={() => setAddOpen(!addOpen)} style={S.dashedBtn} aria-expanded={addOpen}>
+            + Ученик
+          </button>
+          <button type="button" onClick={() => setDateOpen(!dateOpen)} style={S.dashedBtn} aria-expanded={dateOpen}>
+            + Дата
+          </button>
+          {!raw.classId && gb.students.length > 1 && (
+            <button type="button" onClick={() => patch((g) => ({ ...g, students: sortStudents(g.students) }))} style={S.link} title="Расставить учеников по фамилии">
+              По алфавиту
+            </button>
+          )}
+        </div>
+
+        {dateOpen && (
           <div style={S.row}>
-            <input value={manual.last} onChange={(e) => setManual({ ...manual, last: e.target.value })} placeholder="Фамилия" aria-label="Фамилия нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 120px" }} />
-            <input value={manual.first} onChange={(e) => setManual({ ...manual, first: e.target.value })} placeholder="Имя" aria-label="Имя нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 120px" }} />
-            <input value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value.trim() })} placeholder="почта (можно позже)" aria-label="Почта нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 160px" }} />
+            <input type="date" value={extraDate} onChange={(e) => setExtraDate(e.target.value)} aria-label="Добавить дату урока" style={{ ...S.input, width: "auto" }} />
             <button
               type="button"
               onClick={() => {
-                if (!manual.last.trim() && !manual.first.trim()) return;
-                addStudent({ id: uid(), last: manual.last.trim(), first: manual.first.trim(), email: manual.email.toLowerCase() });
-                setManual({ last: "", first: "", email: "" });
+                if (!extraDate) return;
+                patch((g) => ({ ...g, extra: Array.from(new Set([...(g.extra || []), extraDate])), skip: (g.skip || []).filter((x) => x !== extraDate) }));
+                setExtraDate("");
+                setDateOpen(false);
               }}
-              style={S.primary}
+              style={S.secondary}
             >
-              Добавить
+              Добавить урок
             </button>
+            <span style={S.label}>Например, перенесённый урок. Лишнюю дату скрывает × в шапке столбца.</span>
           </div>
-          {!raw.classId && (
-            <>
-              <div style={S.label}>Или сразу списком — по ученику на строку: фамилия, имя, почта.</div>
-              <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={3} placeholder={"Иванов Иван, ivanov@mail.ru\nПетрова Анна"} style={{ ...S.input, resize: "vertical" }} aria-label="Список учеников" />
+        )}
+
+        {addOpen && (
+          <div style={S.paste} data-add-student>
+            {classes.length > 0 && (
+              <>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Найти ученика в списках классов: фамилия, имя, класс"
+                  aria-label="Найти ученика"
+                  style={S.input}
+                />
+                <div style={S.candidates}>
+                  {candidates.length === 0 ? (
+                    <span style={S.label}>{q ? "Никого не нашлось — добавьте вручную ниже." : "Все ученики из списков уже в журнале."}</span>
+                  ) : (
+                    candidates.map((st) => (
+                      <button key={st.id} type="button" onClick={() => addStudent(st)} style={S.candidate} data-candidate={studentName(st)}>
+                        <b>{studentName(st)}</b> <span style={S.label}>· {st.className}{st.email ? "" : " · без почты"}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+            <div style={S.label}>Нет в списке — вручную:</div>
+            <div style={S.row}>
+              <input value={manual.last} onChange={(e) => setManual({ ...manual, last: e.target.value })} placeholder="Фамилия" aria-label="Фамилия нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 120px" }} />
+              <input value={manual.first} onChange={(e) => setManual({ ...manual, first: e.target.value })} placeholder="Имя" aria-label="Имя нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 120px" }} />
+              <input value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value.trim() })} placeholder="почта (можно позже)" aria-label="Почта нового ученика" style={{ ...S.input, width: "auto", flex: "1 1 160px" }} />
               <button
                 type="button"
                 onClick={() => {
-                  parseStudents(paste).forEach((st) => addStudent({ ...st, id: uid() }));
-                  setPaste("");
+                  if (!manual.last.trim() && !manual.first.trim()) return;
+                  addStudent({ id: uid(), last: manual.last.trim(), first: manual.first.trim(), email: manual.email.toLowerCase() });
+                  setManual({ last: "", first: "", email: "" });
                 }}
-                style={{ ...S.secondary, alignSelf: "flex-start" }}
+                style={S.primary}
               >
-                Добавить списком
+                Добавить
               </button>
-            </>
-          )}
-        </div>
-      )}
+            </div>
+            {!raw.classId && (
+              <>
+                <div style={S.label}>Или сразу списком — по ученику на строку: фамилия, имя, почта.</div>
+                <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={3} placeholder={"Иванов Иван, ivanov@mail.ru\nПетрова Анна"} style={{ ...S.input, resize: "vertical" }} aria-label="Список учеников" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    parseStudents(paste).forEach((st) => addStudent({ ...st, id: uid() }));
+                    setPaste("");
+                  }}
+                  style={{ ...S.secondary, alignSelf: "flex-start" }}
+                >
+                  Добавить списком
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
-      {gb.students.length === 0 ? (
-        <p style={S.text}>Добавьте учеников — появится таблица.</p>
-      ) : dates.length === 0 ? (
-        <p style={S.text}>В выбранном периоде нет дней уроков — выберите дни в настройках журнала или добавьте дату.</p>
-      ) : (
-        <div style={S.tableWrap} ref={tableRef}>
-          <table style={S.table} data-gradebook-table>
-            <thead>
-              <tr>
-                <th style={{ ...S.th, ...S.sticky, textAlign: "left" }}>Ученик</th>
-                {dates.map((d) => (
-                  <th key={d} style={S.th} data-date={d}>
-                    <div style={S.dateTop}>{ddmm(d)}</div>
-                    <div style={S.dateDay}>
-                      {DAY_SHORT[dayOf(d)]}
-                      <button type="button" title="Скрыть дату (урока не было)" aria-label={"Скрыть дату " + ddmm(d)} onClick={() => patch((g) => ({ ...g, skip: [...(g.skip || []), d] }))} style={S.hideBtn}>
-                        ×
-                      </button>
-                    </div>
+        {gb.students.length === 0 ? (
+          <p style={S.text}>Добавьте учеников — появится таблица.</p>
+        ) : dates.length === 0 ? (
+          <p style={S.text}>В выбранном периоде нет дней уроков — выберите дни в настройках журнала (кнопка справа вверху) или добавьте дату.</p>
+        ) : (
+          <div style={S.tableWrap} ref={tableRef}>
+            <table style={S.table} data-gradebook-table>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, ...S.sticky, ...S.thName }}>Ученик</th>
+                  {dates.map((d) => (
+                    <th key={d} style={{ ...S.th, ...(d === today ? S.todayCol : null) }} data-date={d} title={d === today ? "Сегодня" : undefined}>
+                      <div style={S.dateTop}>{d.slice(8, 10)}</div>
+                      <div style={S.dateDay}>
+                        {DAY_SHORT[dayOf(d)].toLowerCase()}
+                        <button type="button" title="Скрыть дату (урока не было)" aria-label={"Скрыть дату " + ddmm(d)} onClick={() => patch((g) => ({ ...g, skip: [...(g.skip || []), d] }))} style={S.hideBtn}>
+                          ×
+                        </button>
+                      </div>
+                    </th>
+                  ))}
+                  <th style={{ ...S.th, ...S.statTh }} title={asGrades ? "Среднее арифметическое оценок" : "Среднее арифметическое баллов"}>
+                    Средняя
                   </th>
-                ))}
-                {gb.scale === 100 && <th style={{ ...S.th, ...S.statTh }} title="Среднее арифметическое баллов">Ср. балл</th>}
-                <th style={{ ...S.th, ...S.statTh }} title="Среднее арифметическое оценок">Ср. оценка</th>
-                <th style={{ ...S.th, ...S.statTh }} title="Сколько отметок">Отм.</th>
-                <th style={{ ...S.th, ...S.statTh }} title="Прошедшие уроки без отметки">Проп.</th>
-                <th style={{ ...S.th, ...S.statTh }} title="Сколько каких оценок">5 · 4 · 3 · 2</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gb.students.map((st, row) => {
-                const ss = stats.per[row];
-                return (
-                  <tr key={st.id} data-student={studentName(st)}>
-                    <td style={{ ...S.td, ...S.sticky, ...S.nameCell }}>
-                      {/* Ученик — фамилией и именем; почта ниже мелко: по ней
-                          отметки доходят. Ученик из списка класса — только
-                          читается (список ведёт разработчик); добавленного
-                          учителем можно править. */}
-                      {st.fromClass || st.fromRoster ? (
-                        <div style={S.rosterName}>
-                          <span style={S.rosterText}>
-                            <b>{studentName(st)}</b>
-                            <span style={{ ...S.rosterEmail, ...(st.email ? null : S.emailMissing) }}>
-                              {st.fromRoster && st.className ? st.className + " · " : ""}
-                              {st.email || "нет почты — отметки не дойдут"}
+                  <th style={{ ...S.th, ...S.statTh }} title="Сколько раз не был («н»)">н</th>
+                  <th style={{ ...S.th, ...S.statTh }} title="Сколько каких оценок">5 · 4 · 3 · 2</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gb.students.map((st, row) => {
+                  const ss = stats.per[row];
+                  return (
+                    <tr key={st.id} data-student={studentName(st)}>
+                      <td style={{ ...S.td, ...S.sticky, ...S.nameCell }}>
+                        {/* Ученик — фамилией и именем; почта ниже мелко: по ней
+                            отметки доходят. Ученик из списка класса — только
+                            читается (список ведёт разработчик); добавленного
+                            учителем можно править. */}
+                        {st.fromClass || st.fromRoster ? (
+                          <div style={S.rosterName}>
+                            <span style={S.rosterText}>
+                              <b>{studentName(st)}</b>
+                              <span style={{ ...S.rosterEmail, ...(st.email ? null : S.emailMissing) }}>
+                                {st.fromRoster && st.className ? st.className + " · " : ""}
+                                {st.email || "нет почты — отметки не уйдут"}
+                              </span>
                             </span>
-                          </span>
-                          <button type="button" onClick={() => removeStudent(st)} title="Убрать из этого журнала" aria-label={"Убрать из журнала: " + studentName(st)} style={S.hideBtn}>
-                            ×
-                          </button>
-                        </div>
-                      ) : (
-                      <div style={S.rosterName}>
-                      <div style={S.rosterText}>
-                      <div style={S.nameRow}>
-                        <input
-                          value={st.last ?? ""}
-                          placeholder="Фамилия"
-                          onChange={(e) => editStudent(st.id, { last: e.target.value })}
-                          aria-label={"Фамилия: " + studentName(st)}
-                          style={S.nameInput}
-                        />
-                        <input
-                          value={st.first ?? ""}
-                          placeholder="Имя"
-                          onChange={(e) => editStudent(st.id, { first: e.target.value })}
-                          aria-label={"Имя: " + studentName(st)}
-                          style={{ ...S.nameInput, fontWeight: 500 }}
-                        />
-                      </div>
-                      <input
-                        value={st.email}
-                        placeholder="почта — чтобы отметки дошли"
-                        onChange={(e) => editStudent(st.id, { email: e.target.value.trim() })}
-                        aria-label={"Почта: " + studentName(st)}
-                        style={{ ...S.emailInput, ...(st.email ? null : S.emailMissing) }}
-                      />
-                      </div>
-                      <button type="button" onClick={() => removeStudent(st)} title="Убрать из этого журнала" aria-label={"Убрать из журнала: " + studentName(st)} style={S.hideBtn}>
-                        ×
-                      </button>
-                      </div>
-                      )}
-                    </td>
-                    {dates.map((d, col) => {
-                      const raw = ((gb.marks || {})[st.id] || {})[d] ?? "";
-                      const bad = String(raw).trim() !== "" && markValue(raw, gb.scale) === null;
-                      const changed = changedKeys.has(st.id + "|" + d);
-                      if (asGrades && gb.scale === 100) {
-                        // Оценками — только просмотр: ставят баллы.
-                        const v = markValue(raw, gb.scale);
-                        const g = markGrade(gb, v);
+                            <button type="button" onClick={() => removeStudent(st)} title="Убрать из этого журнала" aria-label={"Убрать из журнала: " + studentName(st)} style={S.hideBtn}>
+                              ×
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={S.rosterName}>
+                            <div style={S.rosterText}>
+                              <div style={S.nameRow}>
+                                <input value={st.last ?? ""} placeholder="Фамилия" onChange={(e) => editStudent(st.id, { last: e.target.value })} aria-label={"Фамилия: " + studentName(st)} style={{ ...S.nameInput, flex: "0 1 auto", fieldSizing: "content", minWidth: 48 }} />
+                                <input value={st.first ?? ""} placeholder="Имя" onChange={(e) => editStudent(st.id, { first: e.target.value })} aria-label={"Имя: " + studentName(st)} style={{ ...S.nameInput, fontWeight: 500 }} />
+                              </div>
+                              <input
+                                value={st.email}
+                                placeholder="почта — чтобы отметки дошли"
+                                onChange={(e) => editStudent(st.id, { email: e.target.value.trim() })}
+                                aria-label={"Почта: " + studentName(st)}
+                                style={{ ...S.emailInput, ...(st.email ? null : S.emailMissing) }}
+                              />
+                            </div>
+                            <button type="button" onClick={() => removeStudent(st)} title="Убрать из этого журнала" aria-label={"Убрать из журнала: " + studentName(st)} style={S.hideBtn}>
+                              ×
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      {dates.map((d, col) => {
+                        const cellRaw = ((gb.marks || {})[st.id] || {})[d] ?? "";
+                        const absent = isAbsent(cellRaw);
+                        const bad = String(cellRaw).trim() !== "" && !absent && markValue(cellRaw, gb.scale) === null;
+                        const changed = changedKeys.has(st.id + "|" + d);
+                        const todayStyle = d === today ? S.todayCol : null;
+                        if (asGrades && gb.scale === 100) {
+                          // Оценками — только просмотр: ставят баллы.
+                          const v = markValue(cellRaw, gb.scale);
+                          const g = absent ? "н" : markGrade(gb, v);
+                          return (
+                            <td key={d} style={{ ...S.td, ...todayStyle }}>
+                              <span data-grade-cell={row + ":" + col} title={v === null ? "" : v + " баллов"} style={{ ...S.cell, ...S.gradeCell, ...toneOf(cellRaw), ...(changed ? S.cellChanged : null) }}>
+                                {g || "·"}
+                              </span>
+                            </td>
+                          );
+                        }
                         return (
-                          <td key={d} style={S.td}>
-                            <span data-grade-cell={row + ":" + col} title={v === null ? "" : v + " баллов"} style={{ ...S.gradeCell, ...(g ? GRADE_TONE[g] : null), ...(changed ? S.cellChanged : null) }}>
-                              {g || ""}
-                            </span>
+                          <td key={d} style={{ ...S.td, ...todayStyle }}>
+                            <input
+                              data-cell={row + ":" + col}
+                              value={cellRaw}
+                              placeholder="·"
+                              inputMode="text"
+                              aria-label={`${studentName(st)}, ${ddmm(d)}`}
+                              onChange={(e) => setMark(st.id, d, e.target.value)}
+                              onKeyDown={(e) => onCellKey(e, row, col)}
+                              onFocus={(e) => e.target.select()}
+                              style={{ ...S.cell, ...toneOf(cellRaw), ...(changed ? S.cellChanged : null), ...(bad ? S.cellBad : null) }}
+                              title={bad ? (gb.scale === 5 ? "Отметка от 1 до 5 или «н»" : "Отметка от 0 до 100 или «н»") : changed ? "Ещё не выложена" : absent ? "Не был" : ""}
+                            />
                           </td>
                         );
-                      }
-                      return (
-                        <td key={d} style={S.td}>
-                          <input
-                            data-cell={row + ":" + col}
-                            value={raw}
-                            inputMode="decimal"
-                            aria-label={`${studentName(st)}, ${ddmm(d)}`}
-                            onChange={(e) => setMark(st.id, d, e.target.value)}
-                            onKeyDown={(e) => onCellKey(e, row, col)}
-                            onFocus={(e) => e.target.select()}
-                            style={{ ...S.cell, ...(changed ? S.cellChanged : null), ...(bad ? S.cellBad : null) }}
-                            title={bad ? (gb.scale === 5 ? "Отметка от 1 до 5" : "Отметка от 0 до 100") : changed ? "Ещё не выложена" : ""}
-                          />
-                        </td>
-                      );
-                    })}
-                    {gb.scale === 100 && (
-                      <td style={{ ...S.td, ...S.avgCell }} data-avg={studentName(st)}>
-                        {f1(ss.avg)}
+                      })}
+                      <td style={{ ...S.td, ...S.avgCell }}>
+                        <span style={{ ...S.avgMain, ...(ss.avgGrade !== null && ss.avgGrade < 3 ? { color: "var(--red)" } : null) }}>
+                          {asGrades ? <span data-avg-grade={studentName(st)}>{f1(ss.avgGrade)}</span> : <span data-avg={studentName(st)}>{f1(ss.avg ?? ss.avgGrade)}</span>}
+                        </span>
+                        {gb.scale === 100 && (
+                          <span style={S.avgSub}>
+                            {asGrades ? (
+                              <>
+                                <span data-avg={studentName(st)}>{f1(ss.avg)}</span> б.
+                              </>
+                            ) : (
+                              <>
+                                оц. <span data-avg-grade={studentName(st)}>{f1(ss.avgGrade)}</span>
+                              </>
+                            )}
+                          </span>
+                        )}
                       </td>
-                    )}
-                    <td style={{ ...S.td, ...S.avgCell, ...(ss.avgGrade !== null && ss.avgGrade < 3 ? { color: "var(--red)" } : null) }} data-avg-grade={studentName(st)}>
-                      {f1(ss.avgGrade)}
-                    </td>
-                    <td style={{ ...S.td, ...S.statCell }}>{ss.count}</td>
-                    <td style={{ ...S.td, ...S.statCell, ...(ss.missing ? { color: "var(--red)" } : null) }} data-missing={studentName(st)}>
-                      {ss.missing}
-                    </td>
-                    <td style={{ ...S.td, ...S.statCell, whiteSpace: "nowrap" }} data-dist={studentName(st)}>
-                      {[5, 4, 3, 2].map((g) => ss.dist[g]).join(" · ")}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td style={{ ...S.td, ...S.sticky, ...S.footLabel }}>Средний по уроку</td>
-                {dates.map((d) => {
-                  const vals = gb.students.map((st) => markValue(((gb.marks || {})[st.id] || {})[d], gb.scale)).filter((v) => v !== null);
-                  const shown = asGrades ? vals.map((v) => markGrade(gb, v)) : vals;
-                  return (
-                    <td key={d} style={{ ...S.td, ...S.footCell }}>
-                      {shown.length ? f1(shown.reduce((a, b) => a + b, 0) / shown.length) : "—"}
-                    </td>
+                      <td style={{ ...S.td, ...S.statCell, ...(ss.absent ? { color: "var(--red)" } : null) }} data-absent={studentName(st)}>
+                        {ss.absent || "—"}
+                      </td>
+                      <td style={{ ...S.td, ...S.statCell, whiteSpace: "nowrap" }} data-dist={studentName(st)}>
+                        {[5, 4, 3, 2].map((g) => ss.dist[g]).join(" · ")}
+                      </td>
+                    </tr>
                   );
                 })}
-                {gb.scale === 100 && <td style={{ ...S.td, ...S.footCell, fontWeight: 700 }}>{f1(stats.avg)}</td>}
-                <td style={{ ...S.td, ...S.footCell, fontWeight: 700 }}>{f1(stats.avgGrade)}</td>
-                <td style={{ ...S.td, ...S.footCell }}>{stats.count}</td>
-                <td style={S.td} />
-                <td style={{ ...S.td, ...S.footCell, whiteSpace: "nowrap" }}>{[5, 4, 3, 2].map((g) => stats.dist[g]).join(" · ")}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td style={{ ...S.td, ...S.sticky, ...S.footLabel }}>Средняя по уроку</td>
+                  {dates.map((d) => {
+                    const vals = gb.students.map((st) => markValue(((gb.marks || {})[st.id] || {})[d], gb.scale)).filter((v) => v !== null);
+                    const shown = asGrades ? vals.map((v) => markGrade(gb, v)) : vals;
+                    return (
+                      <td key={d} style={{ ...S.td, ...S.footCell, ...(d === today ? S.todayCol : null) }}>
+                        {shown.length ? f1(shown.reduce((x, y) => x + y, 0) / shown.length) : "—"}
+                      </td>
+                    );
+                  })}
+                  <td style={{ ...S.td, ...S.footCell, fontWeight: 700 }}>{f1(asGrades ? stats.avgGrade : stats.avg ?? stats.avgGrade)}</td>
+                  <td style={S.td} />
+                  <td style={{ ...S.td, ...S.footCell, whiteSpace: "nowrap" }}>{[5, 4, 3, 2].map((g) => stats.dist[g]).join(" · ")}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
-      {stats && stats.count > 0 && (
-        <div style={S.classStats} data-class-stats>
-          <div style={S.classMain}>
+        {stats && stats.count > 0 && (
+          <div style={S.classStats} data-class-stats>
             <span style={S.label}>По классу</span>
             {gb.scale === 100 && (
               <span>
@@ -611,66 +690,63 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             <span>
               средняя оценка <b style={S.classBig}>{f1(stats.avgGrade)}</b>
             </span>
+            <span style={S.distRow} aria-label="Распределение оценок">
+              {[5, 4, 3, 2].map((g) => {
+                const n = stats.dist[g];
+                const share = stats.count ? Math.round((n / stats.count) * 100) : 0;
+                return (
+                  <span key={g} style={{ ...S.distItem, ...CELL_TONE[g] }} data-dist-grade={g}>
+                    <b>{g}</b> — {n} <span style={{ opacity: 0.7 }}>({share} %)</span>
+                  </span>
+                );
+              })}
+            </span>
+            <span style={{ ...S.label, flexBasis: "100%" }}>
+              {stats.best ? "Лучший средний: " + studentName(stats.best) + ". " : ""}
+              {stats.risk.length ? "Средняя оценка ниже 3: " + stats.risk.map(studentName).join(", ") + "." : "Средняя оценка ниже 3 — ни у кого."}
+            </span>
           </div>
-          <div style={S.distRow} aria-label="Распределение оценок">
-            {[5, 4, 3, 2].map((g) => {
-              const n = stats.dist[g];
-              const share = stats.count ? Math.round((n / stats.count) * 100) : 0;
-              return (
-                <span key={g} style={{ ...S.distItem, ...GRADE_TONE[g] }} data-dist-grade={g}>
-                  <b>{g}</b> — {n} <span style={{ color: "var(--mute)" }}>({share} %)</span>
-                </span>
-              );
-            })}
-          </div>
-          <div style={S.label}>
-            {stats.best ? "Лучший средний: " + studentName(stats.best) + ". " : ""}
-            {stats.risk.length ? "Средняя оценка ниже 3: " + stats.risk.map(studentName).join(", ") + "." : "Средняя оценка ниже 3 — ни у кого."}
-          </div>
-          {gb.scale === 100 && <div style={S.label}>Шкала уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5. Средние — среднее арифметическое.</div>}
-        </div>
-      )}
-
-      <div style={S.row}>
-        <input type="date" value={extraDate} onChange={(e) => setExtraDate(e.target.value)} aria-label="Добавить дату урока" style={{ ...S.input, width: "auto" }} />
-        <button
-          type="button"
-          onClick={() => {
-            if (!extraDate) return;
-            patch((g) => ({ ...g, extra: Array.from(new Set([...(g.extra || []), extraDate])), skip: (g.skip || []).filter((x) => x !== extraDate) }));
-            setExtraDate("");
-          }}
-          style={S.secondary}
-        >
-          + Дата урока
-        </button>
-        {(gb.skip || []).length > 0 && (
-          <span style={S.label}>
-            Скрытые даты:{" "}
-            {gb.skip.slice().sort().map((d) => (
-              <button key={d} type="button" onClick={() => patch((g) => ({ ...g, skip: g.skip.filter((x) => x !== d) }))} style={S.link} title="Вернуть дату">
-                {ddmm(d)} ↺
-              </button>
-            ))}
-          </span>
         )}
-      </div>
 
-      <div style={S.publishBar}>
-        <button type="button" onClick={publishAll} disabled={!changes.length || busy} style={{ ...S.primary, ...(changes.length ? null : S.off) }}>
-          {busy ? "Выкладываю…" : changes.length ? "Выложить изменения · " + changes.length : "Всё выложено"}
-        </button>
-        <span style={S.label} role="status">
-          {msg ||
-            (changes.length
-              ? "Жёлтые клетки ещё не выложены. Ученики увидят отметки после нажатия."
-              : "Ученики видят отметки в своём разделе «Результаты».")}
-          {noEmail ? ` Без почты: ${noEmail} — им отметки не уйдут.` : ""}
-        </span>
-      </div>
-    </section>
+        <div style={{ ...S.publishBar, ...(changes.length ? null : S.publishIdle) }}>
+          {changes.length > 0 && <span style={S.publishDot} aria-hidden="true" />}
+          <span style={S.publishText} role="status">
+            {msg ? (
+              msg
+            ) : changes.length ? (
+              <>
+                <b>
+                  {changes.length} {word(changes.length, "новая отметка", "новые отметки", "новых отметок")}
+                </b>{" "}
+                ещё не {changes.length === 1 ? "выложена" : "выложены"}
+              </>
+            ) : (
+              "Всё выложено — ученики видят отметки в своих «Результатах»"
+            )}
+            {noEmailNames.length > 0 &&
+              ` · Без почты: ${noEmailNames.length} (${noEmailNames.slice(0, 2).join(", ")}${noEmailNames.length > 2 ? "…" : ""}) — им отметки не уйдут`}
+          </span>
+          <button type="button" onClick={publishAll} disabled={!changes.length || busy} style={{ ...S.primary, ...(changes.length ? null : S.off) }}>
+            {busy ? "Выкладываю…" : changes.length ? "Выложить изменения · " + changes.length : "Всё выложено"}
+          </button>
+        </div>
+      </section>
+      <p style={S.hint}>
+        Отметка — цифра в клетке{gb.scale === 100 ? " (0–100)" : " (1–5)"}, «н» — не был, пусто — без отметки. Enter и стрелки ходят по клеткам. Жёлтая рамка — ещё
+        не выложено. Отметки видны ученику в его «Результатах» как официальные.
+        {gb.scale === 100 ? " Оценки — по шкале уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5." : ""}
+      </p>
+    </div>
   );
 }
+
+// Цвет клетки по оценке — как в макете: 5 и 4 зелёные, 3 жёлтая, 2 красная.
+const CELL_TONE = {
+  5: { background: "var(--greenSoft)", color: "var(--green)", borderColor: "transparent" },
+  4: { background: "color-mix(in srgb, var(--greenSoft) 60%, var(--panel2))", color: "var(--green)", borderColor: "transparent" },
+  3: { background: "var(--warmBg)", color: "var(--warmInk)", borderColor: "transparent" },
+  2: { background: "var(--redBg)", color: "var(--red)", borderColor: "transparent" },
+};
 
 // Оттенок рамки по оценке.
 const GRADE_TONE = {
@@ -681,19 +757,41 @@ const GRADE_TONE = {
 };
 
 const S = {
+  outer: { display: "flex", flexDirection: "column", gap: 12, minWidth: 0 },
+  topRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  chipGroup: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  chip: { height: 34, padding: "0 13px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13.5, cursor: "pointer" },
+  chipOn: { background: "var(--btnBg)", borderColor: "var(--btnBg)", color: "var(--btnInk)", fontWeight: 600 },
+  chipDashed: { borderStyle: "dashed", background: "transparent", color: "var(--ink2)" },
+  vsep: { width: 1, height: 22, background: "var(--line)" },
+  summaryBtn: { display: "inline-flex", alignItems: "center", gap: 8, height: 36, padding: "0 12px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13, cursor: "pointer" },
+  cardHead: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  cardTitle: { margin: 0, flex: 1, minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 21 },
+  cardMeta: { fontFamily: "var(--sans, inherit)", fontSize: 13, color: "var(--ink3)" },
+  segWrap: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 10, background: "color-mix(in srgb, var(--ink) 8%, transparent)" },
+  segBtn: { height: 30, padding: "0 10px", border: "none", borderRadius: 8, background: "transparent", color: "var(--ink2)", font: "inherit", fontSize: 13, cursor: "pointer" },
+  segBtnOn: { background: "var(--panel2)", color: "var(--ink)", fontWeight: 600, boxShadow: "0 1px 2px rgba(0,0,0,.08)" },
+  dashedBtn: { height: 32, padding: "0 12px", borderRadius: 9, border: "1px dashed var(--line)", background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 12.5, cursor: "pointer" },
+  thName: { textAlign: "left", fontSize: 11.5, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)", fontWeight: 600 },
+  todayCol: { background: "color-mix(in srgb, var(--warmBg) 70%, transparent)" },
+  cellEmpty: { borderStyle: "dashed", background: "transparent" },
+  cellAbsent: { background: "var(--neutralBg)", color: "var(--ink3)", borderColor: "transparent", fontFamily: "var(--serif)" },
+  avgMain: { display: "block", fontFamily: "var(--serif)", fontSize: 17 },
+  avgSub: { display: "block", fontSize: 11, fontWeight: 400, color: "var(--mute)" },
+  publishIdle: { background: "transparent", borderColor: "var(--line2, var(--line))" },
+  publishDot: { width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 },
+  publishText: { flex: 1, minWidth: 200, fontSize: 13.5, color: "var(--ink2)" },
+  hint: { margin: 0, fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5 },
   viewSwitch: { display: "inline-flex", gap: 4, marginLeft: "auto" },
   statTh: { fontSize: 11.5, fontWeight: 600, color: "var(--ink3)", padding: "6px 8px" },
   statCell: { fontSize: 12.5, color: "var(--ink2)", fontVariantNumeric: "tabular-nums", padding: "3px 8px" },
-  gradeCell: {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 46, height: 32, boxSizing: "border-box", borderRadius: 7,
-    border: "1px solid var(--line)", background: "var(--panel2)", fontWeight: 700, fontSize: 15,
-  },
-  classStats: { display: "flex", flexDirection: "column", gap: 8, padding: "12px", borderRadius: 12, background: "var(--panel2)", border: "1px solid var(--line2, var(--line))" },
+  gradeCell: { cursor: "default" },
+  classStats: { display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: "6px 16px", padding: "10px 12px", borderRadius: 12, background: "color-mix(in srgb, var(--ink) 3%, var(--panel2))", border: "1px solid var(--line2, var(--line))", fontSize: 13.5, color: "var(--ink2)" },
   classMain: { display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap", fontSize: 13.5, color: "var(--ink2)" },
   classBig: { fontFamily: "var(--serif)", fontSize: 22, color: "var(--ink)" },
   distRow: { display: "flex", flexWrap: "wrap", gap: 6 },
   distItem: { fontSize: 13, padding: "3px 10px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--panel)" },
-  card: { padding: "16px 18px", borderRadius: 14, border: "1px solid var(--line)", background: "var(--panel)", display: "flex", flexDirection: "column", gap: 12, minWidth: 0 },
+  card: { padding: "16px 18px 0", borderRadius: 18, border: "1px solid var(--line)", background: "var(--panel)", display: "flex", flexDirection: "column", gap: 12, minWidth: 0, overflow: "hidden" },
   title: { fontSize: 12, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--mute)" },
   text: { margin: 0, fontSize: 13.5, color: "var(--ink3)", lineHeight: 1.5 },
   head: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
@@ -721,8 +819,8 @@ const S = {
   table: { borderCollapse: "separate", borderSpacing: 0, fontSize: 13.5, minWidth: "100%" },
   // Закреплённые шапка и столбец — непрозрачные: карточки в теме полупрозрачны,
   // и прокрученные клетки просвечивали бы сквозь имя ученика.
-  th: { position: "sticky", top: 0, padding: "6px 4px", background: "var(--menuBg)", borderBottom: "1px solid var(--line)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap", zIndex: 1 },
-  td: { padding: "3px 4px", borderBottom: "1px solid var(--line2, var(--line))", textAlign: "center" },
+  th: { position: "sticky", top: 0, padding: "8px 5px", background: "var(--menuBg)", borderBottom: "1px solid var(--line)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap", zIndex: 1 },
+  td: { padding: "6px 5px", borderBottom: "1px solid var(--line2, var(--line))", textAlign: "center" },
   sticky: { position: "sticky", left: 0, zIndex: 2, background: "var(--menuBg)", borderRight: "1px solid var(--line)", boxShadow: "4px 0 6px -4px rgba(0,0,0,.18)" },
   nameCell: { textAlign: "left", minWidth: 170, maxWidth: 230 },
   nameRow: { display: "flex", gap: 2 },
@@ -735,17 +833,15 @@ const S = {
   nameInput: { display: "block", width: "100%", minWidth: 0, flex: 1, border: "none", background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 13.5, fontWeight: 600, padding: "0 2px", height: 20, minHeight: 0, lineHeight: "20px", boxShadow: "none", borderRadius: 4 },
   emailInput: { display: "block", width: "100%", border: "none", background: "transparent", color: "var(--ink3)", font: "inherit", fontSize: 11.5, padding: "0 2px", height: 16, minHeight: 0, lineHeight: "16px", boxShadow: "none", borderRadius: 4 },
   emailMissing: { color: "var(--red)" },
-  dateTop: { fontSize: 13, fontVariantNumeric: "tabular-nums" },
+  dateTop: { fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   dateDay: { display: "flex", alignItems: "center", justifyContent: "center", gap: 2, fontSize: 11, fontWeight: 400, color: "var(--mute)" },
   hideBtn: { border: "none", background: "none", color: "var(--mute)", fontSize: 13, lineHeight: 1, padding: "0 2px", cursor: "pointer" },
-  cell: {
-    width: 46, height: 32, boxSizing: "border-box", textAlign: "center", border: "1px solid var(--line)", borderRadius: 7, background: "var(--panel2)",
-    color: "var(--ink)", font: "inherit", fontSize: 14, fontVariantNumeric: "tabular-nums", padding: 0,
-  },
-  cellChanged: { borderColor: "var(--accent)", background: "var(--warmBg, var(--panel2))" },
+  cell: { width: 40, height: 36, boxSizing: "border-box", textAlign: "center", border: "1px solid var(--line)", borderRadius: 8, background: "var(--panel2)", color: "var(--ink)", fontFamily: "var(--serif)", fontSize: 18, fontVariantNumeric: "tabular-nums", padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" },
+  // Ещё не выложено — жёлтое кольцо поверх цвета оценки.
+  cellChanged: { boxShadow: "inset 0 0 0 2px var(--warmLine)", borderColor: "var(--warmLine)", borderStyle: "solid" },
   cellBad: { borderColor: "var(--red)", color: "var(--red)" },
   avgCell: { fontWeight: 700, fontVariantNumeric: "tabular-nums", minWidth: 60 },
   footLabel: { textAlign: "left", fontSize: 12, color: "var(--mute)" },
   footCell: { fontSize: 12, color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
-  publishBar: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  publishBar: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "0 -18px", padding: "12px 18px", background: "color-mix(in srgb, var(--warmBg) 85%, transparent)", borderTop: "1px solid var(--line2, var(--line))" },
 };

@@ -1,6 +1,6 @@
 // Журнал учителя: даты из расписания, отметки, что выложить ученикам.
 import assert from "node:assert";
-import { classStats, markGrade, sortStudents, studentName, studentStats, dateAverage, daysFromSchedule, lessonDates, markPublished, markValue, newGradebook, parseStudents, payloadFor, pendingChanges, studentAverage } from "../src/gradebook.js";
+import { classStats, isAbsent, markGrade, sortStudents, studentName, studentStats, dateAverage, daysFromSchedule, lessonDates, markPublished, markValue, newGradebook, parseStudents, payloadFor, pendingChanges, studentAverage } from "../src/gradebook.js";
 
 let passed = 0;
 function check(name, fn) {
@@ -123,6 +123,20 @@ check("статистика: средний балл, средняя оценк�
   const five = classStats({ ...g, scale: 5, marks: { s1: { "2026-10-05": "2" }, s2: { "2026-10-05": "5" } } });
   assert.equal(five.avg, null);
   assert.deepEqual(five.risk.map((x) => x.id), ["s1"]);
+});
+
+check("«н» — не был: уходит ученику, в средние не входит, считается отдельно", () => {
+  assert.ok(isAbsent("н") && isAbsent(" Н ") && isAbsent("нб") && isAbsent("н/б") && !isAbsent("5"));
+  const g = { ...gb, marks: { s1: { "2026-10-05": "н", "2026-10-12": "80" }, s2: {}, s3: {} } };
+  const st = studentStats(g, "s1", undefined, "2026-10-20");
+  assert.equal(st.absent, 1);
+  assert.equal(st.avg, 80);
+  assert.equal(st.missing, 1);
+  const ch = pendingChanges(g);
+  assert.deepEqual(ch.map((c) => c.date + ":" + c.value).sort(), ["2026-10-05:н", "2026-10-12:80"]);
+  assert.equal(payloadFor(g, "2026-10-05", "н").scale, "absent");
+  const done = markPublished(g, ch);
+  assert.equal(pendingChanges(done).length, 0);
 });
 
 console.log(`\n${passed} проверок пройдено`);

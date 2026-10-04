@@ -1,6 +1,7 @@
-// Раздел «Результаты» (предпросмотр): свои записи по разным шкалам, общая
-// статистика (средний балл — среднее арифметическое по 100-балльной), разделение
-// на официальные и свои, демо-результаты из обновления, роль учителя (выложить
+// Раздел «Результаты» (предпросмотр, вид B): слева предметы и олимпиады, справа
+// страница предмета — плитки, график, записи; на телефоне — чипы. Свои записи по
+// разным шкалам, средний балл — среднее арифметическое по 100-балльной,
+// разделение на официальные и свои, демо-результаты из обновления, роль учителя (выложить
 // ученику — ученик видит, убрать — пропадает), телефон. И что на сайте раздела нет.
 //
 // Запуск: DIST=<сборка предпросмотра> npm run check:results
@@ -38,15 +39,41 @@ await page.goto(URL0);
 await page.waitForTimeout(2500);
 const stored = async () => JSON.parse(JSON.parse(await page.evaluate(() => localStorage.getItem("planner:planner-state-v5"))).value).results || [];
 const cards = () => page.locator("[data-result]").evaluateAll((els) => els.map((e) => e.getAttribute("data-result")));
-const marks = () => page.locator("[data-mark]").evaluateAll((els) => els.map((e) => e.getAttribute("data-mark").split(":")[1]));
+const scores = (scope) => page.locator(scope + " [data-result]").evaluateAll((els) => els.map((e) => e.getAttribute("data-result") + "=" + e.getAttribute("data-score")));
+const officialScores = (subject) => page.locator(`[data-subject-page="${subject}"] [data-result][data-official]`).evaluateAll((els) => els.map((e) => e.getAttribute("data-score")).sort());
+const text = async (sel) => ((await page.locator(sel).count()) ? (await page.locator(sel).first().innerText()).trim() : "");
+const nav = async (name) => { await page.locator(`[data-nav-subject="${name}"]`).click(); await page.waitForTimeout(200); };
+const menuItems = async (title) => {
+  await page.getByRole("button", { name: "Действия: " + title, exact: true }).first().click();
+  const items = await page.getByRole("menuitem").allInnerTexts();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  return items.map((x) => x.trim());
+};
+const act = async (title, item) => {
+  await page.getByRole("button", { name: "Действия: " + title, exact: true }).first().click();
+  await page.getByRole("menuitem", { name: item, exact: true }).click();
+  await page.waitForTimeout(250);
+};
+const mode = async (m) => { await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: m }).click(); await page.waitForTimeout(200); };
 
 want("в меню есть «Результаты»", (await page.locator(".ap-nav", { hasText: "Результаты" }).count()) >= 1);
+want("вид B: слева предметы, справа страница", (await page.locator('[data-layout="desktop"] nav [data-nav-subject="Все предметы"]').count()) === 1 && (await page.locator('[data-subject-page="Все предметы"]').count()) === 1);
 want("демо-результаты из обновления видны", (await cards()).includes("Высшая проба") && (await cards()).includes("Пробник ЕГЭ (лицейский)"), (await cards()).join(" | "));
 const official = page.locator('[data-result="Высшая проба"]');
-want("официальный — с замком и без «Изменить»", /🔒/.test(await official.innerText()) && (await official.getByRole("button", { name: "Изменить" }).count()) === 0);
-want("олимпиада: сумма по турам и проходной", /59 из 100/.test(await official.innerText()) && /набран ✓/.test(await official.innerText()) && /Прошёл на следующий этап/.test(await official.innerText()));
-want("пробник: вторичные и первичные", /78 из 100/.test(await page.locator('[data-result="Пробник ЕГЭ (лицейский)"]').innerText()) && /первичных 46 из 58/.test(await page.locator('[data-result="Пробник ЕГЭ (лицейский)"]').innerText()));
-want("код для результатов показан", /^[A-Z2-9]{4}(-[A-Z2-9]{4}){4}$/.test((await page.locator("[data-results-code]").innerText()).trim()));
+want("официальный — с замком и без «Изменить»", /🔒/.test(await official.innerText()) && (await official.getAttribute("data-official")) === "true" && !(await menuItems("Высшая проба")).includes("Изменить"));
+const probe = page.locator('[data-result="Пробник ЕГЭ (лицейский)"]');
+want("пробник: вторичные крупно, первичные подписью", (await probe.getAttribute("data-score")) === "78" && /первичных 46 из 58/.test(await probe.innerText()), await probe.innerText());
+want("олимпиада слева: «59 · прошёл ✓»", (await text('[data-nav-olympiad="Высшая проба"] [data-olympiad-badge]')) === "59 · прошёл ✓", await text('[data-nav-olympiad="Высшая проба"] [data-olympiad-badge]'));
+await page.locator('[data-nav-olympiad="Высшая проба"]').click();
+await page.waitForTimeout(200);
+const opage = await text('[data-olympiad-page="Высшая проба"]');
+want("олимпиада: туры, сумма и проходной", /Тест\s*38\s*из 50/.test(opage) && /сумма 59 из 100/.test(opage) && /прошёл дальше ✓/.test(opage) && /Прошёл на следующий этап/.test(opage), opage.replace(/\n/g, " | "));
+await nav("Все предметы");
+await page.getByRole("button", { name: "Код ученика" }).click();
+want("код ученика — в окне", /^[A-Z2-9]{4}(-[A-Z2-9]{4}){4}$/.test(await text('[role=dialog][aria-label="Код ученика"] [data-results-code]')));
+await page.keyboard.press("Escape");
+await page.waitForTimeout(200);
 
 // Свои: две оценки за уроки по 100-балльной.
 async function addLesson(title, score) {
@@ -65,55 +92,57 @@ await addLesson("Урок 1", 90);
 await addLesson("Урок 2", 70);
 await page.waitForTimeout(1500);
 want("свои записи сохранились", (await stored()).length === 2 && (await stored())[0].score === 90, JSON.stringify(await stored()));
-want("оценки за уроки — строкой отметок по предмету", JSON.stringify((await marks()).sort()) === JSON.stringify(["70", "90"]) && /Право/.test(await page.locator("[data-lesson-marks]").innerText()) && /средний балл 80/.test(await page.locator("[data-lesson-marks]").innerText()), JSON.stringify(await marks()));
 
-// Статистика: только свои — средний (90+70)/2 = 80.
-await page.getByRole("button", { name: /^Мои записи/ }).click();
-await page.waitForTimeout(200);
-want("фильтр «Мои записи» — только свои", (await cards()).length === 0 && (await marks()).length === 2, (await cards()).join(" | "));
-want("средний балл своих — 80", (await page.locator("[data-results-avg]").innerText()).trim() === "80", await page.locator("[data-results-avg]").innerText());
-await page.getByRole("button", { name: /Официальные/ }).click();
-await page.waitForTimeout(200);
-want("фильтр «Официальные» — только выложенные", (await cards()).length === 2 && (await marks()).length === 0);
-await page.getByRole("button", { name: /^Все/ }).first().click();
-await page.waitForTimeout(200);
+// Право: уроки 90 и 70 и олимпиада 59 → средний 73; средняя оценка (5 + 4) / 2.
+await nav("Право");
+want("Право: записи предмета", JSON.stringify((await scores('[data-subject-page="Право"]')).sort()) === JSON.stringify(["Высшая проба=59", "Урок 1=90", "Урок 2=70"]), (await scores('[data-subject-page="Право"]')).join(" | "));
+want("Право: средний слева и на плитке — 73", (await text('[data-nav-avg="Право"]')) === "73" && /^Средний\s*73/.test(await text('[data-tile="avg"]')), await text('[data-tile="avg"]'));
+want("Право: лучший и средняя оценка", /90/.test(await text('[data-tile="best"]')) && /4,5/.test(await text('[data-tile="other"]')), (await text('[data-tile="best"]')) + " / " + (await text('[data-tile="other"]')));
+want("Право: график с порогом", (await page.locator("[data-score-chart]").count()) === 1);
+await page.locator('[data-subject-page="Право"] [data-records]').getByRole("button", { name: "Урок", exact: true }).click();
+await page.waitForTimeout(150);
+want("Право: фильтр записей по виду", JSON.stringify((await scores('[data-subject-page="Право"]')).sort()) === JSON.stringify(["Урок 1=90", "Урок 2=70"]));
+await page.locator('[data-subject-page="Право"] [data-records]').getByRole("button", { name: "Все", exact: true }).click();
+await nav("Все предметы");
 // Все четыре: 90, 70, 78 (пробник), 59 (олимпиада) → 74,3.
-want("средний по всем — среднее арифметическое", (await page.locator("[data-results-avg]").innerText()).trim() === "74,3", await page.locator("[data-results-avg]").innerText());
+want("средний по всем — среднее арифметическое", (await text('[data-nav-avg="Все предметы"]')) === "74,3" && /Средний балл 74,3 из 100 по 4 записям · 2 официальных, 2 своих/.test(await text("[data-results-summary]")), await text("[data-results-summary]"));
+await mode("Оценки");
+// Оценки: 5, 4 (урок 70), 4 (пробник 78); олимпиада — без оценки.
+want("в оценках — средняя оценка 4,3", (await text('[data-nav-avg="Все предметы"]')) === "4,3" && (await page.locator('[data-result="Урок 1"]').getAttribute("data-score")) === "5", await text('[data-nav-avg="Все предметы"]'));
+await mode("Баллы");
 
-// Правка и удаление своей, скрытие официальной.
-await page.locator('[data-mark$=":70"]').click();
+// Правка и удаление своей, скрытие официальной — через «⋯».
+await act("Урок 2", "Изменить");
 await page.getByRole("dialog").getByLabel("Баллы", { exact: true }).fill("80");
 await page.getByRole("dialog").getByRole("button", { name: "Сохранить" }).click();
 await page.waitForTimeout(1500);
 want("правка своей записи сохраняется", (await stored()).find((r) => r.title === "Урок 2").score === 80);
-// Удалить свою можно и с карточки — заведём КТ.
 await page.getByRole("button", { name: "+ Результат" }).click();
 await page.getByRole("dialog").getByRole("button", { name: "КТ", exact: true }).click();
 await page.getByRole("dialog").getByLabel("Название").fill("Своя КТ");
 await page.getByRole("dialog").getByRole("group", { name: "Оценка" }).getByRole("button", { name: "4" }).click();
 await page.getByRole("dialog").getByRole("button", { name: "Сохранить" }).click();
 await page.waitForTimeout(300);
-want("своя карточка — «моя запись» и «Изменить»", /моя запись/.test(await page.locator('[data-result="Своя КТ"]').innerText()) && (await page.locator('[data-result="Своя КТ"]').getByRole("button", { name: "Изменить" }).count()) === 1);
-await page.locator('[data-result="Своя КТ"]').getByRole("button", { name: "Удалить" }).click();
+want("своя запись — «моя запись» и «Изменить»", /моя запись/.test(await page.locator('[data-result="Своя КТ"]').innerText()) && (await menuItems("Своя КТ")).includes("Изменить"));
+await act("Своя КТ", "Удалить");
 await page.waitForTimeout(1500);
 want("удаление своей", !(await cards()).includes("Своя КТ") && (await stored()).length === 2);
-await official.getByRole("button", { name: "Скрыть у себя" }).click();
-await page.waitForTimeout(300);
-want("официальную можно скрыть у себя", !(await cards()).includes("Высшая проба") && (await page.getByRole("button", { name: /Показать скрытые · 1/ }).count()) === 1);
+await act("Высшая проба", "Скрыть у себя");
+want("официальную можно скрыть у себя", !(await cards()).includes("Высшая проба") && (await page.locator('[data-nav-olympiad="Высшая проба"]').count()) === 0 && (await page.getByRole("button", { name: /Показать скрытые · 1/ }).count()) === 1);
 
 // Роль учителя: выложить ученику, ученик видит; убрать — пропадает.
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(300);
+want("учитель: шапка «Вы — учитель»", /Вы — учитель/.test(await text("[data-teacher-who]")));
 await page.getByRole("button", { name: "Отдельный результат" }).click();
 await page.waitForTimeout(200);
 want("учитель: учебный ученик уже выбран", (await page.locator('[data-chosen="student@demo"]').count()) === 1);
-// Выбор из списка класса галочкой и снятие.
 await page.locator("[data-student-picker]").getByRole("checkbox", { name: "Иванов Иван" }).check();
 want("учитель: ученика выбирают галочкой из списка класса", (await page.locator('[data-chosen="ivanov@demo"]').count()) === 1);
 await page.getByRole("button", { name: "Убрать: Иванов Иван · 10Б" }).click();
 want("учитель: и убирают из выбранных", (await page.locator('[data-chosen="ivanov@demo"]').count()) === 0);
 want("учитель: без почты выбрать нельзя", await page.locator("[data-student-picker]").getByRole("checkbox", { name: "Сидоров Пётр" }).isDisabled());
-await page.getByPlaceholder("Например: Иванова А. Б.").fill("Петрова И. В.");
+await page.getByLabel("Подпись учителя").fill("Петрова И. В.");
 await page.getByRole("button", { name: "КТ", exact: true }).click();
 await page.getByLabel("Предмет").fill("Право");
 await page.getByLabel("Название").fill("КТ №1 по ТГП");
@@ -125,8 +154,8 @@ want("учитель видит выложенное", /КТ №1 по ТГП ·
 await page.getByRole("button", { name: "Ученик", exact: true }).click();
 await page.waitForTimeout(600);
 const kt = page.locator('[data-result="КТ №1 по ТГП"]');
-want("ученик видит результат от учителя", (await kt.count()) === 1 && /от учителя · Петрова И. В./.test(await kt.innerText()) && /оценка 5/.test(await kt.innerText()));
-want("и изменить его не может", (await kt.getByRole("button", { name: "Изменить" }).count()) === 0);
+want("ученик видит результат от учителя", (await kt.count()) === 1 && /Петрова И. В./.test(await kt.innerText()) && /оценка 5/.test(await kt.innerText()), (await kt.count()) ? await kt.innerText() : "нет");
+want("и изменить его не может", (await kt.getAttribute("data-official")) === "true" && !(await menuItems("КТ №1 по ТГП")).includes("Изменить"));
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/results-desktop.png", fullPage: true });
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(300);
@@ -150,9 +179,10 @@ await page.getByLabel("Предмет журнала").fill("Право");
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Пн" }).click();
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Чт" }).click();
 await page.waitForTimeout(200);
+want("журнал: сводка настроек на кнопке", /пн, чт/.test(await text("[data-settings-summary]")) && /100-балльная/.test(await text("[data-settings-summary]")), await text("[data-settings-summary]"));
+want("журнал: предмет — чипом класса", (await page.getByRole("group", { name: "Журналы класса" }).getByRole("button", { name: "Право", exact: true }).count()) === 1);
 const studentsRows = await page.locator("[data-student]").evaluateAll((els) => els.map((e) => e.getAttribute("data-student")));
 want("журнал: ученики класса подставились сами, по фамилии", JSON.stringify(studentsRows) === JSON.stringify(["Иванов Иван", "Петрова Анна", "Сидоров Пётр", "Учебный ученик"]), studentsRows.join(" | "));
-// Убрать ученика из журнала и добавить из другого класса.
 await page.getByRole("button", { name: "Убрать из журнала: Петрова Анна" }).click();
 await page.getByRole("button", { name: "+ Ученик" }).click();
 await page.getByLabel("Найти ученика").fill("кузн");
@@ -174,55 +204,53 @@ const ri = await row("Иванов Иван");
 const rs = await row("Сидоров Пётр");
 await page.locator(`[data-cell="${ru}:0"]`).fill("90");
 await page.locator(`[data-cell="${ru}:1"]`).fill("75");
+await page.locator(`[data-cell="${ru}:2"]`).fill("н");
 await page.locator(`[data-cell="${ri}:0"]`).fill("60");
 await page.locator(`[data-cell="${ri}:0"]`).press("Enter");
 await page.keyboard.type("50");
 await page.waitForTimeout(200);
 want("журнал: Enter — на ученика ниже", (await page.locator(`[data-cell="${ri + 1}:0"]`).inputValue()) === "50");
-want("журнал: средний по ученику", (await page.locator('[data-avg="Учебный ученик"]').innerText()).trim() === "82,5", await page.locator('[data-avg="Учебный ученик"]').innerText());
-want("журнал: средняя оценка и распределение у ученика", (await page.locator('[data-avg-grade="Учебный ученик"]').innerText()).trim() === "4,5" && (await page.locator('[data-dist="Учебный ученик"]').innerText()).trim() === "1 · 1 · 0 · 0");
-await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Оценки" }).click();
+want("журнал: средний по ученику («н» не считается)", (await text('[data-avg="Учебный ученик"]')) === "82,5", await text('[data-avg="Учебный ученик"]'));
+want("журнал: средняя оценка, пропуски и распределение", (await text('[data-avg-grade="Учебный ученик"]')) === "4,5" && (await text('[data-absent="Учебный ученик"]')) === "1" && (await text('[data-dist="Учебный ученик"]')) === "1 · 1 · 0 · 0", [await text('[data-avg-grade="Учебный ученик"]'), await text('[data-absent="Учебный ученик"]'), await text('[data-dist="Учебный ученик"]')].join(" / "));
+await page.locator("[data-gradebook]").getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Оценки" }).click();
 await page.waitForTimeout(200);
-want("журнал: «Оценки» — в клетках оценки по шкале уроков", (await page.locator(`[data-grade-cell="${ru}:0"]`).innerText()).trim() === "5" && (await page.locator(`[data-grade-cell="${ru}:1"]`).innerText()).trim() === "4" && (await page.locator(`[data-grade-cell="${ri}:0"]`).innerText()).trim() === "3");
-await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Баллы" }).click();
+want("журнал: «Оценки» — в клетках оценки по шкале уроков", (await text(`[data-grade-cell="${ru}:0"]`)) === "5" && (await text(`[data-grade-cell="${ru}:1"]`)) === "4" && (await text(`[data-grade-cell="${ri}:0"]`)) === "3");
+await page.locator("[data-gradebook]").getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Баллы" }).click();
 await page.waitForTimeout(200);
-want("журнал: сводка по классу", /средняя оценка\s*3,8/.test(await page.locator("[data-class-stats]").innerText()) && /Лучший средний: Учебный ученик/.test(await page.locator("[data-class-stats]").innerText()), await page.locator("[data-class-stats]").innerText());
+want("журнал: сводка по классу", /средняя оценка\s*3,8/.test(await text("[data-class-stats]")) && /Лучший средний: Учебный ученик/.test(await text("[data-class-stats]")), await text("[data-class-stats]"));
 await page.locator(`[data-cell="${rs}:1"]`).fill("120");
 await page.waitForTimeout(150);
 const pubBtn = () => page.getByRole("button", { name: /Выложить изменения|Всё выложено/ });
-// Кузнецова (50) — с почтой; Сидоров без почты — ему не уходит; 120 — вне шкалы.
-want("журнал: вне шкалы и без почты — не уходят", /Выложить изменения · 4/.test(await pubBtn().innerText()), await pubBtn().innerText());
+// 90, 75, «н», 60 и 50 (Кузнецова) — с почтой; Сидоров без почты — ему не уходит; 120 — вне шкалы.
+want("журнал: вне шкалы и без почты — не уходят", /Выложить изменения · 5/.test(await pubBtn().innerText()), await pubBtn().innerText());
 await page.locator(`[data-cell="${rs}:1"]`).fill("");
-want("журнал: без почты — предупреждение", /Без почты: 2/.test(await page.locator("[data-gradebook] [role=status]").innerText()), await page.locator("[data-gradebook] [role=status]").innerText());
+const status = () => text("[data-gradebook] [role=status]");
+want("журнал: внизу — сколько не выложено и кому без почты", /5 новых отмет\S* ещё не выложен/.test(await status()) && /Без почты: 2/.test(await status()), await status());
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/gradebook.png", fullPage: true });
-await page.getByRole("button", { name: /Выложить изменения · 4/ }).click();
+await page.getByRole("button", { name: /Выложить изменения · 5/ }).click();
 await page.waitForTimeout(500);
-want("журнал: выложено 4 отметки", /Выложено отметок: 4/.test(await page.locator("[data-gradebook] [role=status]").innerText()) && (await page.getByRole("button", { name: "Всё выложено" }).count()) === 1);
+want("журнал: выложено 5 отметок", /Выложено отметок: 5/.test(await status()) && (await page.getByRole("button", { name: "Всё выложено" }).count()) === 1, await status());
 await page.getByRole("button", { name: "Ученик", exact: true }).click();
 await page.waitForTimeout(700);
-const lessonRow = page.locator('[data-lesson-subject="Право"]');
-const fromTeacher = await lessonRow.locator("[data-mark]").evaluateAll((els) => els.filter((e) => e.disabled).map((e) => e.getAttribute("data-mark").split(":")[1]));
-want("ученик видит отметки из журнала (свои 90 и 75)", JSON.stringify(fromTeacher.sort()) === JSON.stringify(["75", "90"]), JSON.stringify(fromTeacher));
-await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Оценки" }).click();
-await page.waitForTimeout(200);
-const asGrades = await lessonRow.locator("[data-mark]").evaluateAll((els) => els.filter((e) => e.disabled).map((e) => e.getAttribute("data-mark").split(":")[1]));
-want("ученик: «Оценки» — 90 → 5, 75 → 4", JSON.stringify(asGrades.sort()) === JSON.stringify(["4", "5"]), JSON.stringify(asGrades));
-want("ученик: средняя оценка по предмету", /средняя оценка/.test(await page.locator('[data-lesson-avg="Право"]').innerText()));
-want("ученик: общая статистика в оценках", /Средняя оценка/.test(await page.locator("[data-results-stats]").innerText()) && /из 5/.test(await page.locator("[data-results-stats]").innerText()));
+await nav("Право");
+want("ученик видит отметки из журнала (90, 75 и «н»)", JSON.stringify(await officialScores("Право")) === JSON.stringify(["75", "90", "н"]), JSON.stringify(await officialScores("Право")));
+await mode("Оценки");
+want("ученик: «Оценки» — 90 → 5, 75 → 4", JSON.stringify(await officialScores("Право")) === JSON.stringify(["4", "5", "н"]), JSON.stringify(await officialScores("Право")));
+want("ученик: средняя оценка на плитке", /^Средняя оценка/.test(await text('[data-tile="avg"]')) && /из 5/.test(await text('[data-tile="avg"]')), await text('[data-tile="avg"]'));
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/results-grades.png", fullPage: true });
-await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Баллы" }).click();
-await page.waitForTimeout(200);
+await mode("Баллы");
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(300);
 await page.locator(`[data-cell="${ru}:0"]`).fill("");
 await page.locator(`[data-cell="${ru}:1"]`).fill("80");
+await page.locator(`[data-cell="${ru}:2"]`).fill("");
 await page.waitForTimeout(150);
-await page.getByRole("button", { name: /Выложить изменения · 2/ }).click();
+await page.getByRole("button", { name: /Выложить изменения · 3/ }).click();
 await page.waitForTimeout(500);
 await page.getByRole("button", { name: "Ученик", exact: true }).click();
 await page.waitForTimeout(700);
-const after = await page.locator('[data-lesson-subject="Право"] [data-mark]').evaluateAll((els) => els.filter((e) => e.disabled).map((e) => e.getAttribute("data-mark").split(":")[1]));
-want("исправленная — заменилась, стёртая — пропала", JSON.stringify(after) === JSON.stringify(["80"]), JSON.stringify(after));
+await nav("Право");
+want("исправленная — заменилась, стёртые — пропали", JSON.stringify(await officialScores("Право")) === JSON.stringify(["80"]), JSON.stringify(await officialScores("Право")));
 await page.waitForTimeout(1200);
 const gbStored = JSON.parse(JSON.parse(await page.evaluate(() => localStorage.getItem("planner:planner-state-v5"))).value).gradebooks || [];
 want("журнал сохранён: класс, убранные и добавленные", gbStored.length === 1 && gbStored[0].classId === "10b" && gbStored[0].excluded.includes("demo-3") && gbStored[0].addedStudents.length === 2);
@@ -230,7 +258,7 @@ want("журнал сохранён: класс, убранные и добав�
 // Удалить журнал — подтверждением на месте (системное окно в предпросмотре заблокировано).
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(300);
-await page.getByRole("button", { name: "Настройки журнала" }).click();
+if (!(await page.locator("[data-settings]").count())) await page.getByRole("button", { name: "Настройки журнала" }).click();
 await page.getByRole("button", { name: "Удалить журнал", exact: true }).click();
 want("удалить журнал: спрашивает здесь же", (await page.getByRole("alertdialog", { name: "Удалить журнал?" }).count()) === 1);
 await page.getByRole("alertdialog", { name: "Удалить журнал?" }).getByRole("button", { name: "Нет", exact: true }).click();
@@ -247,6 +275,7 @@ await page.getByRole("button", { name: "+ Результат" }).click();
 const od = page.getByRole("dialog", { name: "Новый результат" });
 await od.getByRole("button", { name: "Олимпиада", exact: true }).click();
 want("олимпиада: шкалы на выбор нет", (await od.getByLabel("Как считается").count()) === 0);
+await od.getByLabel("Предмет").fill("Право");
 await od.getByLabel("Название").fill("Высшая проба · право");
 await od.getByRole("button", { name: "+ Тур" }).click();
 await od.getByLabel("Этап 1, баллы тура 1").fill("38");
@@ -261,15 +290,16 @@ await od.getByLabel("Баллы этапа 2").fill("70");
 await od.getByLabel("Максимум этапа 2").fill("100");
 await od.getByRole("button", { name: "Сохранить" }).click();
 await page.waitForTimeout(400);
-const ol = page.locator('[data-result="Высшая проба · право"]');
-const stagesText = await ol.locator("[data-olympiad-stages]").innerText();
+want("олимпиада слева — по последнему этапу", /^70/.test(await text('[data-nav-olympiad="Высшая проба · право"] [data-olympiad-badge]')), await text('[data-nav-olympiad="Высшая проба · право"] [data-olympiad-badge]'));
+await page.locator('[data-nav-olympiad="Высшая проба · право"]').click();
+await page.waitForTimeout(200);
+const stagesText = await text('[data-olympiad-page="Высшая проба · право"] [data-olympiad-stages]');
 want("олимпиада: этапы отдельно — 59 и 70, не сумма", /Отборочный[\s\S]*59 из 100/.test(stagesText) && /70 из 100/.test(stagesText) && !/129/.test(stagesText), stagesText.replace(/\n/g, " | "));
-want("олимпиада: проходной первого этапа набран", /набран ✓/.test(stagesText) && /Прошёл на следующий этап/.test(stagesText));
-await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Оценки" }).click();
-await page.waitForTimeout(200);
-want("олимпиада: в режиме оценок — без оценки", !/оценка/.test(await ol.locator("[data-stage-sum]").first().innerText()) && (await ol.locator("text=оценка").count()) === 0);
-await page.getByRole("group", { name: "Показывать" }).getByRole("button", { name: "Баллы" }).click();
-await page.waitForTimeout(200);
+want("олимпиада: проходной первого этапа набран", /прошёл дальше ✓/.test(stagesText) && /Прошёл на следующий этап/.test(stagesText));
+await nav("Право");
+await mode("Оценки");
+want("олимпиада: в режиме оценок — без оценки", !/оценка/.test(await page.locator('[data-result="Высшая проба · право"]').innerText()));
+await mode("Баллы");
 
 // Пока раздел в разработке, у всех, кроме владельца, — заглушка.
 await page.getByRole("button", { name: "Другой пользователь", exact: true }).click();
@@ -279,9 +309,13 @@ if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "
 await page.getByRole("button", { name: "Ученик", exact: true }).click();
 await page.waitForTimeout(300);
 
-// Телефон.
+// Телефон: предметы чипами, сводка с графиком, записи.
 await page.setViewportSize({ width: 375, height: 800 });
 await page.waitForTimeout(500);
+want("телефон: вид B — чипы предметов", (await page.locator('[data-layout="phone"] [data-chip="Право"]').count()) === 1 && (await page.locator('[data-chip="Олимпиады"]').count()) === 1);
+await page.locator('[data-chip="Право"]').click();
+await page.waitForTimeout(300);
+want("телефон: сводка предмета", /из 100/.test(await text("[data-page-avg]")) && (await page.locator("[data-score-chart]").count()) === 1, await text("[data-page-avg]"));
 const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 want("телефон: вбок не листается", over <= 0, over + " px");
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
@@ -290,7 +324,7 @@ await page.getByRole("button", { name: "Журнал", exact: true }).click();
 await page.getByRole("button", { name: "+ Журнал 10Б" }).click();
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Пн" }).click();
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Ср" }).click();
-await page.getByRole("button", { name: "Скрыть настройки" }).click();
+await page.getByRole("button", { name: "Настройки журнала" }).click();
 await page.waitForTimeout(400);
 const overT = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 const wrapScroll = await page.evaluate(() => { const t = document.querySelector("[data-gradebook-table]"); return t ? t.parentElement.scrollWidth > t.parentElement.clientWidth : false; });
@@ -299,7 +333,7 @@ if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "
 await page.getByRole("button", { name: "Ученик", exact: true }).click();
 await page.waitForTimeout(300);
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/results-phone.png", fullPage: true });
-await page.getByRole("button", { name: "+ Результат" }).click();
+await page.getByRole("button", { name: "+ Добавить" }).click();
 await page.waitForTimeout(300);
 const dlgBox = await page.getByRole("dialog").boundingBox();
 want("телефон: окно записи помещается", dlgBox && dlgBox.x >= 0 && dlgBox.x + dlgBox.width <= 376, JSON.stringify(dlgBox));

@@ -89,6 +89,12 @@ export function newGradebook(subject, schedule, now = new Date()) {
 }
 
 // Отметка из клетки: число в пределах шкалы или null (пусто или мусор).
+// «н» — не был на уроке (так же «нб», «н/б»). Это не отметка: в средние не
+// входит, но ученику уходит и считается отдельно.
+export function isAbsent(raw) {
+  return /^(н|нб|н\/б)$/i.test(String(raw === undefined || raw === null ? "" : raw).trim());
+}
+
 export function markValue(raw, scale) {
   const s = String(raw === undefined || raw === null ? "" : raw).trim().replace(",", ".");
   if (!s) return null;
@@ -127,7 +133,7 @@ export function pendingChanges(gb) {
     const row = (gb.marks || {})[st.id] || {};
     const seen = new Set();
     Object.keys(row).forEach((date) => {
-      const v = markValue(row[date], gb.scale);
+      const v = isAbsent(row[date]) ? "н" : markValue(row[date], gb.scale);
       const key = st.id + "|" + date;
       seen.add(key);
       if (v === null || !dates.has(date)) {
@@ -149,6 +155,7 @@ export function payloadFor(gb, date, value) {
   const d = parse(date);
   const label = d ? String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") : date;
   const base = { kind: "lesson", subject: gb.subject || gb.name, title: "Урок " + label, date, journal: gb.name, key: itemKey(gb, date) };
+  if (value === "н") return { ...base, scale: "absent" };
   return gb.scale === 5 ? { ...base, scale: "grade", grade: value } : { ...base, scale: "points", score: value, max: 100 };
 }
 
@@ -213,7 +220,12 @@ export function studentStats(gb, studentId, dates, today = null) {
   const grades = [];
   const dist = { 5: 0, 4: 0, 3: 0, 2: 0 };
   let missing = 0;
+  let absent = 0;
   list.forEach((d) => {
+    if (isAbsent(row[d])) {
+      absent += 1;
+      return;
+    }
     const v = markValue(row[d], gb.scale);
     if (v === null) {
       if (!today || d <= today) missing += 1;
@@ -224,7 +236,7 @@ export function studentStats(gb, studentId, dates, today = null) {
     grades.push(g);
     if (dist[g] !== undefined) dist[g] += 1;
   });
-  return { count: values.length, avg: gb.scale === 5 ? null : mean(values), avgGrade: mean(grades), missing, dist };
+  return { count: values.length, avg: gb.scale === 5 ? null : mean(values), avgGrade: mean(grades), missing, absent, dist };
 }
 
 // Сводка по классу: средние по всем отметкам, распределение оценок, у кого

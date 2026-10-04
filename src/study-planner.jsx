@@ -4208,6 +4208,10 @@ export default function StudyPlanner() {
               gradebooks={gradebooks}
               setGradebooks={setGradebooks}
               schedule={lyceumSchedule}
+              colorOf={(name) => {
+                const own = ALL_SUBJECTS.find((x) => x.name === name);
+                return own ? own.color : lyceumColorOf(name);
+              }}
             />
           </Suspense>
         )}

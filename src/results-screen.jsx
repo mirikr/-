@@ -4,6 +4,7 @@ import { KINDS, SCALES, STAGES, STATUSES, blankResult, blankStage, cleanResult, 
 import { decryptFeed, recipientCode } from "./results-feed.js";
 import { canPublish, fetchInbox, fetchPublished, inboxIsDemo, publish, unpublish } from "./results-inbox.js";
 import GradebookPanel from "./gradebook-panel.jsx";
+import StudentView from "./results-student.jsx";
 import { CLASSES } from "./school-roster.js";
 import { studentName } from "./gradebook.js";
 import FEED from "./results-feed.json";
@@ -47,11 +48,8 @@ const fmtDate = (iso) => {
 
 // allowed — открыт ли раздел этому аккаунту: пока он в разработке, полностью
 // его видит только владелец (и предпросмотр); остальным — заглушка.
-export default function ResultsScreen({ results, setResults, subjects, accountId, accountEmail, sandbox, onUndo, allowed = true, gradebooks, setGradebooks, schedule }) {
+export default function ResultsScreen({ results, setResults, subjects, accountId, accountEmail, sandbox, onUndo, allowed = true, gradebooks, setGradebooks, schedule, colorOf }) {
   const [role, setRole] = useState("student");
-  const [kind, setKind] = useState("all");
-  // Официальные (выложены учителем или обновлением, не правятся) и свои.
-  const [origin, setOrigin] = useState("all");
   // Показывать баллами или оценками (шкала уроков: 0–49 → 2 … 90–100 → 5).
   const [mode, setModeState] = useState(() => {
     try {
@@ -68,13 +66,13 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
       /* приватное окно */
     }
   };
-  const [subject, setSubject] = useState("");
   const [editing, setEditing] = useState(null); // запись или null
   const [published, setPublished] = useState([]);
   const [hidden, setHidden] = useState(readHidden);
   const [showHidden, setShowHidden] = useState(false);
   const [code, setCode] = useState("");
   const [reload, setReload] = useState(0);
+  const [codeOpen, setCodeOpen] = useState(false);
   const teacherAllowed = allowed && (sandbox || canPublish());
 
   // Код аккаунта и выложенное мне: из обновления и от учителя.
@@ -108,30 +106,10 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
 
   const own = (results || []).map((r) => ({ ...r, source: "self" }));
   const all = useMemo(() => [...own, ...published], [results, published]); // eslint-disable-line react-hooks/exhaustive-deps
-  const visible = all.filter((r) => r.source === "self" || showHidden || !hidden.includes(r.id));
-  const hiddenCount = all.filter((r) => r.source !== "self" && hidden.includes(r.id)).length;
-  const shown = visible
-    .filter((r) => origin === "all" || (origin === "own" ? r.source === "self" : r.source !== "self"))
-    .filter((r) => kind === "all" || r.kind === kind)
-    .filter((r) => !subject || r.subject === subject)
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || String(b.id).localeCompare(String(a.id)));
-
   const subjectList = useMemo(() => {
     const names = new Set([...(subjects || []), ...all.map((r) => r.subject).filter(Boolean)]);
     return Array.from(names).sort((a, b) => a.localeCompare(b, "ru"));
   }, [subjects, all]);
-
-  const bySubject = useMemo(() => {
-    const map = new Map();
-    visible.filter((r) => kind === "all" || r.kind === kind).forEach((r) => {
-      const key = r.subject || "Без предмета";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(r);
-    });
-    return Array.from(map.entries())
-      .map(([name, list]) => ({ name, ...subjectSummary(list, mode) }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"));
-  }, [visible, kind, mode]);
 
   function save(r) {
     const clean = cleanResult({ ...r, id: r.id || newId() });
@@ -158,7 +136,6 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
     }
   }
 
-  const counts = KINDS.reduce((m, k) => ({ ...m, [k.id]: visible.filter((r) => r.kind === k.id).length }), {});
 
   return (
     <div style={S.wrap} className="ap-results">
@@ -218,112 +195,26 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
           schedule={schedule}
         />
       ) : (
-        <>
-          <div style={S.originRow} role="group" aria-label="Чьи результаты">
-            {[
-              ["all", "Все", visible.length],
-              ["official", "Официальные", visible.filter((r) => r.source !== "self").length],
-              ["own", "Мои записи", visible.filter((r) => r.source === "self").length],
-            ].map(([id, label, n]) => (
-              <button key={id} type="button" aria-pressed={origin === id} onClick={() => setOrigin(id)} style={{ ...S.originBtn, ...(origin === id ? S.originOn : null) }}>
-                {id === "official" ? "🔒 " : ""}
-                {label} <span style={S.chipCount}>{n}</span>
-              </button>
-            ))}
-          </div>
-          <div style={S.modeRow} role="group" aria-label="Показывать">
-            <span style={S.label}>Показывать:</span>
-            {[
-              ["points", "Баллы"],
-              ["grades", "Оценки"],
-            ].map(([id, label]) => (
-              <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} style={{ ...S.seg, ...(mode === id ? S.segOn : null) }}>
-                {label}
-              </button>
-            ))}
-          </div>
-          {origin === "official" && (
-            <p style={S.originNote}>Официальные результаты выкладывает учитель или приходят с обновлением приложения. Их нельзя изменить — только скрыть у себя.</p>
-          )}
-          <div style={S.toolbar}>
-            <div style={S.chips} role="group" aria-label="Вид результата">
-              <button type="button" aria-pressed={kind === "all"} onClick={() => setKind("all")} style={{ ...S.chip, ...(kind === "all" ? S.chipOn : null) }}>
-                Все <span style={S.chipCount}>{visible.length}</span>
-              </button>
-              {KINDS.filter((k) => counts[k.id] || k.id !== "other").map((k) => (
-                <button key={k.id} type="button" aria-pressed={kind === k.id} onClick={() => setKind(k.id)} style={{ ...S.chip, ...(kind === k.id ? S.chipOn : null) }}>
-                  {k.name} <span style={S.chipCount}>{counts[k.id] || 0}</span>
-                </button>
-              ))}
-            </div>
-            <select value={subject} onChange={(e) => setSubject(e.target.value)} aria-label="Предмет" style={S.select}>
-              <option value="">Все предметы</option>
-              {subjectList.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={() => setEditing({ ...blankResult(kind === "all" ? "lesson" : kind), subject, date: todayIso() })} style={S.primary}>
-              + Результат
-            </button>
-          </div>
+        <StudentView
+          items={all}
+          hiddenIds={hidden}
+          showHidden={showHidden}
+          setShowHidden={setShowHidden}
+          onHide={hide}
+          onEdit={(r) => setEditing(r)}
+          onRemove={remove}
+          onAdd={() => setEditing({ ...blankResult("lesson"), date: todayIso() })}
+          mode={mode}
+          setMode={setMode}
+          colorOf={colorOf}
+          onCode={() => setCodeOpen(true)}
+        />
+      )}
 
-          {shown.length >= 2 && <StatsCard stats={overallStats(shown, mode)} mode={mode} />}
-
-          {bySubject.length > 0 && !subject && (
-            <div style={S.summaryGrid}>
-              {bySubject.slice(0, 8).map((s) => (
-                <button key={s.name} type="button" onClick={() => setSubject(s.name === "Без предмета" ? "" : s.name)} className="ap-card" style={S.summary}>
-                  <span style={S.summaryName}>{s.name}</span>
-                  <span style={S.summaryBig}>{s.avg === null ? "—" : mode === "grades" ? f1(s.avg) : Math.round(s.avg) + " %"}</span>
-                  <span style={S.summaryMeta}>
-                    {s.count} {word(s.count, "результат", "результата", "результатов")}
-                    {s.last !== null ? " · последний " + (mode === "grades" ? f1(s.last) : Math.round(s.last) + " %") : ""}
-                    {s.trend !== null && Math.round(s.trend) !== 0 ? (
-                      <b style={{ color: s.trend > 0 ? "var(--green, #3F8F6A)" : "var(--red)" }}> {s.trend > 0 ? "▲" : "▼"} {mode === "grades" ? f1(Math.abs(s.trend)) : Math.abs(Math.round(s.trend))}</b>
-                    ) : null}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {shown.some((r) => r.kind === "lesson") && (
-            <LessonMarks list={shown.filter((r) => r.kind === "lesson")} onEdit={(r) => setEditing(r)} mode={mode} />
-          )}
-
-          <div style={S.list}>
-            {shown.length === 0 ? (
-              <div className="ap-card" style={S.empty}>
-                <div style={S.emptyTitle}>{all.length ? "Здесь пока пусто" : "Результатов пока нет"}</div>
-                <p style={S.emptyText}>
-                  Записывайте сюда КТ, пробники, экзамены и олимпиады — с баллами так, как их считают: из максимума, первичными и
-                  вторичными, оценкой или процентом. Учитель может выложить результаты вам сам — они появятся здесь же.
-                </p>
-              </div>
-            ) : (
-              shown.filter((r) => r.kind !== "lesson").map((r) => (
-                <ResultCard
-                  key={r.id}
-                  r={r}
-                  mode={mode}
-                  hidden={hidden.includes(r.id)}
-                  onEdit={() => setEditing(r)}
-                  onRemove={() => remove(r)}
-                  onHide={(on) => hide(r.id, on)}
-                />
-              ))
-            )}
-            {hiddenCount > 0 && (
-              <button type="button" onClick={() => setShowHidden(!showHidden)} style={S.linkBtn}>
-                {showHidden ? "Не показывать скрытые" : "Показать скрытые · " + hiddenCount}
-              </button>
-            )}
-          </div>
-
+      {codeOpen && (
+        <Modal title="Код ученика" onClose={() => setCodeOpen(false)}>
           <CodePanel code={code} sandbox={sandbox} signedIn={!!accountId} />
-        </>
+        </Modal>
       )}
 
       {editing && (
@@ -335,119 +226,6 @@ export default function ResultsScreen({ results, setResults, subjects, accountId
   );
 }
 
-// Общая статистика по тому, что сейчас показано (с учётом фильтров).
-const f1 = (n) => (n === null ? "—" : String(Math.round(n * 10) / 10).replace(".", ","));
-function StatsCard({ stats, mode }) {
-  const grades = mode === "grades";
-  const kinds = KINDS.filter((k) => stats.byKind[k.id]);
-  return (
-    <section className="ap-card" style={S.stats} aria-label="Статистика" data-results-stats>
-      <div style={S.statMain}>
-        <span style={S.statLabel}>{grades ? "Средняя оценка" : "Средний балл"}</span>
-        <span style={S.statBig} data-results-avg>{f1(stats.avg)}</span>
-        <span style={S.statUnit}>{grades ? "из 5" : "из 100"}</span>
-      </div>
-      <div style={S.statGrid}>
-        <Stat label="Записей" value={stats.count + (stats.scored < stats.count ? " (с баллами " + stats.scored + ")" : "")} />
-        <Stat label="Лучший" value={f1(stats.best)} />
-        <Stat label="Худший" value={f1(stats.worst)} />
-        <Stat
-          label="Последний"
-          value={
-            <>
-              {f1(stats.last)}
-              {stats.trend !== null && Math.round(stats.trend) !== 0 && (
-                <b style={{ color: stats.trend > 0 ? "var(--green, #3F8F6A)" : "var(--red)", fontSize: 12.5 }}> {stats.trend > 0 ? "▲" : "▼"} {f1(Math.abs(stats.trend))}</b>
-              )}
-            </>
-          }
-        />
-      </div>
-      {kinds.length > 1 && (
-        <div style={S.statKinds}>
-          {kinds.map((k) => (
-            <span key={k.id} style={S.statKind}>
-              {k.name}: <b>{f1(stats.byKind[k.id].avg)}</b> <span style={{ color: "var(--mute)" }}>· {stats.byKind[k.id].count}</span>
-            </span>
-          ))}
-        </div>
-      )}
-      <p style={S.statNote}>
-        {grades
-          ? "Оценки по шкале уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5 (от процента набранного). Средняя — среднее арифметическое оценок; зачёты не считаются."
-          : "Всё в 100-балльной шкале: баллы — процентом от максимума, ЕГЭ — тестовым баллом, оценка без баллов — серединой своего промежутка (5 → 95, 4 → 80, 3 → 60, 2 → 25). Средний — среднее арифметическое."}
-      </p>
-    </section>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <div style={S.stat}>
-      <span style={S.statLabel}>{label}</span>
-      <span style={S.statValue}>{value}</span>
-    </div>
-  );
-}
-
-// Оценки за уроки — не карточкой на каждую, а строкой по предмету: даты и
-// отметки, средний балл. Свои отметки открываются на правку, официальные — нет.
-function LessonMarks({ list, onEdit, mode }) {
-  const grades = mode === "grades";
-  const bySubject = new Map();
-  list
-    .slice()
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
-    .forEach((r) => {
-      const key = r.subject || "Без предмета";
-      if (!bySubject.has(key)) bySubject.set(key, []);
-      bySubject.get(key).push(r);
-    });
-  return (
-    <section className="ap-card" style={S.lessons} aria-label="Оценки за уроки" data-lesson-marks>
-      <div style={S.codeTitle}>Оценки за уроки</div>
-      {Array.from(bySubject.entries()).map(([name, rows]) => {
-        const st = subjectSummary(rows, mode);
-        return (
-          <div key={name} style={S.lessonRow} data-lesson-subject={name}>
-            <div style={S.lessonHead}>
-              <span style={S.lessonName}>{name}</span>
-              <span style={S.lessonAvg} data-lesson-avg={name}>
-                {grades ? "средняя оценка " : "средний балл "}
-                {f1(st.avg)}
-              </span>
-            </div>
-            <div style={S.lessonChips}>
-              {rows.map((r) => {
-                const s = summarize(r);
-                const value = grades ? gradeOf(r) : r.scale === "grade" ? r.grade : r.scale === "points" && Number(r.max) === 100 ? r.score : s.main;
-                const mine = r.source === "self";
-                const g = gradeOf(r);
-                const tone = g === null ? null : g === 5 ? S.markGood : g >= 4 ? S.markMid : g === 3 ? null : S.markLow;
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    disabled={!mine}
-                    onClick={() => mine && onEdit(r)}
-                    title={(r.title || "Урок") + (mine ? " · своя запись — нажмите, чтобы изменить" : " · 🔒 " + (r.source === "teacher" ? "от учителя" + (r.author ? " · " + r.author : "") : "официальная"))}
-                    data-mark={(r.date || "") + ":" + value}
-                    style={{ ...S.mark, ...tone, ...(mine ? S.markOwn : null) }}
-                  >
-                    <span style={S.markValue}>{value ?? "—"}</span>
-                    <span style={S.markDate}>{fmtDate(r.date).slice(0, 5) || "без даты"}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-      <p style={S.statNote}>Пунктирная рамка — ваша запись, остальные выставил учитель.</p>
-    </section>
-  );
-}
-
 function word(n, one, few, many) {
   const a = n % 10;
   const b = n % 100;
@@ -455,137 +233,6 @@ function word(n, one, few, many) {
   if (a === 1) return one;
   if (a >= 2 && a <= 4) return few;
   return many;
-}
-
-function ResultCard({ r, hidden, onEdit, onRemove, onHide, mode }) {
-  const s = summarize(r);
-  const grade = mode === "grades" && !(r.scale === "grade" && (r.score === undefined || r.score === null || r.score === "")) ? gradeOf(r) : null;
-  const mine = r.source === "self";
-  const title = r.title || kindName(r.kind) + (r.subject ? " · " + r.subject : "");
-  const threshold = r.threshold !== undefined && r.threshold !== null && r.threshold !== "";
-  return (
-    <article className="ap-card" style={{ ...S.card, ...(hidden ? { opacity: 0.55 } : null) }} data-result={title}>
-      <div style={S.cardTop}>
-        <span style={{ ...S.kind, ...(r.kind === "olympiad" ? S.kindOlymp : r.kind === "exam" ? S.kindExam : null) }}>{kindName(r.kind)}</span>
-        {r.kind !== "olympiad" && r.stage && <span style={S.meta}>{r.stage}</span>}
-        {r.subject && <span style={S.meta}>{r.subject}</span>}
-        {r.date && <span style={S.meta}>{fmtDate(r.date)}</span>}
-        {mine ? (
-          <span style={S.ownTag}>моя запись</span>
-        ) : (
-          <span style={S.source} title="Официальный результат: изменить нельзя, можно только скрыть у себя">
-            🔒 {r.source === "teacher" ? "от учителя" + (r.author ? " · " + r.author : "") : "официальный · из обновления"}
-          </span>
-        )}
-      </div>
-      <div style={S.cardMain}>
-        <div style={S.cardText}>
-          <div style={S.title}>{title}</div>
-          {r.kind !== "olympiad" && r.status && <span style={{ ...S.status, ...(r.status === "winner" || r.status === "prize" ? S.statusWin : null) }}>{statusName(r.status)}</span>}
-          {r.kind !== "olympiad" && r.place ? <span style={S.meta}> · {r.place} место</span> : null}
-        </div>
-        <div style={S.score}>
-          <div style={S.scoreMain}>{s.main}</div>
-          {s.sub && <div style={S.scoreSub}>{s.sub}</div>}
-          {grade !== null && <div style={S.scoreGrade}>оценка {grade}</div>}
-        </div>
-      </div>
-      {r.kind === "olympiad" && <OlympiadStages r={r} />}
-      {r.kind !== "olympiad" && s.percent !== null && (
-        <div style={S.track} aria-hidden="true">
-          <span style={{ ...S.fill, width: s.percent + "%", background: s.percent >= 80 ? "var(--green, #3F8F6A)" : s.percent >= 50 ? "var(--accent)" : "var(--red)" }} />
-        </div>
-      )}
-      {r.kind !== "olympiad" && threshold && (
-        <div style={S.threshold}>
-          Проходной — {String(r.threshold).replace(".", ",")}
-          {s.passedThreshold === true && <b style={{ color: "var(--green, #3F8F6A)" }}> · набран ✓</b>}
-          {s.passedThreshold === false && <b style={{ color: "var(--red)" }}> · не набран</b>}
-        </div>
-      )}
-      {r.kind !== "olympiad" && (r.parts || []).length > 0 && (
-        <div style={S.parts}>
-          {r.parts.map((p, i) => (
-            <span key={i} style={S.part}>
-              {p.name || "Часть " + (i + 1)}: <b>{p.score ?? "—"}</b>
-              {p.max !== null && p.max !== undefined ? " из " + p.max : ""}
-            </span>
-          ))}
-        </div>
-      )}
-      {r.note && <p style={S.note}>{r.note}</p>}
-      <div style={S.actions}>
-        {mine ? (
-          <>
-            <button type="button" onClick={onEdit} style={S.linkBtn}>
-              Изменить
-            </button>
-            <button type="button" onClick={onRemove} style={{ ...S.linkBtn, color: "var(--red)" }}>
-              Удалить
-            </button>
-          </>
-        ) : (
-          <button type="button" onClick={() => onHide(!hidden)} style={S.linkBtn}>
-            {hidden ? "Показать" : "Скрыть у себя"}
-          </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
-// Этапы олимпиады: у каждого — туры (баллы складываются), сумма, проходной,
-// статус. Этапы друг с другом не складываются.
-function OlympiadStages({ r }) {
-  const stages = olympiadStages(r);
-  return (
-    <div style={S.stages} data-olympiad-stages>
-      {stages.map((st, i) => {
-        const s = stageSummary(st);
-        const hasThreshold = st.threshold !== undefined && st.threshold !== null && st.threshold !== "";
-        return (
-          <div key={st.id || i} style={S.stage} data-stage={st.name || "Этап " + (i + 1)}>
-            <div style={S.stageHead}>
-              <span style={S.stageName}>{st.name || "Этап " + (i + 1)}</span>
-              {st.date && <span style={S.meta}>{fmtDate(st.date)}</span>}
-              <span style={S.stageSum} data-stage-sum>
-                {s.main}
-              </span>
-            </div>
-            {(st.tours || []).length > 0 && (
-              <div style={S.parts}>
-                {st.tours.map((t, j) => (
-                  <span key={j} style={S.part}>
-                    {t.name || "Тур " + (j + 1)}: <b>{t.score ?? "—"}</b>
-                    {t.max !== null && t.max !== undefined && t.max !== "" ? " из " + t.max : ""}
-                  </span>
-                ))}
-                {st.tours.length > 1 && <span style={{ ...S.part, fontWeight: 700 }}>сумма {s.main}</span>}
-              </div>
-            )}
-            {s.percent !== null && (
-              <div style={S.track} aria-hidden="true">
-                <span style={{ ...S.fill, width: s.percent + "%", background: s.percent >= 80 ? "var(--green, #3F8F6A)" : s.percent >= 50 ? "var(--accent)" : "var(--red)" }} />
-              </div>
-            )}
-            <div style={S.threshold}>
-              {hasThreshold && (
-                <>
-                  Проходной — {String(st.threshold).replace(".", ",")}
-                  {s.passedThreshold === true && <b style={{ color: "var(--green, #3F8F6A)" }}> · набран ✓</b>}
-                  {s.passedThreshold === false && <b style={{ color: "var(--red)" }}> · не набран</b>}
-                </>
-              )}
-              {st.status && (
-                <span style={{ ...S.status, ...(st.status === "winner" || st.status === "prize" ? S.statusWin : null), marginLeft: hasThreshold ? 8 : 0 }}>{statusName(st.status)}</span>
-              )}
-              {st.place ? <span style={S.meta}> · {st.place} место</span> : null}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // Поля этапов олимпиады в форме: этапы, у этапа туры (или баллы целиком).
@@ -1102,25 +749,31 @@ function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebook
   }
 
   const authorField = (
-    <label style={{ ...S.field, maxWidth: 360 }}>
+    <label style={S.field}>
       <span style={S.label}>Подпись (как вас увидят ученики)</span>
-      <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Например: Иванова А. Б." style={S.input} />
+      <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Например: Иванова А. Б." style={S.input} aria-label="Подпись учителя" />
     </label>
   );
 
   return (
     <div style={S.teacher}>
-      <div style={S.originRow} role="group" aria-label="Что выложить">
-        {[
-          ["journal", "Журнал"],
-          ["single", "Отдельный результат"],
-        ].map(([id, label]) => (
-          <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)} style={{ ...S.originBtn, ...(tab === id ? S.originOn : null) }}>
-            {label}
-          </button>
-        ))}
+      {/* Шапка: кто вы и куда уходят отметки; вкладки — справа. Подпись правится
+          в настройках журнала (и в форме отдельного результата). */}
+      <div style={S.teacherHead}>
+        <div style={S.teacherWho} data-teacher-who>
+          Вы — учитель{author.trim() ? ": " + author.trim() : ""} · отметки уходят ученикам по почте
+        </div>
+        <div style={S.originRow} role="group" aria-label="Что выложить">
+          {[
+            ["journal", "Журнал"],
+            ["single", "Отдельный результат"],
+          ].map(([id, label]) => (
+            <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)} style={{ ...S.originBtn, ...(tab === id ? S.originOn : null) }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      {authorField}
       {tab === "journal" ? (
         <GradebookPanel
           gradebooks={gradebooks}
@@ -1130,6 +783,7 @@ function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebook
           authorName={author.trim()}
           onPublished={onPublished}
           demoEmail={sandbox ? DEMO_EMAIL : ""}
+          authorField={authorField}
         />
       ) : (
       <>
@@ -1139,6 +793,7 @@ function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebook
           Ученик увидит результат в своём разделе «Результаты» — только тот, чья почта указана.
           {inboxIsDemo ? " В предпросмотре облака нет: выложенное хранится на этом устройстве, а «ученик» — " + DEMO_EMAIL + "." : ""}
         </p>
+        <div style={{ maxWidth: 360 }}>{authorField}</div>
         <StudentPicker value={recipients} onChange={setRecipients} />
         <ResultForm key={formKey} initial={{ ...blankResult("kt"), date: todayIso() }} subjects={subjects} submitLabel="Выложить" onSubmit={send} />
         {msg && (
@@ -1329,6 +984,8 @@ const S = {
   dialogHead: { display: "flex", alignItems: "center", gap: 10, padding: "14px 18px 8px" },
   dialogTitle: { flex: 1, fontFamily: "var(--serif)", fontSize: 21 },
   dialogBody: { padding: "4px 18px 18px", overflowY: "auto" },
+  teacherHead: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  teacherWho: { flex: "1 1 260px", fontSize: 14, color: "var(--ink3)" },
   teacher: { display: "flex", flexDirection: "column", gap: 16 },
   teacherCard: { padding: "16px 18px", borderRadius: 14, border: "1px solid var(--line)", background: "var(--panel)", display: "flex", flexDirection: "column", gap: 12 },
   pubRow: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid var(--line2, var(--line))" },
