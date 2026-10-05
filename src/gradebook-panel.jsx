@@ -75,6 +75,10 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   // предпросмотре (и во встроенных окнах) заблокировано и молча отвечает «нет».
   const [confirmDelete, setConfirmDelete] = useState(false);
   const tableRef = useRef(null);
+  const cardRef = useRef(null);
+  const scrollToCard = useRef(false);
+  // Только что созданный журнал: в его карточке — предмет и дни уроков.
+  const [freshId, setFreshId] = useState("");
   // Как показывать отметки: баллами (как ставят) или оценками по шкале уроков.
   const [view, setViewState] = useState(() => {
     try {
@@ -113,8 +117,25 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     if (!classId) fresh.students = demoEmail ? [{ id: uid(), last: "Учебный", first: "ученик", email: demoEmail }] : [];
     setGradebooks((prev) => [...(prev || []), fresh]);
     setOpenId(fresh.id);
-    setSettingsOpen(true);
+    // Настройки сами не раскрываем: на телефоне они занимали весь экран и
+    // журнал уезжал вниз — казалось, что он не создался. Предмет и дни уроков
+    // спрашиваем прямо в карточке нового журнала, а к ней прокручиваем.
+    setSettingsOpen(false);
+    setFreshId(fresh.id);
+    scrollToCard.current = true;
     setMsg("");
+  }
+
+  function toggleDay(d) {
+    patch((g) => {
+      const on = (g.days || []).includes(d);
+      return { ...g, daysManual: true, days: on ? g.days.filter((x) => x !== d) : DAY_KEYS.filter((x) => x === d || (g.days || []).includes(x)) };
+    });
+  }
+
+  function setSubject(subject) {
+    // Дни подтягиваются из расписания, пока их не выбирали руками.
+    patch((g) => ({ ...g, subject, days: g.daysManual ? g.days : daysFromSchedule(schedule, subject) }));
   }
 
   const dates = useMemo(() => (gb ? lessonDates(gb) : []), [gb]);
@@ -214,6 +235,15 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     }),
     [] // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // Новый журнал — прокрутить к его карточке.
+  const openKey = raw ? raw.id : "";
+  useEffect(() => {
+    if (!scrollToCard.current || !cardRef.current) return;
+    scrollToCard.current = false;
+    const el = cardRef.current;
+    requestAnimationFrame(() => el.scrollIntoView && el.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, [openKey]);
 
   async function publishAll() {
     if (!gb || !changes.length) return;
@@ -435,11 +465,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                 list="gb-subjects"
                 value={raw.subject}
                 aria-label="Предмет журнала"
-                onChange={(e) => {
-                  const subject = e.target.value;
-                  // Дни подтягиваются из расписания, пока их не выбирали руками.
-                  patch((g) => ({ ...g, subject, days: g.daysManual ? g.days : daysFromSchedule(schedule, subject) }));
-                }}
+                onChange={(e) => setSubject(e.target.value)}
                 style={S.input}
               />
               <datalist id="gb-subjects">
@@ -471,7 +497,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                     key={d}
                     type="button"
                     aria-pressed={on}
-                    onClick={() => patch((g) => ({ ...g, daysManual: true, days: on ? g.days.filter((x) => x !== d) : DAY_KEYS.filter((x) => x === d || g.days.includes(x)) }))}
+                    onClick={() => toggleDay(d)}
                     style={{ ...S.seg, ...(on ? S.segOn : null) }}
                   >
                     {DAY_SHORT[d]}
@@ -537,7 +563,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
 
       {/* Без стекла: размытие фона под большой таблицей пересчитывалось на
           каждом шаге прокрутки. */}
-      <section className="ap-card" style={{ ...S.card, ...S.cardSolid }}>
+      <section className="ap-card" style={{ ...S.card, ...S.cardSolid }} ref={cardRef}>
         <div style={S.cardHead}>
           {/* Название — своей строкой, когда места мало; кнопки — под ним. */}
           <div style={S.cardTitleBox}>
@@ -680,11 +706,48 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
           </div>
         )}
 
+        {!settingsOpen && (dates.length === 0 || raw.id === freshId) && (
+          <div style={S.setup} data-journal-setup>
+            <div style={S.setupTitle}>{dates.length === 0 ? "Выберите предмет и дни уроков — появится таблица" : "Новый журнал"}</div>
+            <label style={{ ...S.field, maxWidth: 360 }}>
+              <span style={S.label}>Предмет</span>
+              <input list="gb-subjects-setup" value={raw.subject} aria-label="Предмет журнала" onChange={(e) => setSubject(e.target.value)} style={S.input} />
+              <datalist id="gb-subjects-setup">
+                {(subjects || []).map((n) => (
+                  <option key={n} value={n} />
+                ))}
+              </datalist>
+            </label>
+            <div style={S.field}>
+              <span style={S.label}>
+                Дни уроков{" "}
+                {fromSchedule.length ? "· по расписанию: " + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") : "· в расписании этого предмета нет — отметьте дни"}
+              </span>
+              <div style={S.row} role="group" aria-label="Дни уроков">
+                {DAY_KEYS.map((d) => {
+                  const on = (raw.days || []).includes(d);
+                  return (
+                    <button key={d} type="button" aria-pressed={on} onClick={() => toggleDay(d)} style={{ ...S.seg, ...(on ? S.segOn : null) }}>
+                      {DAY_SHORT[d]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={S.row}>
+              <span style={S.label}>Период — {settingsSummary.split(" · ")[0].toLowerCase()}; поменять его и шкалу можно в настройках (кнопка со сводкой).</span>
+              {raw.id === freshId && dates.length > 0 && (
+                <button type="button" onClick={() => setFreshId("")} style={S.secondary}>
+                  Готово
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {gb.students.length === 0 ? (
           <p style={S.text}>Добавьте учеников — появится таблица.</p>
-        ) : dates.length === 0 ? (
-          <p style={S.text}>В выбранном периоде нет дней уроков — выберите дни в настройках журнала (кнопка справа вверху) или добавьте дату.</p>
-        ) : (
+        ) : dates.length === 0 ? null : (
           <div style={S.tableWrap} ref={tableRef}>
             <table style={S.table} data-gradebook-table>
               <thead>
@@ -863,6 +926,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
           </div>
         )}
 
+        {(dates.length > 0 || changes.length > 0) && (
         <div style={{ ...S.publishBar, ...(changes.length ? null : S.publishIdle) }}>
           {changes.length > 0 && <span style={S.publishDot} aria-hidden="true" />}
           <span style={S.publishText} role="status">
@@ -886,6 +950,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             {busy ? "Выкладываю…" : changes.length ? "Выложить изменения · " + changes.length : "Всё выложено"}
           </button>
         </div>
+        )}
       </section>
       <p style={S.hint}>
         Отметка — цифра в клетке{gb.scale === 100 ? " (0–100)" : " (1–5)"}, «н» — не был, пусто — без отметки. Enter и стрелки ходят по клеткам. Жёлтая рамка — ещё
@@ -1124,6 +1189,8 @@ const S = {
   // Ещё не выложено — жёлтое кольцо поверх цвета оценки.
   cellChanged: { boxShadow: "inset 0 0 0 2px var(--warmLine)", borderColor: "var(--warmLine)", borderStyle: "solid" },
   cellBad: { borderColor: "var(--red)", borderStyle: "solid", color: "var(--red)", background: "var(--redBg)" },
+  setup: { display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", borderRadius: 12, border: "1px dashed var(--accent)", background: "color-mix(in srgb, var(--accent) 6%, transparent)" },
+  setupTitle: { fontSize: 14, fontWeight: 700 },
   cardSolid: { backdropFilter: "none", WebkitBackdropFilter: "none", background: "var(--menuBg)" },
   cellEditing: { outline: "2px solid var(--accent)", outlineOffset: 1, cursor: "text" },
   issues: { display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 12, border: "1px solid color-mix(in srgb, var(--red) 40%, transparent)", background: "var(--redBg)", fontSize: 13, color: "var(--ink)" },

@@ -214,6 +214,8 @@ const classNames = await page.locator("[data-class]").evaluateAll((els) => els.m
 want("журнал: классы — списком сбоку", (await page.locator("[data-class-list]").count()) === 1 && classNames.join(",") === "10Б,11А", classNames.join(","));
 await page.getByRole("button", { name: "+ Журнал 10Б" }).click();
 await page.waitForTimeout(300);
+// Новый журнал: предмет и дни — прямо в карточке, таблица — как только выбран день.
+want("новый журнал: виден сразу, предмет и дни — в карточке", (await page.locator("[data-gradebook] [data-journal-setup]").count()) === 1 && (await page.locator("[data-settings]").count()) === 0);
 await page.getByLabel("Предмет журнала").fill("Право");
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Пн" }).click();
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Чт" }).click();
@@ -379,7 +381,6 @@ await page.getByRole("button", { name: "Журнал", exact: true }).click();
 await page.getByRole("button", { name: "+ Журнал 10Б" }).click();
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Пн" }).click();
 await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Ср" }).click();
-await page.getByRole("button", { name: "Настройки журнала" }).click();
 await page.waitForTimeout(400);
 const overT = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 const wrapScroll = await page.evaluate(() => { const t = document.querySelector("[data-gradebook-table]"); return t ? t.parentElement.scrollWidth > t.parentElement.clientWidth : false; });
