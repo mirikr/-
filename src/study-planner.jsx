@@ -3254,28 +3254,9 @@ export default function StudyPlanner() {
             «Скопировать», здесь — то же место, «Импорт».
           </div>
         )}
-        {homeworkReminders.length > 0 && screen !== "today" && screen !== "journal" && (
-          <div style={styles.hwBanner}>
-            <div style={styles.hwBannerBody}>
-            <div style={styles.hwBannerTitle}>Скоро сдавать</div>
-            {homeworkReminders.map((h) => (
-              <div key={h.id} style={styles.hwBannerRow}>
-                {h.subjectName && (
-                  <>
-                    <span style={{ ...styles.hwBannerSubject, color: lyceumColorOf(h.subjectName) }}>{h.subjectName}:</span>{" "}
-                  </>
-                )}
-                <span>{h.text}</span>
-                {h.minutes > 0 && <span style={styles.hwBannerMinutes}> · {h.minutes} мин</span>}
-                <span style={styles.hwBannerDue}> · {relativeDayLabel(h.daysUntil)}</span>
-              </div>
-            ))}
-            </div>
-            <div style={styles.hwBannerMark} aria-hidden="true">
-              !
-            </div>
-          </div>
-        )}
+        {/* Общей плашки «Скоро сдавать» над каждым разделом больше нет: напоминание
+            живёт там, где о заданиях думают, — «Не забудь» на «Сегодня», «Скоро
+            сдавать» в «Дневнике» и «Сдать скоро» в «Лицее». */}
 
         <ScreenHead
           title={screenInfo.title}
@@ -4381,7 +4362,14 @@ export default function StudyPlanner() {
               onNotebook: openLyceumNotebook,
               onResults: resultsAllowed ? openResults : undefined,
             }}
-            soon={upcomingHomework.filter((h) => !h.done).slice(0, 4)}
+            // Сначала напоминания (скоро сдавать и важное), потом остальное по сроку.
+            soon={(() => {
+              const ids = new Set(homeworkReminders.map((h) => h.id));
+              return [
+                ...homeworkReminders.map((h) => ({ ...h, remind: true })),
+                ...upcomingHomework.filter((h) => !h.done && !ids.has(h.id)),
+              ].slice(0, 6);
+            })()}
             onToggleTask={(id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done })}
             dueLabel={relativeDayLabel}
             homeworkOn={homeworkOnDate}

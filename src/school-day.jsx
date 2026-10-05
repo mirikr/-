@@ -628,28 +628,49 @@ export default function SchoolDay({
         </section>
 
         <aside className="ap-sd-side">
-          <section className="ap-card" style={S.sideCard}>
-            <h2 style={S.sideTitle}>Сдать скоро</h2>
-            {soon.length === 0 ? (
-              <p style={S.sideMuted}>Заданий со сроком нет.</p>
-            ) : (
-              soon.map((h, i) => (
-                <label key={h.id} style={{ ...S.soonRow, ...(i ? S.soonRule : null) }}>
-                  <input type="checkbox" checked={!!h.done} onChange={() => onToggleTask(h.id)} style={S.check} />
-                  <span style={S.soonText}>
-                    <span style={{ textDecoration: h.done ? "line-through" : "none" }}>{h.text || "без описания"}</span>
-                    <span style={S.soonMeta}>
-                      {[h.subjectName, h.minutes ? h.minutes + " мин" : ""].filter(Boolean).join(" · ")}
+          {/* «Сдать скоро» — напоминание «Лицея»: сверху то, о чём пора помнить
+              (срок близко или задание важное), с «!» и полоской важности. */}
+          {(() => {
+            const hot = soon.some((h) => h.remind && (h.daysUntil <= 1 || Number(h.priority) === 3));
+            return (
+              <section className="ap-card" style={{ ...S.sideCard, ...(hot ? S.soonHot : null) }} data-soon>
+                <h2 style={{ ...S.sideTitle, ...S.soonTitle }}>
+                  {hot && (
+                    <span style={S.soonMark} aria-hidden="true">
+                      !
                     </span>
-                  </span>
-                  <span style={{ ...S.soonDue, color: h.daysUntil <= 0 ? "var(--red)" : "var(--ink3)" }}>{dueLabel(h.daysUntil)}</span>
-                </label>
-              ))
-            )}
-            <button type="button" onClick={onJournal} style={S.sideLink}>
-              Все задания →
-            </button>
-          </section>
+                  )}
+                  Сдать скоро
+                </h2>
+                {soon.length === 0 ? (
+                  <p style={S.sideMuted}>Заданий со сроком нет.</p>
+                ) : (
+                  soon.map((h, i) => {
+                    const p = Number(h.priority) === 2 || Number(h.priority) === 3 ? Number(h.priority) : 1;
+                    const info = kit.priorityInfo(p);
+                    return (
+                      <label key={h.id} style={{ ...S.soonRow, ...(i ? S.soonRule : null), ...(p > 1 ? { borderLeft: "3px solid " + info.strong, paddingLeft: 8 } : null) }} data-soon-row={h.text}>
+                        <input type="checkbox" checked={!!h.done} onChange={() => onToggleTask(h.id)} style={S.check} />
+                        <span style={S.soonText}>
+                          <span style={{ textDecoration: h.done ? "line-through" : "none", fontWeight: h.remind ? 600 : 400 }}>{h.text || "без описания"}</span>
+                          <span style={S.soonMeta}>
+                            {[h.subjectName, h.minutes ? h.minutes + " мин" : ""].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                          <span style={{ ...S.soonDue, color: h.daysUntil <= 1 ? "var(--red)" : "var(--ink3)" }}>{dueLabel(h.daysUntil)}</span>
+                          {p > 1 && <Bars value={p} info={info} />}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+                <button type="button" onClick={onJournal} style={S.sideLink}>
+                  Все задания →
+                </button>
+              </section>
+            );
+          })()}
           <NextDayCard days={days} todayKey={todayKey} summaries={nowSummaries} entriesOf={nowLessonsOf} kit={kit} homeworkOn={homeworkOn} now={now} />
           <section style={S.legend}>
             <div style={S.legendTitle}>Как читать</div>
@@ -704,9 +725,10 @@ function NextDayCard({ days, todayKey, summaries, entriesOf, kit, homeworkOn, no
           : ""}
         {evening.length ? "Вечером: " + [...new Set(evening)].join(", ") + "." : ""}
       </div>
+      {/* Сами задания — в «Сдать скоро» над этой карточкой; здесь — только сколько. */}
       {due.length > 0 && (
-        <div style={S.nextDue}>
-          К этому дню: {due.map((h) => h.text).join("; ")}
+        <div style={S.nextDue} data-next-due>
+          К этому дню задано: {due.length} {plural(due.length, "задание", "задания", "заданий")} — они в «Сдать скоро» выше
         </div>
       )}
     </section>
@@ -958,6 +980,9 @@ const S = {
   soonMeta: { fontSize: 12.5, color: "var(--ink3)" },
   soonDue: { fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" },
   nextLine: { fontSize: 14 },
+  soonHot: { borderColor: "color-mix(in srgb, var(--red) 40%, var(--line))", boxShadow: "inset 3px 0 0 var(--red)" },
+  soonTitle: { display: "flex", alignItems: "center", gap: 8 },
+  soonMark: { width: 22, height: 22, borderRadius: "50%", background: "var(--red)", color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   nextDue: { fontSize: 13, lineHeight: 1.5, padding: "7px 10px", borderRadius: 9, background: "var(--warmBg)" },
   legend: { borderRadius: "var(--radius)", padding: "16px 18px", background: "var(--neutralBg)", display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "var(--ink2)", lineHeight: 1.6 },
   legendTitle: { fontWeight: 600, color: "var(--ink)" },
