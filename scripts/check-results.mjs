@@ -212,16 +212,21 @@ await page.waitForTimeout(300);
 await page.getByRole("button", { name: "Журнал", exact: true }).click();
 const classNames = await page.locator("[data-class]").evaluateAll((els) => els.map((e) => e.getAttribute("data-class")));
 want("журнал: классы — списком сбоку", (await page.locator("[data-class-list]").count()) === 1 && classNames.join(",") === "10Б,11А", classNames.join(","));
-await page.getByRole("button", { name: "+ Журнал 10Б" }).click();
-await page.waitForTimeout(300);
-// Новый журнал: предмет и дни — прямо в карточке, таблица — как только выбран день.
-want("новый журнал: виден сразу, предмет и дни — в карточке", (await page.locator("[data-gradebook] [data-journal-setup]").count()) === 1 && (await page.locator("[data-settings]").count()) === 0);
-await page.getByLabel("Предмет журнала").fill("Право");
-await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Пн" }).click();
-await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Чт" }).click();
+await page.locator('[data-class="10Б"]').click();
 await page.waitForTimeout(200);
+// Класс: предметы из его расписания — журнал создаётся одним нажатием, дни уроков — оттуда же.
+const classSubs = await page.locator("[data-class-page] [data-new-journal]").evaluateAll((els) => els.map((e) => e.getAttribute("data-new-journal")).filter(Boolean));
+want("класс: предметы — из расписания класса", JSON.stringify(classSubs) === JSON.stringify(["Право", "История", "Обществознание", "Английский язык (гр. 1)"]), classSubs.join(" | "));
+await page.locator('[data-new-journal="Право"]').click();
+await page.waitForTimeout(300);
+want("новый журнал: сразу таблица, дни — из расписания класса", (await page.locator("[data-gradebook-table]").count()) === 1 && (await page.locator("[data-journal-setup]").count()) === 0 && (await page.locator("[data-settings]").count()) === 0);
 want("журнал: сводка настроек на кнопке", /пн, чт/.test(await text("[data-settings-summary]")) && /100-балльная/.test(await text("[data-settings-summary]")), await text("[data-settings-summary]"));
-want("журнал: предмет — чипом класса", (await page.getByRole("group", { name: "Журналы класса" }).getByRole("button", { name: "Право", exact: true }).count()) === 1);
+want("журнал: где вы — «10Б / Право»", /10Б\s*\/\s*Право/.test(await text("[data-crumbs]")), await text("[data-crumbs]"));
+await page.locator("[data-crumbs]").getByRole("button", { name: "10Б" }).click();
+await page.waitForTimeout(200);
+want("класс: журнал в списке, его предмета среди новых больше нет", (await page.locator('[data-class-page] [data-journal="Право"]').count()) === 1 && (await page.locator('[data-new-journal="Право"]').count()) === 0);
+await page.locator('[data-journal="Право"]').click();
+await page.waitForTimeout(200);
 const studentsRows = await page.locator("[data-student]").evaluateAll((els) => els.map((e) => e.getAttribute("data-student")));
 want("журнал: ученики класса подставились сами, по фамилии", JSON.stringify(studentsRows) === JSON.stringify(["Иванов Иван", "Петрова Анна", "Сидоров Пётр", "Учебный ученик"]), studentsRows.join(" | "));
 await page.getByRole("button", { name: "Убрать из журнала: Петрова Анна" }).click();
@@ -378,9 +383,14 @@ want("телефон: вбок не листается", over <= 0, over + " px"
 await page.getByRole("button", { name: "Учитель", exact: true }).click();
 await page.waitForTimeout(400);
 await page.getByRole("button", { name: "Журнал", exact: true }).click();
-await page.getByRole("button", { name: "+ Журнал 10Б" }).click();
-await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Пн" }).click();
-await page.getByRole("group", { name: "Дни уроков" }).getByRole("button", { name: "Ср" }).click();
+await page.waitForTimeout(200);
+// Телефон: по шагам — классы, класс, журнал.
+await page.getByRole("button", { name: "‹ Классы" }).click();
+await page.waitForTimeout(200);
+want("телефон: сначала список классов", (await page.locator("[data-class-list] [data-class]").count()) === 2 && (await page.locator("[data-class-page]").count()) === 0);
+await page.locator('[data-class="10Б"]').click();
+await page.waitForTimeout(200);
+await page.locator('[data-new-journal="История"]').click();
 await page.waitForTimeout(400);
 const overT = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 const wrapScroll = await page.evaluate(() => { const t = document.querySelector("[data-gradebook-table]"); return t ? t.parentElement.scrollWidth > t.parentElement.clientWidth : false; });

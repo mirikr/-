@@ -839,6 +839,45 @@ export default function StudyPlanner() {
   }
   const saveTimer = useRef(null);
   const pendingSince = useRef(null);
+  // Новая версия приложения скачалась и встала (src/main.jsx). Только что
+  // открыли или приложение было в фоне — тихо перезапускаемся на ней; если
+  // человек что-то вводит или правки ещё не записаны — показываем «Обновить».
+  const openedAt = useRef(Date.now());
+  const [updateReady, setUpdateReady] = useState(false);
+  const updateBusy = () => {
+    const el = typeof document !== "undefined" ? document.activeElement : null;
+    const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+    return pendingSince.current !== null || typing;
+  };
+  const reloadWhenSaved = () => {
+    // Последние правки пишутся с задержкой — дожидаемся записи.
+    if (pendingSince.current !== null) {
+      setTimeout(reloadWhenSaved, 400);
+      return;
+    }
+    setTimeout(() => window.location.reload(), 300);
+  };
+  useEffect(() => {
+    const onReady = () => {
+      const fresh = Date.now() - openedAt.current < 30000;
+      if ((fresh || document.visibilityState === "hidden") && !updateBusy()) {
+        window.location.reload();
+        return;
+      }
+      setUpdateReady(true);
+    };
+    const onShow = () => {
+      if (document.visibilityState === "visible" && window.__plannerUpdateReady && !updateBusy()) window.location.reload();
+    };
+    if (window.__plannerUpdateReady) onReady();
+    window.addEventListener("planner-update-ready", onReady);
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      window.removeEventListener("planner-update-ready", onReady);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Последнее сохранённое состояние с метками времени: с ним сравнивается текущее,
   // чтобы пометить как изменённые только те элементы, которые вправду поменялись.
   const syncSnapshot = useRef(null);
@@ -5133,6 +5172,22 @@ export default function StudyPlanner() {
         }}
       />
 
+      {updateReady && (
+        <div style={{ ...styles.undoStack, bottom: undoQueue.length ? 96 : 12 }} role="status" data-update-ready>
+          <div style={styles.undoToast}>
+            <div style={styles.undoRow}>
+              <span style={styles.undoText}>Вышла новая версия приложения. Ваши записи сохранятся.</span>
+              <button onClick={reloadWhenSaved} style={styles.updateBtn}>
+                Обновить
+              </button>
+              <button onClick={() => setUpdateReady(false)} style={styles.undoCancel} aria-label="Позже" title="Позже">
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {undoQueue.length > 0 && (
         <div style={styles.undoStack}>
           {undoQueue.map((item) => (
@@ -7067,6 +7122,7 @@ const styles = {
     overflow: "hidden",
     zIndex: 50,
   },
+  updateBtn: { border: "none", borderRadius: 8, padding: "7px 12px", background: "var(--accent)", color: "var(--accentInk)", font: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   undoBarTrack: { height: 3, background: "var(--railActive)" },
   undoBar: { height: "100%", background: "var(--accent)" },
   undoRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" },

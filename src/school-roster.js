@@ -1,6 +1,10 @@
-// Списки классов: класс → ученики (фамилия, имя, почта). Ведёт их разработчик:
-// список добавляется сюда и выходит с обновлением. Учитель в журнале выбирает
-// класс, ученики подставляются сами; недостающего может добавить в свой журнал.
+// Списки классов: класс → ученики (фамилия, имя, почта) и предметы по
+// расписанию класса (в какие дни недели уроки). Ведёт их разработчик: список
+// добавляется сюда и выходит с обновлением. Учитель заходит в класс и
+// выбирает предмет — ученики и дни уроков подставляются сами; недостающего
+// ученика может добавить в свой журнал.
+//
+// Дни — ключи mon, tue, wed, thu, fri, sat, sun.
 //
 // Почта нужна, чтобы отметки дошли до ученика (по ней база отдаёт ему его
 // строки). Всё, что лежит в этом файле, попадает в код сайта и видно любому,
@@ -19,6 +23,12 @@ const DEMO = [
       { id: "demo-3", last: "Петрова", first: "Анна", email: "petrova@demo" },
       { id: "demo-4", last: "Сидоров", first: "Пётр", email: "" },
     ],
+    subjects: [
+      { name: "Право", days: ["mon", "thu"] },
+      { name: "История", days: ["tue", "fri"] },
+      { name: "Обществознание", days: ["wed", "fri"] },
+      { name: "Английский язык (гр. 1)", days: ["mon", "wed"] },
+    ],
   },
   {
     id: "11a",
@@ -26,6 +36,10 @@ const DEMO = [
     students: [
       { id: "demo-5", last: "Кузнецова", first: "Мария", email: "kuznetsova@demo" },
       { id: "demo-6", last: "Смирнов", first: "Алексей", email: "smirnov@demo" },
+    ],
+    subjects: [
+      { name: "Право", days: ["tue", "thu"] },
+      { name: "Экономика", days: ["mon"] },
     ],
   },
 ];
@@ -41,4 +55,17 @@ export function classById(id, classes = CLASSES) {
 // Все ученики всех классов — для поиска «добавить ученика».
 export function allStudents(classes = CLASSES) {
   return (classes || []).flatMap((c) => (c.students || []).map((st) => ({ ...st, classId: c.id, className: c.name })));
+}
+
+// Предметы класса по его расписанию: [{ name, days }].
+export function classSubjects(cls) {
+  return cls && Array.isArray(cls.subjects) ? cls.subjects.filter((x) => x && x.name) : [];
+}
+
+// Дни уроков предмета у класса или null, если такого предмета в его
+// расписании нет.
+export function classSubjectDays(cls, subject) {
+  const name = String(subject || "").trim().toLowerCase().replace(/ё/g, "е");
+  const found = classSubjects(cls).find((x) => String(x.name).trim().toLowerCase().replace(/ё/g, "е") === name);
+  return found ? (found.days || []).slice() : null;
 }

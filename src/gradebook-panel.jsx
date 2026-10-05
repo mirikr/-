@@ -25,7 +25,7 @@ import {
   withStudents,
 } from "./gradebook.js";
 import { percentOfGrade, scoreTone } from "./results-model.js";
-import { CLASSES, allStudents } from "./school-roster.js";
+import { CLASSES, allStudents, classSubjectDays, classSubjects } from "./school-roster.js";
 import { publishItems } from "./results-inbox.js";
 
 // Журнал учителя (gradebook.js): класс из списка (school-roster.js) — ученики
@@ -42,6 +42,16 @@ const todayIso = () => {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 };
 const VIEW_KEY = "planner-gradebook-view";
+// Где учитель был в журнале: уровень (классы → класс → журнал), класс, журнал.
+const NAV_KEY = "planner-gradebook-nav";
+function readNav() {
+  try {
+    return JSON.parse(localStorage.getItem(NAV_KEY) || "null");
+  } catch (e) {
+    return null;
+  }
+}
+const norm = (t) => String(t || "").trim().toLowerCase().replace(/ё/g, "е");
 const WIDE = "(min-width: 1100px)";
 
 function useWide() {
@@ -60,9 +70,30 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   const list = gradebooks || [];
   const wide = useWide();
   const hasLegacy = list.some((g) => !g.classId);
-  const [classId, setClassId] = useState(() => (list[0] ? list[0].classId || "" : classes[0] ? classes[0].id : ""));
+  // Журнал устроен по шагам: список классов → класс (его журналы и предметы
+  // из расписания класса) → журнал. Последнее место запоминается.
+  const [classId, setClassId] = useState(() => {
+    const n = readNav();
+    if (n && (n.classId === "" || classes.some((c) => c.id === n.classId))) return n.classId;
+    return list[0] ? list[0].classId || "" : classes[0] ? classes[0].id : "";
+  });
   const inClass = list.filter((g) => (g.classId || "") === classId);
-  const [openId, setOpenId] = useState(() => (inClass[0] ? inClass[0].id : ""));
+  const [openId, setOpenId] = useState(() => {
+    const n = readNav();
+    return n && n.openId && list.some((g) => g.id === n.openId) ? n.openId : "";
+  });
+  const [level, setLevel] = useState(() => {
+    const n = readNav();
+    if (n && ["classes", "class", "journal"].includes(n.level)) return n.level;
+    return list.length ? "class" : "classes";
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_KEY, JSON.stringify({ level, classId, openId }));
+    } catch (e) {
+      /* приватное окно */
+    }
+  }, [level, classId, openId]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
@@ -78,8 +109,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
   const tableRef = useRef(null);
   const cardRef = useRef(null);
   const scrollToCard = useRef(false);
-  // Только что созданный журнал: в его карточке — предмет и дни уроков.
-  const [freshId, setFreshId] = useState("");
+
   // Как показывать отметки: баллами (как ставят) или оценками по шкале уроков.
   const [view, setViewState] = useState(() => {
     try {
@@ -96,7 +126,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
       /* приватное окно */
     }
   };
-  const raw = inClass.find((g) => g.id === openId) || inClass[0] || null;
+  const raw = level === "journal" ? inClass.find((g) => g.id === openId) || null : null;
   const currentClass = classes.find((c) => c.id === classId) || null;
   // Журнал вместе с учениками (класс + добавленные − убранные), по фамилии.
   const gb = useMemo(() => {
@@ -110,20 +140,44 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     setGradebooks((prev) => (prev || []).map((g) => (g.id === raw.id ? fn(g) : g)));
   }
 
-  function create() {
-    const used = new Set(inClass.map((g) => g.subject));
-    const subject = (subjects || []).find((n) => !used.has(n)) || (subjects || [])[0] || "";
+  // Новый журнал: предмет из расписания класса (дни — оттуда же) или свой
+  // (тогда предмет и дни спрашиваются в карточке журнала).
+  function create(entry) {
+    const subject = entry ? entry.name : "";
     const fresh = { ...newGradebook(subject, schedule), classId, addedStudents: [], excluded: [] };
+    if (entry && Array.isArray(entry.days)) fresh.days = entry.days.slice();
+    else if (!subject) fresh.days = [];
     // Журнал без класса из списка — со своим списком; в предпросмотре сразу учебный ученик.
     if (!classId) fresh.students = demoEmail ? [{ id: uid(), last: "Учебный", first: "ученик", email: demoEmail }] : [];
     setGradebooks((prev) => [...(prev || []), fresh]);
     setOpenId(fresh.id);
-    // Настройки сами не раскрываем: на телефоне они занимали весь экран и
-    // журнал уезжал вниз — казалось, что он не создался. Предмет и дни уроков
-    // спрашиваем прямо в карточке нового журнала, а к ней прокручиваем.
+    setLevel("journal");
     setSettingsOpen(false);
-    setFreshId(fresh.id);
     scrollToCard.current = true;
+    setMsg("");
+  }
+
+  function goClasses() {
+    setLevel("classes");
+    setSettingsOpen(false);
+    setConfirmDelete(false);
+    setMsg("");
+  }
+
+  function goClass(id) {
+    setClassId(id);
+    setOpenId("");
+    setLevel("class");
+    setSettingsOpen(false);
+    setConfirmDelete(false);
+    setMsg("");
+  }
+
+  function openJournal(id) {
+    setOpenId(id);
+    setLevel("journal");
+    setSettingsOpen(false);
+    setConfirmDelete(false);
     setMsg("");
   }
 
@@ -134,16 +188,21 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
     });
   }
 
+  // Дни уроков предмета: из расписания класса, а если там его нет — из
+  // своего расписания учителя.
+  const scheduleDays = (subject) => classSubjectDays(currentClass, subject) || daysFromSchedule(schedule, subject);
+
   function setSubject(subject) {
     // Дни подтягиваются из расписания, пока их не выбирали руками.
-    patch((g) => ({ ...g, subject, days: g.daysManual ? g.days : daysFromSchedule(schedule, subject) }));
+    patch((g) => ({ ...g, subject, days: g.daysManual ? g.days : scheduleDays(subject) }));
   }
 
   const dates = useMemo(() => (gb ? lessonDates(gb) : []), [gb]);
   const changes = useMemo(() => (gb ? pendingChanges(gb) : []), [gb]);
   const stats = useMemo(() => (gb ? classStats(gb, dates, todayIso()) : null), [gb, dates]);
   const asGrades = gb && (gb.scale === 5 || view === "grades");
-  const fromSchedule = gb ? daysFromSchedule(schedule, gb.subject) : [];
+  const fromSchedule = gb ? scheduleDays(gb.subject) : [];
+  const fromClass = !!(gb && classSubjectDays(currentClass, gb.subject));
   const noEmail = gb ? gb.students.filter((s) => !String(s.email || "").trim()).length : 0;
 
   // Правка ученика: добавленного в журнал или из своего списка старого журнала.
@@ -278,157 +337,169 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
       })()
     : "";
 
-  function pickClass(id) {
-    setClassId(id);
-    const first = list.find((g) => (g.classId || "") === id);
-    setOpenId(first ? first.id : "");
-    setMsg("");
-    setSettingsOpen(false);
-  }
   const wordN = (n, one, few, many) => (n % 100 >= 11 && n % 100 <= 14 ? many : n % 10 === 1 ? one : n % 10 >= 2 && n % 10 <= 4 ? few : many);
+  const daysText = (days) => (days || []).map((d) => DAY_SHORT[d].toLowerCase()).join(", ");
   const summaryBtn = raw && (
     <button type="button" onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} aria-label="Настройки журнала" title="Настройки журнала: период, дни уроков, шкала" style={S.summaryBtn} data-settings-summary>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
       {settingsSummary}
     </button>
   );
+  const shownLevel = level === "journal" && !gb ? "class" : wide && level === "classes" ? "class" : level;
+  const classLabel = currentClass ? currentClass.name : "Свой список";
 
-  // На широком экране классы — списком слева, у выбранного класса под ним его
-  // журналы (предметы). На узком — чипами в строку, как раньше.
-  const journalButtons = (
-    <div style={S.sideJournals} role="group" aria-label="Журналы класса">
-      {inClass.map((g) => {
-        const on = raw && g.id === raw.id;
+  // Классы — списком. Нажал — зашёл в класс.
+  const classItems = [
+    ...classes.map((c) => ({ id: c.id, name: c.name, n: (c.students || []).length, journals: list.filter((g) => g.classId === c.id).length })),
+    ...(hasLegacy || !classes.length ? [{ id: "", name: "Свой список", own: true, journals: list.filter((g) => !g.classId).length }] : []),
+  ];
+  const classButtons = (
+    <div role="group" aria-label="Класс" style={S.sideList}>
+      {classItems.map((c) => {
+        const on = shownLevel !== "classes" && classId === c.id;
         return (
-          <button key={g.id} type="button" aria-pressed={on} onClick={() => { setOpenId(g.id); setMsg(""); }} style={{ ...S.sideJournal, ...(on ? S.sideJournalOn : null) }} data-journal={g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}>
-            {g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}
+          <button key={c.id || "own"} type="button" aria-pressed={on} onClick={() => goClass(c.id)} style={{ ...S.sideItem, ...(on ? S.sideOn : null) }} data-class={c.name}>
+            <span style={S.sideRow}>
+              <span style={S.sideName}>{c.name}</span>
+              <span style={S.sideArrow} aria-hidden="true">›</span>
+            </span>
+            <span style={S.sideMeta}>
+              {c.own ? "ученики вписаны вручную" : c.n + " " + wordN(c.n, "ученик", "ученика", "учеников")} ·{" "}
+              {c.journals ? c.journals + " " + wordN(c.journals, "журнал", "журнала", "журналов") : "журналов нет"}
+            </span>
           </button>
         );
       })}
-      <button type="button" onClick={create} style={{ ...S.sideJournal, ...S.sideJournalAdd }}>
-        {classId ? "+ Предмет" : "+ Журнал"}
-      </button>
     </div>
   );
   const sideNav = (
-    <nav aria-label="Классы и журналы" className="ap-card" style={S.side} data-class-list>
+    <nav aria-label="Классы" className="ap-card" style={S.side} data-class-list>
       <div style={S.sideLabel}>Классы</div>
-      <div role="group" aria-label="Класс" style={S.sideList}>
-        {classes.map((c) => {
-          const on = classId === c.id;
-          const n = (c.students || []).length;
-          const js = list.filter((g) => g.classId === c.id).length;
-          return (
-            <div key={c.id} style={S.sideBlock}>
-              <button type="button" aria-pressed={on} onClick={() => pickClass(c.id)} style={{ ...S.sideItem, ...(on ? S.sideOn : null) }} data-class={c.name}>
-                <span style={S.sideName}>{c.name}</span>
-                <span style={S.sideMeta}>
-                  {n} {wordN(n, "ученик", "ученика", "учеников")} · {js ? js + " " + wordN(js, "журнал", "журнала", "журналов") : "журналов нет"}
-                </span>
-              </button>
-              {on && journalButtons}
-            </div>
-          );
-        })}
-        {(hasLegacy || !classes.length) && (
-          <div style={S.sideBlock}>
-            <button type="button" aria-pressed={classId === ""} onClick={() => pickClass("")} style={{ ...S.sideItem, ...(classId === "" ? S.sideOn : null) }} data-class="Свой список">
-              <span style={S.sideName}>Свой список</span>
-              <span style={S.sideMeta}>ученики вписаны вручную</span>
-            </button>
-            {classId === "" && journalButtons}
-          </div>
-        )}
-      </div>
+      {classButtons}
     </nav>
   );
 
-  // Класс и предмет — чипами в одну строку, справа — сводка настроек.
-  const topRow = (
-    <div style={S.topRow}>
-      {(classes.length > 0 || hasLegacy) && (
-        <div style={S.chipGroup} role="group" aria-label="Класс">
-          <span style={S.label}>Класс</span>
-          {classes.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              aria-pressed={classId === c.id}
-              onClick={() => pickClass(c.id)}
-              style={{ ...S.chip, ...(classId === c.id ? S.chipOn : null) }}
-              data-class={c.name}
-            >
-              {c.name}
-            </button>
-          ))}
-          {(hasLegacy || !classes.length) && (
-            <button
-              type="button"
-              aria-pressed={classId === ""}
-              onClick={() => {
-                setClassId("");
-                const first = list.find((g) => !g.classId);
-                setOpenId(first ? first.id : "");
-              }}
-              style={{ ...S.chip, ...(classId === "" ? S.chipOn : null) }}
-            >
-              Свой список
-            </button>
-          )}
-        </div>
-      )}
-      {raw && <span style={S.vsep} aria-hidden="true" />}
-      {raw && (
-        <div style={S.chipGroup} role="group" aria-label="Журналы класса">
-          <span style={S.label}>{classId ? "Предмет" : "Журнал"}</span>
-          {inClass.map((g) => (
-            <button key={g.id} type="button" aria-pressed={g.id === raw.id} onClick={() => { setOpenId(g.id); setMsg(""); }} style={{ ...S.chip, ...(g.id === raw.id ? S.chipOn : null) }}>
-              {g.classId ? g.subject || "Без предмета" : journalTitle(g, classes)}
-            </button>
-          ))}
-          <button type="button" onClick={create} style={{ ...S.chip, ...S.chipDashed }}>
-            {classId ? "+ Предмет" : "+ Журнал"}
+  // Где вы: «Классы › 10Б › Право». На широком экране классы и так слева.
+  const crumbs = (
+    <nav aria-label="Где вы в журнале" style={S.crumbs} data-crumbs>
+      {!wide && (
+        <>
+          <button type="button" onClick={goClasses} style={S.crumb}>
+            ‹ Классы
           </button>
-        </div>
+          <span style={S.crumbSep}>/</span>
+        </>
       )}
-      {raw && <span style={{ flex: 1 }} />}
+      {gb ? (
+        <>
+          <button type="button" onClick={() => goClass(classId)} style={S.crumb}>
+            {classLabel}
+          </button>
+          <span style={S.crumbSep}>/</span>
+          <span style={S.crumbOn} aria-current="page">
+            {raw.classId ? raw.subject || "Без предмета" : gb.name}
+          </span>
+        </>
+      ) : (
+        <span style={S.crumbOn} aria-current="page">
+          {classLabel}
+        </span>
+      )}
+    </nav>
+  );
+  const headRow = (
+    <div style={S.headRow}>
+      {crumbs}
+      <span style={{ flex: 1 }} />
       {summaryBtn}
     </div>
   );
 
-  // Обёртка: список классов сбоку (широкий экран) или чипы сверху.
   const shell = (body, attrs) =>
     wide ? (
       <div style={S.split} {...attrs}>
         {sideNav}
         <div style={S.outer}>
-          {raw && <div style={S.summaryRow}>{summaryBtn}</div>}
+          {gb && headRow}
           {body}
         </div>
       </div>
     ) : (
       <div style={S.outer} {...attrs}>
-        {topRow}
+        {shownLevel !== "classes" && headRow}
         {body}
       </div>
     );
 
-  if (!gb) {
+  // Телефон, первый шаг: список классов.
+  if (shownLevel === "classes") {
     return shell(
-      <>
+      <section className="ap-card" style={S.listCard} data-class-list>
+        <div style={S.sideLabel}>Классы</div>
+        {classButtons}
         {classes.length === 0 && <p style={S.text}>Списки классов добавляет разработчик. Пока их нет — журнал можно вести своим списком учеников.</p>}
-        <section className="ap-card" style={S.card}>
-          <div style={S.title}>Журнал</div>
-          <p style={S.text}>
-            {currentClass ? `У класса ${currentClass.name} журналов пока нет. ` : ""}
-            Ученики — строками, уроки по датам из расписания — столбцами. Ставьте отметки, а потом нажмите «Выложить изменения»: каждый
-            ученик увидит свои отметки в разделе «Результаты».
-          </p>
-          <button type="button" onClick={create} style={{ ...S.primary, alignSelf: "flex-start" }}>
-            {currentClass ? "+ Журнал " + currentClass.name : "+ Новый журнал"}
-          </button>
-        </section>
-      </>
+      </section>
+    );
+  }
+
+  // Класс: его журналы и предметы из расписания класса для нового журнала.
+  if (!gb) {
+    const classSubs = classSubjects(currentClass);
+    const used = new Set(inClass.map((g) => norm(g.subject)));
+    const freeSubs = classSubs.filter((x) => !used.has(norm(x.name)));
+    const n = currentClass ? (currentClass.students || []).length : 0;
+    return shell(
+      <section className="ap-card" style={S.card} data-class-page={classLabel}>
+        <div style={{ ...S.cardTitleBox, flex: "none" }}>
+          <h3 style={S.cardTitle}>{classLabel}</h3>
+          <div style={S.cardMeta}>
+            {currentClass ? n + " " + wordN(n, "ученик", "ученика", "учеников") + " · " : ""}
+            {inClass.length ? inClass.length + " " + wordN(inClass.length, "журнал", "журнала", "журналов") : "журналов пока нет"}
+          </div>
+        </div>
+        {inClass.length > 0 && (
+          <div style={S.jList} aria-label="Журналы класса">
+            {inClass.map((g) => {
+              const label = g.classId ? g.subject || "Без предмета" : journalTitle(g, classes);
+              const pend = pendingChanges(withStudents(g, classes)).length;
+              return (
+                <button key={g.id} type="button" onClick={() => openJournal(g.id)} style={S.jRow} data-journal={label}>
+                  <span style={S.jMain}>
+                    <span style={S.jName}>{label}</span>
+                    <span style={S.jMeta}>
+                      {daysText(g.days) || "дни не выбраны"}
+                      {pend ? " · " + pend + " " + wordN(pend, "отметка", "отметки", "отметок") + " не выложено" : ""}
+                    </span>
+                  </span>
+                  <span style={S.sideArrow} aria-hidden="true">›</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div style={S.newBlock}>
+          <div style={S.sideLabel}>{classSubs.length ? "Новый журнал — предмет из расписания класса" : "Новый журнал"}</div>
+          <div style={S.row}>
+            {freeSubs.map((x) => (
+              <button key={x.name} type="button" onClick={() => create(x)} style={S.subjChip} data-new-journal={x.name}>
+                <b>{x.name}</b>
+                <span style={S.subjDays}>{daysText(x.days)}</span>
+              </button>
+            ))}
+            <button type="button" onClick={() => create(null)} style={{ ...S.subjChip, ...S.chipDashed }} data-new-journal="">
+              {classSubs.length ? "Другой предмет" : "+ Журнал"}
+            </button>
+          </div>
+          {classSubs.length > 0 && freeSubs.length === 0 && <div style={S.label}>Журналы по всем предметам класса уже есть.</div>}
+          {currentClass && classSubs.length === 0 && (
+            <div style={S.label}>Расписание этого класса ещё не добавлено — в журнале выберите предмет и отметьте дни уроков сами.</div>
+          )}
+        </div>
+        <p style={S.text}>
+          Ученики — строками, уроки по датам из расписания — столбцами. Ставьте отметки, а потом нажмите «Выложить изменения»: каждый ученик
+          увидит свои отметки в разделе «Результаты».
+        </p>
+      </section>
     );
   }
 
@@ -486,7 +557,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                 })}
               </div>
               <div style={S.setNote}>
-                {fromSchedule.length ? "По расписанию: " + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") + ". " : "В расписании этого предмета нет — отметьте дни сами. "}
+                {fromSchedule.length ? (fromClass ? "По расписанию класса: " : "По расписанию: ") + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") + ". " : "В расписании этого предмета нет — отметьте дни сами. "}
                 {fromSchedule.length > 0 && (
                   <button type="button" onClick={() => patch((g) => ({ ...g, daysManual: false, days: fromSchedule }))} style={S.link}>
                     Как в расписании
@@ -549,6 +620,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
                   onClick={() => {
                     setGradebooks((prev) => (prev || []).filter((g) => g.id !== raw.id));
                     setOpenId("");
+                    setLevel("class");
                     setConfirmDelete(false);
                     setSettingsOpen(false);
                     setMsg("");
@@ -715,7 +787,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
           </div>
         )}
 
-        {!settingsOpen && (dates.length === 0 || raw.id === freshId) && (
+        {!settingsOpen && dates.length === 0 && (
           <div style={S.setup} data-journal-setup>
             <div style={S.setupTitle}>{dates.length === 0 ? "Выберите предмет и дни уроков — появится таблица" : "Новый журнал"}</div>
             <label style={{ ...S.field, maxWidth: 360 }}>
@@ -730,7 +802,7 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             <div style={S.field}>
               <span style={S.label}>
                 Дни уроков{" "}
-                {fromSchedule.length ? "· по расписанию: " + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") : "· в расписании этого предмета нет — отметьте дни"}
+                {fromSchedule.length ? (fromClass ? "· по расписанию класса: " : "· по расписанию: ") + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") : "· в расписании этого предмета нет — отметьте дни"}
               </span>
               <div style={S.row} role="group" aria-label="Дни уроков">
                 {DAY_KEYS.map((d) => {
@@ -745,11 +817,6 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
             </div>
             <div style={S.row}>
               <span style={S.label}>Период — {settingsSummary.split(" · ")[0].toLowerCase()}; поменять его и шкалу можно в настройках (кнопка со сводкой).</span>
-              {raw.id === freshId && dates.length > 0 && (
-                <button type="button" onClick={() => setFreshId("")} style={S.secondary}>
-                  Готово
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -1113,6 +1180,22 @@ const S = {
   sideJournalOn: { background: "var(--btnBg)", color: "var(--btnInk)", fontWeight: 600 },
   sideJournalAdd: { color: "var(--ink3)", border: "1px dashed var(--line)", marginTop: 2 },
   summaryRow: { display: "flex", justifyContent: "flex-end" },
+  headRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  crumbs: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 14, minWidth: 0 },
+  crumb: { border: "none", background: "none", padding: "6px 2px", color: "var(--accent)", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" },
+  crumbSep: { color: "var(--mute)" },
+  crumbOn: { fontWeight: 700, color: "var(--ink)", overflowWrap: "anywhere" },
+  listCard: { display: "flex", flexDirection: "column", gap: 4, padding: "12px 10px", borderRadius: 18, border: "1px solid var(--line)", background: "var(--panel)" },
+  sideRow: { display: "flex", alignItems: "center", gap: 8, width: "100%" },
+  sideArrow: { marginLeft: "auto", color: "var(--mute)", fontSize: 18, lineHeight: 1 },
+  jList: { display: "flex", flexDirection: "column", border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden" },
+  jRow: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", border: "none", borderTop: "1px solid var(--line2, var(--line))", background: "transparent", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" },
+  jMain: { display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 },
+  jName: { fontSize: 15, fontWeight: 700, overflowWrap: "break-word" },
+  jMeta: { fontSize: 12.5, color: "var(--ink3)" },
+  newBlock: { display: "flex", flexDirection: "column", gap: 8 },
+  subjChip: { display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 1, padding: "8px 12px", borderRadius: 12, border: "1px solid var(--line)", background: "var(--panel2)", color: "var(--ink)", font: "inherit", fontSize: 13.5, textAlign: "left", cursor: "pointer" },
+  subjDays: { fontSize: 12, color: "var(--ink3)" },
   topRow: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   chipGroup: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
   chip: { height: 34, padding: "0 13px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 13.5, cursor: "pointer" },
