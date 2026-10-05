@@ -23,7 +23,7 @@ import { CompactDay, useNowMinutes } from "./school-day.jsx";
 //
 // Что у всей параллели — свёрнутой строкой внизу: спрашивают обычно не про
 // своё расписание («а что у вас сейчас?»), но реже, чем про своё.
-export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, kit, onOpen, styles }) {
+export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, kit, onOpen, onTasks, styles }) {
   const now = useNowMinutes();
   const [allOpen, setAllOpen] = useState(false);
 
@@ -113,18 +113,22 @@ export default function NowCard({ entriesFor, tasksFor, homeworkOn, colorOf, kit
             {timeOf(later.plan.from)}–{timeOf(later.plan.to)}
           </div>
           <CompactDay blocks={later.plan.blocks} kit={kit} colorOf={colorOf} tasksFor={tasksFor} onOpen={onOpen} />
-          {later.tasks.length > 0 && (
-            <div style={styles.nowTomorrowTasks}>
-              {later.tasks.map((h) => (
-                <div key={h.id} style={styles.nowTaskRow}>
-                  <span style={{ ...styles.nowTaskText, textDecoration: h.done ? "line-through" : "none" }}>
-                    задано: {h.text}
-                  </span>
-                  {h.subjectName ? <span style={styles.nowMineMeta}>{h.subjectName}</span> : null}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Сами задания — в «Делах и сроках» сразу под этой карточкой (там же
+              напоминание); здесь — строка, что к этому дню задано, со ссылкой туда. */}
+          {(() => {
+            const open = later.tasks.filter((h) => !h.done);
+            if (!open.length) return null;
+            const n = open.length;
+            const word = n % 10 === 1 && n % 100 !== 11 ? "задание" : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? "задания" : "заданий";
+            return (
+              <button type="button" onClick={onTasks} style={styles.nowTasksLink} data-now-tasks>
+                <span style={styles.nowTasksMark} aria-hidden="true">!</span>
+                {later.step === 1 ? "К завтра" : "К этому дню"} задано: {n} {word}
+                {open[0] && <span style={styles.nowMineMeta}> · {open.map((h) => h.subjectName || h.text).filter(Boolean).slice(0, 3).join(", ")}</span>}
+                <span style={{ marginLeft: "auto" }}>↓</span>
+              </button>
+            );
+          })()}
         </div>
       )}
 
