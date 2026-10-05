@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import MoreMenu from "./more-menu.jsx";
+import { PERFECT_CLASS, ensurePerfectCss, isPerfect } from "./perfect-score.js";
 import { KINDS, expandResults, gradeOf, kindName, olympiadStages, percentOfGrade, scoreColor, stageSummary, statusName, summarize } from "./results-model.js";
 
 // Экран ученика в «Результатах» — вариант B из макетов: слева предметы со
@@ -142,6 +143,8 @@ function olympiadState(r) {
 
 // focus — открыть сразу предмет (из расписания): { subject, n }; n меняется
 // при каждом переходе, чтобы повторный переход сработал.
+ensurePerfectCss();
+
 export default function StudentView({ items, hiddenIds, showHidden, setShowHidden, onHide, onEdit, onRemove, onAdd, mode, setMode, colorOf, onCode, focus }) {
   const narrow = useNarrow();
   const mid = useMedia(MID);
@@ -380,7 +383,7 @@ function NavSubject({ on, onClick, name, color, stats, count, mode }) {
         <span style={{ ...S.dot, background: color }} />
         <span style={S.navName}>{name}</span>
         <span style={{ ...S.navValue, color: tint(stats.avg, mode) }} data-nav-avg={name}>
-          {f1(stats.avg)}
+          {mode !== "grades" && isPerfect(stats.avg) ? <span className={PERFECT_CLASS}>{f1(stats.avg)}</span> : f1(stats.avg)}
         </span>
       </span>
       <span style={S.navBarRow}>
@@ -478,7 +481,7 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
           <div style={S.phoneHead}>
             <h2 style={{ ...S.pageTitle, fontSize: 22 }}>{title}</h2>
             <span style={{ ...S.phoneBig, color: tint(st.avg, mode) }} data-page-avg>
-              {f1(st.avg)} <span style={S.phoneUnit}>{grades ? "из 5" : "из 100"}</span>
+              {!grades && isPerfect(st.avg) ? <span className={PERFECT_CLASS}>{f1(st.avg)}</span> : f1(st.avg)} <span style={S.phoneUnit}>{grades ? "из 5" : "из 100"}</span>
             </span>
           </div>
           <div style={S.phoneLine}>
@@ -507,12 +510,13 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
         {toggle}
       </div>
       <div style={S.tiles}>
-        <Tile label={grades ? "Средняя оценка" : "Средний"} value={f1(st.avg)} color={tint(st.avg, mode)} sub={(grades ? "из 5 · " : "из 100 · ") + list.length + " " + word(list.length, "запись", "записи", "записей")} id="avg" />
-        <Tile label={grades ? "Лучшая" : "Лучший"} value={valueText(st.best)} color={st.best ? tint(st.best.v, mode) : null} sub={whatWhen(st.best)} id="best" />
+        <Tile label={grades ? "Средняя оценка" : "Средний"} value={f1(st.avg)} color={tint(st.avg, mode)} perfect={!grades && isPerfect(st.avg)} sub={(grades ? "из 5 · " : "из 100 · ") + list.length + " " + word(list.length, "запись", "записи", "записей")} id="avg" />
+        <Tile label={grades ? "Лучшая" : "Лучший"} value={valueText(st.best)} color={st.best ? tint(st.best.v, mode) : null} perfect={!grades && !!st.best && isPerfect(st.best.v)} sub={whatWhen(st.best)} id="best" />
         <Tile
           label={grades ? "Последняя" : "Последний"}
           value={valueText(st.last)}
           color={st.last ? tint(st.last.v, mode) : null}
+          perfect={!grades && !!st.last && isPerfect(st.last.v)}
           sub={
             <>
               {st.last ? kindName(st.last.r.kind).toLowerCase() : ""}
@@ -522,7 +526,7 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
           id="last"
         />
         {grades ? (
-          <Tile label="Средний балл" value={f1(st.avgPoints)} color={scoreColor(st.avgPoints)} sub="из 100" id="other" />
+          <Tile label="Средний балл" value={f1(st.avgPoints)} color={scoreColor(st.avgPoints)} perfect={isPerfect(st.avgPoints)} sub="из 100" id="other" />
         ) : (
           <Tile label="Средняя оценка" value={f1(st.avgGrade)} color={scoreColor(percentOfGrade(st.avgGrade))} sub="из 5" id="other" />
         )}
@@ -541,11 +545,11 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
   );
 }
 
-function Tile({ label, value, sub, id, color }) {
+function Tile({ label, value, sub, id, color, perfect }) {
   return (
     <div style={S.tile} data-tile={id}>
       <div style={S.tileLabel}>{label}</div>
-      <div style={{ ...S.tileValue, ...(color ? { color } : null) }}>{value}</div>
+      <div style={{ ...S.tileValue, ...(color ? { color } : null) }}>{perfect ? <span className={PERFECT_CLASS} data-perfect>{value}</span> : value}</div>
       <div style={S.tileSub}>{sub}</div>
     </div>
   );
@@ -576,7 +580,7 @@ function RecordRow({ r, mode, withSubject, hidden, onEdit, onRemove, onHide, nar
           {withSubject && r.subject && <div style={S.rowSub}>{r.subject}</div>}
         </div>
         <div style={S.rowScore}>
-          <div style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{sc.big}</div>
+          <div style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{mode !== "grades" && isPerfect(sc.pct) ? <span className={PERFECT_CLASS} data-perfect>{sc.big}</span> : sc.big}</div>
           <div style={S.scoreSub}>{r.kind !== "olympiad" && mode !== "grades" && summarize(r).main.includes(" из ") && Number(r.max) !== 100 && r.scale === "points" ? summarize(r).main : sc.sub}</div>
         </div>
         {menu}
@@ -592,7 +596,7 @@ function RecordRow({ r, mode, withSubject, hidden, onEdit, onRemove, onHide, nar
         <span style={S.rowSub}>{detailOf(r, withSubject)}</span>
       </span>
       <span style={S.rowScore}>
-        <span style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{sc.big}</span>
+        <span style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{mode !== "grades" && isPerfect(sc.pct) ? <span className={PERFECT_CLASS} data-perfect>{sc.big}</span> : sc.big}</span>
         <span style={S.scoreSub}>{sc.sub}</span>
       </span>
       {menu}
@@ -799,7 +803,7 @@ const S = {
   seg: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 10, background: "color-mix(in srgb, var(--ink) 8%, transparent)", alignSelf: "flex-start" },
   segBtn: { height: 30, padding: "0 10px", border: "none", borderRadius: 8, background: "transparent", color: "var(--ink2)", font: "inherit", fontSize: 13, cursor: "pointer" },
   segOn: { background: "var(--panel2)", color: "var(--ink)", fontWeight: 600, boxShadow: "0 1px 2px rgba(0,0,0,.08)" },
-  tiles: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 },
+  tiles: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 10 },
   tile: { padding: "10px 14px", borderRadius: 12, background: "color-mix(in srgb, var(--ink) 3%, var(--panel2))", border: "1px solid var(--line2, var(--line))", minWidth: 0 },
   tileLabel: { fontSize: 12, color: "var(--ink3)" },
   tileValue: { fontFamily: "var(--serif)", fontSize: 24, lineHeight: 1.25, fontVariantNumeric: "tabular-nums" },

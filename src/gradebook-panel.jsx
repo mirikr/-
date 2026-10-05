@@ -25,6 +25,9 @@ import {
   withStudents,
 } from "./gradebook.js";
 import { percentOfGrade, scoreTone } from "./results-model.js";
+import { PERFECT_CLASS, ensurePerfectCss } from "./perfect-score.js";
+
+ensurePerfectCss();
 import { CLASSES, allStudents, classSubjectDays, classSubjects } from "./school-roster.js";
 import { publishItems } from "./results-inbox.js";
 
@@ -1157,7 +1160,13 @@ const MarkCell = memo(function MarkCell({ row, col, value, scale, changed, today
           style={style}
           title={title}
         >
-          {value || "·"}
+          {scale !== 5 && markValue(value, scale) === 100 ? (
+            <span className={PERFECT_CLASS} data-perfect>
+              {value}
+            </span>
+          ) : (
+            value || "·"
+          )}
         </button>
       )}
     </td>
