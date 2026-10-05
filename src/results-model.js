@@ -1,0 +1,417 @@
+// Результаты: контрольные (КТ), экзамены, олимпиады, пробники.
+//
+// Считаются они по-разному, поэтому у записи есть шкала (scale):
+//   points  — баллы из максимума (34 из 50);
+//   primsec — первичные и вторичные баллы, как в ЕГЭ и ОГЭ (25 из 29 первичных
+//             → 82 из 100 тестовых);
+//   grade   — оценка (2–5), по желанию ещё и баллы;
+//   percent — сразу процент;
+//   pass    — зачёт или незачёт.
+// Баллы можно разложить по частям или турам (parts) — тогда сумма считается сама.
+// У олимпиады ещё статус (участник, призёр, победитель), проходной балл на
+// следующий этап и место.
+//
+// Запись — обычный объект с id; хранится в state.results и синхронизируется,
+// как дневник. Выложенные учителем или обновлением — не здесь (results-feed.js):
+// их нельзя править, только скрыть у себя.
+
+export const KINDS = [
+  { id: "lesson", name: "Урок", long: "Оценка за урок" },
+  { id: "kt", name: "КТ", long: "Контрольная (КТ)" },
+  { id: "exam", name: "Экзамен", long: "Экзамен" },
+  { id: "olympiad", name: "Олимпиада", long: "Олимпиада" },
+  { id: "probe", name: "Пробник", long: "Пробник" },
+  { id: "other", name: "Другое", long: "Другое" },
+];
+
+export const SCALES = [
+  { id: "points", name: "Баллы из максимума" },
+  { id: "primsec", name: "Первичные и вторичные баллы" },
+  { id: "grade", name: "Оценка" },
+  { id: "percent", name: "Процент" },
+  { id: "pass", name: "Зачёт / незачёт" },
+];
+
+export const STATUSES = [
+  { id: "", name: "—" },
+  { id: "participant", name: "Участник" },
+  { id: "next", name: "Прошёл на следующий этап" },
+  { id: "prize", name: "Призёр" },
+  { id: "winner", name: "Победитель" },
+];
+
+export const STAGES = ["Школьный", "Муниципальный", "Региональный", "Заключительный", "Отборочный", "Финал"];
+
+// Шкала уроков: 0–49 → 2, 50–69 → 3, 70–89 → 4, 90–100 → 5.
+export const GRADE_BANDS = [
+  { grade: 5, from: 90 },
+  { grade: 4, from: 70 },
+  { grade: 3, from: 50 },
+  { grade: 2, from: 0 },
+];
+
+export function gradeFromPercent(p) {
+  if (p === null || p === undefined || !Number.isFinite(Number(p))) return null;
+  const v = Number(p);
+  return (GRADE_BANDS.find((b) => v >= b.from) || GRADE_BANDS[GRADE_BANDS.length - 1]).grade;
+}
+
+// Оценка без баллов в 100-балльной шкале — середина своего промежутка, чтобы
+// обратно она переводилась в ту же оценку: 5 → 95, 4 → 80, 3 → 60, 2 → 25.
+export const GRADE_TO_100 = { 2: 25, 3: 60, 4: 80, 5: 95 };
+
+// Цвет балла — пропорционально значению: от красного (0) через охру (60) к
+// зелёному (100). Смешиваются цвета темы, поэтому в тёмной теме цвета светлее
+// сами. percent — 0–100 или null (тогда приглушённый).
+export function scoreColor(percent) {
+  if (percent === null || percent === undefined || !Number.isFinite(Number(percent))) return "var(--ink3)";
+  const v = Math.max(0, Math.min(100, Number(percent)));
+  if (v <= 60) return `color-mix(in oklab, var(--warmInk) ${Math.round((v / 60) * 100)}%, var(--red))`;
+  return `color-mix(in oklab, var(--green) ${Math.round(((v - 60) / 40) * 100)}%, var(--warmInk))`;
+}
+
+// Фон и рамка того же цвета — для клеток и меток.
+export function scoreTone(percent) {
+  if (percent === null || percent === undefined) return null;
+  const c = scoreColor(percent);
+  return { background: `color-mix(in srgb, ${c} 15%, transparent)`, borderColor: `color-mix(in srgb, ${c} 45%, transparent)`, color: c };
+}
+
+// Оценка 2–5 → место на той же шкале (плавно между серединами диапазонов).
+export function percentOfGrade(g) {
+  if (g === null || g === undefined || !Number.isFinite(Number(g))) return null;
+  const v = Math.max(2, Math.min(5, Number(g)));
+  const lo = Math.floor(v);
+  const hi = Math.min(5, lo + 1);
+  return GRADE_TO_100[lo] + (GRADE_TO_100[hi] - GRADE_TO_100[lo]) * (v - lo);
+}
+
+const num = (v) => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+};
+
+const fmt = (n) => {
+  if (n === null || n === undefined) return "";
+  const r = Math.round(n * 10) / 10;
+  return String(r).replace(".", ",");
+};
+
+// Сумма по частям, если они есть и заполнены.
+export function partsTotal(parts) {
+  const list = (parts || []).filter((p) => num(p.score) !== null || num(p.max) !== null);
+  if (!list.length) return null;
+  const score = list.reduce((s, p) => s + (num(p.score) || 0), 0);
+  const maxKnown = list.every((p) => num(p.max) !== null);
+  const max = maxKnown ? list.reduce((s, p) => s + num(p.max), 0) : null;
+  return { score, max };
+}
+
+// Олимпиада — только в баллах. У неё несколько этапов (отборочный,
+// заключительный…), у этапа — туры: баллы туров складываются, этапы считаются
+// отдельно. Старые записи (этап строкой, туры в parts) читаются как один этап.
+export function olympiadStages(r) {
+  const res = r || {};
+  if (Array.isArray(res.stages) && res.stages.length) return res.stages;
+  return [
+    {
+      id: "st1",
+      name: res.stage || "",
+      date: res.date || "",
+      tours: res.parts || [],
+      score: res.score,
+      max: res.max,
+      threshold: res.threshold,
+      status: res.status || "",
+      place: res.place,
+    },
+  ];
+}
+
+// Итог этапа: сумма туров (или баллы этапа целиком), проходной.
+export function stageSummary(stage) {
+  return summarizeFlat({ scale: "points", parts: (stage && stage.tours) || [], score: stage && stage.score, max: stage && stage.max, threshold: stage && stage.threshold });
+}
+
+// Этапы олимпиады — отдельными результатами (для статистики и сводок).
+export function expandResults(list) {
+  const out = [];
+  (list || []).forEach((r) => {
+    if (!r || r.kind !== "olympiad") {
+      out.push(r);
+      return;
+    }
+    olympiadStages(r).forEach((st, i) => {
+      out.push({
+        ...r,
+        id: r.id + ":" + (st.id || i),
+        scale: "points",
+        parts: st.tours || [],
+        score: st.score,
+        max: st.max,
+        threshold: st.threshold,
+        status: st.status,
+        place: st.place,
+        date: st.date || r.date,
+        stageName: st.name || "",
+        stages: undefined,
+      });
+    });
+  });
+  return out;
+}
+
+export function blankStage(name = "") {
+  return { id: "st-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name, date: "", tours: [], score: "", max: "", threshold: "", status: "", place: "" };
+}
+
+// Итог записи для показа и подсчётов: у олимпиады — по последнему этапу с
+// баллами (этапы не складываются).
+export function summarize(r) {
+  if (r && r.kind === "olympiad") {
+    const stages = olympiadStages(r);
+    const scored = stages.filter((st) => stageSummary(st).percent !== null || stageSummary(st).main !== "нет баллов");
+    const last = scored.length ? scored[scored.length - 1] : stages[stages.length - 1];
+    const s = stageSummary(last || {});
+    return { ...s, sub: [last && last.name, s.sub].filter(Boolean).join(" · "), stages: stages.length };
+  }
+  return summarizeFlat(r);
+}
+
+// Итог записи для показа и подсчётов: главное число, подпись, процент (0–100
+// или null, если его не из чего посчитать) и прошёл ли проходной.
+function summarizeFlat(r) {
+  const res = r || {};
+  const scale = res.scale || "points";
+  // «н» из журнала — не был на уроке: без баллов и без оценки.
+  if (scale === "absent") return { main: "н", sub: "не был", percent: null, passedThreshold: null };
+  const parts = partsTotal(res.parts);
+  let main = "";
+  let sub = "";
+  let percent = null;
+  let gradeOnly = false;
+  if (scale === "points") {
+    const score = parts ? parts.score : num(res.score);
+    const max = parts && parts.max !== null ? parts.max : num(res.max);
+    if (score !== null) {
+      main = max ? `${fmt(score)} из ${fmt(max)}` : `${fmt(score)} б.`;
+      if (max) percent = (score / max) * 100;
+    }
+  } else if (scale === "primsec") {
+    const p = parts ? parts.score : num(res.primary);
+    const pMax = parts && parts.max !== null ? parts.max : num(res.primaryMax);
+    const s = num(res.secondary);
+    const sMax = num(res.secondaryMax) || 100;
+    if (s !== null) {
+      main = `${fmt(s)} из ${fmt(sMax)}`;
+      percent = (s / sMax) * 100;
+    } else if (p !== null && pMax) {
+      percent = (p / pMax) * 100;
+    }
+    if (p !== null) sub = `первичных ${fmt(p)}${pMax ? " из " + fmt(pMax) : ""}`;
+    if (!main && p !== null) {
+      main = `${fmt(p)}${pMax ? " из " + fmt(pMax) : ""} перв.`;
+      sub = s === null ? "вторичные ещё не известны" : sub;
+    }
+  } else if (scale === "grade") {
+    const g = num(res.grade);
+    if (g !== null) {
+      main = `оценка ${fmt(g)}`;
+      percent = GRADE_TO_100[Math.max(2, Math.min(5, Math.round(g)))];
+    }
+    const score = parts ? parts.score : num(res.score);
+    const max = parts && parts.max !== null ? parts.max : num(res.max);
+    if (score !== null) {
+      sub = max ? `${fmt(score)} из ${fmt(max)} б.` : `${fmt(score)} б.`;
+      if (max) percent = (score / max) * 100;
+    } else if (g !== null) {
+      // Только оценка — процент под ней не пишем: он условный.
+      gradeOnly = true;
+    }
+  } else if (scale === "percent") {
+    const p = num(res.percent);
+    if (p !== null) {
+      main = `${fmt(p)} %`;
+      percent = p;
+    }
+  } else if (scale === "pass") {
+    if (res.passed === true) {
+      main = "зачёт";
+      percent = 100;
+    } else if (res.passed === false) {
+      main = "незачёт";
+      percent = 0;
+    }
+  }
+  if (gradeOnly) {
+    /* без процента */
+  } else if (percent !== null && scale !== "percent" && scale !== "pass" && !sub) sub = `${fmt(percent)} %`;
+  else if (percent !== null && scale !== "percent" && scale !== "pass" && sub && !/%/.test(sub)) sub += ` · ${fmt(percent)} %`;
+
+  // Проходной балл — в тех же единицах, что главное число.
+  const threshold = num(res.threshold);
+  let passedThreshold = null;
+  if (threshold !== null) {
+    const value =
+      scale === "primsec" ? (num(res.secondary) !== null ? num(res.secondary) : parts ? parts.score : num(res.primary)) : scale === "percent" ? num(res.percent) : parts ? parts.score : num(res.score);
+    if (value !== null) passedThreshold = value >= threshold;
+  }
+  return { main: main || "нет баллов", sub, percent: percent === null ? null : Math.max(0, Math.min(100, percent)), passedThreshold };
+}
+
+// Оценка записи (2–5): поставленная оценкой — она и есть, остальное — по
+// шкале уроков от процента. Зачёт и записи без баллов — без оценки.
+export function gradeOf(r) {
+  if (!r) return null;
+  // Олимпиады — только в баллах: оценкой не переводятся. «н» — без оценки.
+  if (r.kind === "olympiad" || r.scale === "absent") return null;
+  if (r.scale === "grade" && num(r.grade) !== null && num(r.score) === null) return num(r.grade);
+  if (r.scale === "pass") return null;
+  return gradeFromPercent(summarize(r).percent);
+}
+
+// Значение записи для подсчётов: процент (100-балльная) или оценка.
+export function valueOf(r, mode = "points") {
+  return mode === "grades" ? gradeOf(r) : summarize(r).percent;
+}
+
+// Сводка по предмету: сколько записей, средний и последний — в баллах или оценках.
+export function subjectSummary(results, mode = "points") {
+  const list = expandResults(results).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const withPct = list.map((r) => ({ r, p: valueOf(r, mode) })).filter((x) => x.p !== null);
+  const avg = withPct.length ? withPct.reduce((s, x) => s + x.p, 0) / withPct.length : null;
+  const last = withPct.length ? withPct[withPct.length - 1] : null;
+  const prev = withPct.length > 1 ? withPct[withPct.length - 2] : null;
+  const best = withPct.length ? withPct.reduce((b, x) => (x.p > b.p ? x : b)) : null;
+  return {
+    count: list.length,
+    avg,
+    last: last ? last.p : null,
+    trend: last && prev ? last.p - prev.p : null,
+    best: best ? best.p : null,
+  };
+}
+
+// Общая статистика по нескольким результатам. Всё переводится в 100-балльную
+// шкалу (процент от максимума, вторичные баллы, оценка, зачёт), и средний балл —
+// среднее арифметическое. Записи без баллов в подсчёт не входят.
+export function overallStats(results, mode = "points") {
+  const expanded = expandResults(results);
+  const rows = expanded
+    .map((r) => ({ r, p: valueOf(r, mode) }))
+    .filter((x) => x.p !== null)
+    .sort((a, b) => String(a.r.date || "").localeCompare(String(b.r.date || "")));
+  const mean = (list) => (list.length ? list.reduce((s, x) => s + x.p, 0) / list.length : null);
+  const byKind = {};
+  rows.forEach((x) => {
+    const k = x.r.kind || "other";
+    if (!byKind[k]) byKind[k] = [];
+    byKind[k].push(x);
+  });
+  const last = rows.length ? rows[rows.length - 1].p : null;
+  const prev = rows.length > 1 ? rows[rows.length - 2].p : null;
+  return {
+    count: expanded.length,
+    scored: rows.length,
+    avg: mean(rows),
+    best: rows.length ? Math.max(...rows.map((x) => x.p)) : null,
+    worst: rows.length ? Math.min(...rows.map((x) => x.p)) : null,
+    last,
+    trend: last !== null && prev !== null ? last - prev : null,
+    byKind: Object.fromEntries(Object.entries(byKind).map(([k, list]) => [k, { count: list.length, avg: mean(list) }])),
+  };
+}
+
+// Пустая запись для формы.
+export function blankResult(kind = "kt") {
+  return {
+    id: "",
+    kind,
+    subject: "",
+    title: "",
+    date: "",
+    stage: "",
+    scale: kind === "exam" ? "primsec" : kind === "kt" ? "grade" : "points",
+    // Олимпиада начинается с одного этапа; туры и следующие этапы добавляются.
+    stages: kind === "olympiad" ? [blankStage("Отборочный")] : undefined,
+    score: "",
+    // Оценки за уроки — по 100-балльной шкале.
+    max: kind === "lesson" ? "100" : "",
+    primary: "",
+    primaryMax: "",
+    secondary: "",
+    secondaryMax: "100",
+    grade: "",
+    percent: "",
+    passed: null,
+    parts: [],
+    status: "",
+    threshold: "",
+    place: "",
+    note: "",
+  };
+}
+
+// Чистит запись перед сохранением: числа — числами, пустое — убирается.
+export function cleanResult(r) {
+  if (r && r.kind === "olympiad") return cleanOlympiad(r);
+  const out = { ...r };
+  delete out.stages;
+  ["score", "max", "primary", "primaryMax", "secondary", "secondaryMax", "grade", "percent", "threshold", "place"].forEach((k) => {
+    const n = num(out[k]);
+    if (n === null) delete out[k];
+    else out[k] = n;
+  });
+  out.parts = (out.parts || [])
+    .map((p) => ({ name: String(p.name || "").trim(), score: num(p.score), max: num(p.max) }))
+    .filter((p) => p.name || p.score !== null || p.max !== null);
+  if (!out.parts.length) delete out.parts;
+  ["title", "subject", "note", "stage"].forEach((k) => {
+    out[k] = String(out[k] || "").trim();
+    if (!out[k]) delete out[k];
+  });
+  if (!out.status) delete out.status;
+  if (out.passed !== true && out.passed !== false) delete out.passed;
+  return out;
+}
+
+function cleanOlympiad(r) {
+  const out = { id: r.id, kind: "olympiad", scale: "points" };
+  ["title", "subject", "note"].forEach((k) => {
+    const v = String(r[k] || "").trim();
+    if (v) out[k] = v;
+  });
+  if (r.source) out.source = r.source;
+  out.stages = olympiadStages(r)
+    .map((st, i) => {
+      const s = { id: st.id || "st" + (i + 1), name: String(st.name || "").trim() };
+      if (st.date) s.date = st.date;
+      const tours = (st.tours || [])
+        .map((t) => ({ name: String(t.name || "").trim(), score: num(t.score), max: num(t.max) }))
+        .filter((t) => t.name || t.score !== null || t.max !== null);
+      if (tours.length) s.tours = tours;
+      else {
+        if (num(st.score) !== null) s.score = num(st.score);
+        if (num(st.max) !== null) s.max = num(st.max);
+      }
+      if (num(st.threshold) !== null) s.threshold = num(st.threshold);
+      if (num(st.place) !== null) s.place = num(st.place);
+      if (st.status) s.status = st.status;
+      return s;
+    })
+    .filter((s) => s.name || s.date || s.tours || s.score !== undefined || s.status);
+  if (!out.stages.length) out.stages = [{ id: "st1", name: "" }];
+  // Дата олимпиады — дата первого этапа: по ней запись встаёт в список.
+  const dated = out.stages.map((s) => s.date).filter(Boolean).sort();
+  if (dated.length) out.date = dated[dated.length - 1];
+  return out;
+}
+
+export function kindName(id) {
+  return (KINDS.find((k) => k.id === id) || KINDS[KINDS.length - 1]).name;
+}
+
+export function statusName(id) {
+  return (STATUSES.find((s) => s.id === id) || STATUSES[0]).name;
+}

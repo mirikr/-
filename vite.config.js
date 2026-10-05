@@ -25,6 +25,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // Регистрируем сами (src/main.jsx): так приложение узнаёт, что новая
+      // версия встала, и перезапускается на ней, а не ждёт следующего открытия.
+      injectRegister: false,
       includeAssets: ["apple-touch-icon.png", "icon-192.png"],
       manifest: {
         name: "Ежедневник лицеиста",
@@ -49,6 +52,10 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
+        // Новая версия сразу берёт открытые вкладки под себя — тогда
+        // приложение узнаёт об этом и перезапускается на ней (src/main.jsx).
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
         // Снимки прошлых версий — это пара мегабайт ради одного окна истории:
         // в офлайн-кэш они не нужны, подгрузятся, когда откроют сравнение.

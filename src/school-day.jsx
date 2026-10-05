@@ -191,6 +191,7 @@ function LessonCard({ unit, state, day, kit, colorOf, tasks, handlers }) {
     },
     !isExam && tasks && { label: "+ Задание к уроку", onSelect: () => setTaskOpen(true) },
     !isExam && handlers.onNotebook && { label: "Тетрадь предмета", onSelect: () => handlers.onNotebook(unit.subject) },
+    handlers.onResults && unit.subject && { label: "Результаты по предмету", onSelect: () => handlers.onResults(unit.subject) },
     { label: unit.entries.length > 1 ? "Изменить уроки" : isExam ? "Изменить" : "Изменить урок", onSelect: () => setEditing(true) },
     unit.entries.length === 1 && { label: "Удалить", danger: true, onSelect: () => handlers.onRemove(first.id) },
   ];

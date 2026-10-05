@@ -45,6 +45,13 @@ const ICON_PATHS = {
     </>
   ),
   school: <path d="M3 20.5h18M5 20.5V10l7-5 7 5v10.5M10 20.5v-5h4v5" />,
+  results: (
+    <>
+      <path d="M8 21h8M12 17v4" />
+      <path d="M7 4h10v5a5 5 0 0 1-10 0V4z" />
+      <path d="M7 6H4.5a2.5 2.5 0 0 0 2.6 3.9M17 6h2.5a2.5 2.5 0 0 1-2.6 3.9" />
+    </>
+  ),
   budget: (
     <>
       <circle cx="12" cy="12" r="8.5" />
@@ -104,7 +111,7 @@ export function Icon({ name, size = 18, strokeWidth = 1.7 }) {
 const RAIL_GROUPS = [
   { label: null, keys: ["today", "events", "journal"] },
   // Тетради — сразу за «Подготовкой»: это одна работа, конспект к пройденному уроку.
-  { label: "Учёба", keys: ["study", "notes", "trainer"] },
+  { label: "Учёба", keys: ["study", "notes", "trainer", "results"] },
   { label: "Лицей и план", keys: ["school", "budget"] },
 ];
 const RAIL_APART = ["search", "settings", "prefs"];
@@ -181,7 +188,7 @@ function NavButton({ item, on, onGo }) {
 // с облаком и темой. Раньше переключатель темы стоял первой строкой, над
 // названием, — самое заметное место занимала настройка, которую трогают раз в
 // месяц. Теперь наверху то, ради чего открывают приложение.
-export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote, next, main, version, onOpenNotes }) {
+export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel, syncLine, syncNote, next, main, version, onOpenNotes, onOpenEvent }) {
   // Подвал колонки свёрнут в одну строку. Каждый день там нужно одно: на связи
   // облако или нет. Время последней синхронизации, подпись и номер версии
   // нужны раз в месяц — они под нажатием.
@@ -242,7 +249,7 @@ export function Rail({ items, screen, onGo, mode, setMode, modeLabel, todayLabel
 
       <div style={styles.railSpacer} />
 
-      <Countdowns next={next} main={main} tone="rail" />
+      <Countdowns next={next} main={main} tone="rail" onOpen={onOpenEvent} />
 
       <div className="ap-railbody" style={styles.railFoot}>
         {/* Синхронизация и настройки — рядом, но порознь: облако проверяют
@@ -442,31 +449,34 @@ export function TabBar({ items, screen, onGo, mode, setMode, modeLabel, account,
 // Два отсчёта: до ближайшего события и до того, по которому считается план.
 // Обычно это одно и то же событие, и тогда карточка одна — вторая появляется,
 // когда впереди что-то мелкое, а план считается до большого экзамена дальше.
-export function Countdowns({ next, main, tone }) {
+// Нажатие на карточку открывает «События» и подсвечивает это событие (onOpen).
+export function Countdowns({ next, main, tone, onOpen }) {
   if (!next) return null;
   const rail = tone === "rail";
   const same = main && main.id === next.id;
-  const card = rail ? styles.cdCardRail : styles.cdCard;
+  const card = { ...(rail ? styles.cdCardRail : styles.cdCard), ...(onOpen ? styles.cdButton : null) };
+  const Box = onOpen ? "button" : "div";
+  const props = (ev) => (onOpen ? { type: "button", onClick: () => onOpen(ev.id), title: "Открыть в «Событиях»", "aria-label": "Открыть событие: " + ev.name, "data-countdown-open": ev.name } : {});
 
   return (
     <div style={rail ? styles.cdColumn : styles.cdRow}>
-      <div className={rail ? undefined : "ap-card"} style={card}>
+      <Box className={rail ? undefined : "ap-card"} style={card} {...props(next)}>
         <div style={styles.cdLabel}>{same ? "до события · план" : "до ближайшего"}</div>
         <div style={styles.cdBig}>
           <span style={styles.cdNum}>{next.days}</span>
           <span style={styles.cdWord}>{next.word}</span>
         </div>
         <div style={styles.cdName}>{next.name}</div>
-      </div>
+      </Box>
       {!same && main && (
-        <div className={rail ? undefined : "ap-card"} style={card}>
+        <Box className={rail ? undefined : "ap-card"} style={card} {...props(main)}>
           <div style={styles.cdLabel}>до события · план</div>
           <div style={styles.cdBig}>
             <span style={{ ...styles.cdNum, color: "var(--gold)" }}>{main.days}</span>
             <span style={styles.cdWord}>{main.word}</span>
           </div>
           <div style={styles.cdName}>{main.name}</div>
-        </div>
+        </Box>
       )}
     </div>
   );
@@ -718,10 +728,12 @@ const styles = {
   },
   cdCardRail: {
     background: "var(--railActive)",
+    border: "none",
     borderRadius: 14,
     padding: "11px 14px 10px",
     minWidth: 0,
   },
+  cdButton: { display: "block", width: "100%", boxSizing: "border-box", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" },
   cdLabel: { fontSize: 11.5, opacity: 0.72 },
   cdBig: { display: "flex", alignItems: "baseline", gap: 7, marginTop: 4 },
   cdNum: { fontFamily: "var(--serif)", fontSize: 30, lineHeight: 1, fontVariantNumeric: "tabular-nums" },
