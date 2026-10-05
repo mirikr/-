@@ -21,6 +21,7 @@ import {
   cleanMark,
   markIssue,
   markIssues,
+  monthRange,
   withStudents,
 } from "./gradebook.js";
 import { percentOfGrade, scoreTone } from "./results-model.js";
@@ -451,86 +452,94 @@ export default function GradebookPanel({ gradebooks, setGradebooks, schedule, su
       <>
 
       {settingsOpen && (
+        // Настройки — списком: слева что, справа как. На телефоне подпись
+        // строки уходит наверх, поля — во всю ширину (поле даты на iPhone не
+        // сжимается и раньше наезжало на соседнее).
         <div style={S.settings} data-settings>
-          <div style={S.grid}>
-            {!raw.classId && (
-              <label style={S.field}>
-                <span style={S.label}>Название (класс, группа)</span>
-                <input value={raw.name} onChange={(e) => patch((g) => ({ ...g, name: e.target.value }))} style={S.input} aria-label="Название журнала" />
-              </label>
-            )}
-            <label style={S.field}>
-              <span style={S.label}>Предмет</span>
-              <input
-                list="gb-subjects"
-                value={raw.subject}
-                aria-label="Предмет журнала"
-                onChange={(e) => setSubject(e.target.value)}
-                style={S.input}
-              />
-              <datalist id="gb-subjects">
-                {(subjects || []).map((n) => (
-                  <option key={n} value={n} />
-                ))}
-              </datalist>
-            </label>
-            <label style={S.field}>
-              <span style={S.label}>С</span>
-              <input type="date" value={raw.from} onChange={(e) => patch((g) => ({ ...g, from: e.target.value }))} style={S.input} aria-label="Начало периода" />
-            </label>
-            <label style={S.field}>
-              <span style={S.label}>По</span>
-              <input type="date" value={raw.to} onChange={(e) => patch((g) => ({ ...g, to: e.target.value }))} style={S.input} aria-label="Конец периода" />
-            </label>
-            {authorField}
+          <div style={S.setHead}>Настройки журнала</div>
+          {!raw.classId && (
+            <div style={S.setRow}>
+              <span style={S.setLabel}>Название</span>
+              <input value={raw.name} onChange={(e) => patch((g) => ({ ...g, name: e.target.value }))} style={{ ...S.input, ...S.setControl }} aria-label="Название журнала" placeholder="Класс или группа" />
+            </div>
+          )}
+          <div style={S.setRow}>
+            <span style={S.setLabel}>Предмет</span>
+            <input list="gb-subjects" value={raw.subject} aria-label="Предмет журнала" onChange={(e) => setSubject(e.target.value)} style={{ ...S.input, ...S.setControl }} />
+            <datalist id="gb-subjects">
+              {(subjects || []).map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
           </div>
-          <div style={S.field}>
-            <span style={S.label}>
-              Дни уроков{" "}
-              {fromSchedule.length ? "· по расписанию: " + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") : "· в расписании этого предмета нет — выберите дни"}
-            </span>
-            <div style={S.row} role="group" aria-label="Дни уроков">
-              {DAY_KEYS.map((d) => {
-                const on = (raw.days || []).includes(d);
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggleDay(d)}
-                    style={{ ...S.seg, ...(on ? S.segOn : null) }}
-                  >
-                    {DAY_SHORT[d]}
+          <div style={S.setRow}>
+            <span style={S.setLabel}>Дни уроков</span>
+            <div style={S.setControl}>
+              <div style={S.row} role="group" aria-label="Дни уроков">
+                {DAY_KEYS.map((d) => {
+                  const on = (raw.days || []).includes(d);
+                  return (
+                    <button key={d} type="button" aria-pressed={on} onClick={() => toggleDay(d)} style={{ ...S.seg, ...(on ? S.segOn : null) }}>
+                      {DAY_SHORT[d]}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={S.setNote}>
+                {fromSchedule.length ? "По расписанию: " + fromSchedule.map((d) => DAY_SHORT[d]).join(", ") + ". " : "В расписании этого предмета нет — отметьте дни сами. "}
+                {fromSchedule.length > 0 && (
+                  <button type="button" onClick={() => patch((g) => ({ ...g, daysManual: false, days: fromSchedule }))} style={S.link}>
+                    Как в расписании
                   </button>
-                );
-              })}
-              {fromSchedule.length > 0 && (
-                <button type="button" onClick={() => patch((g) => ({ ...g, daysManual: false, days: fromSchedule }))} style={S.link}>
-                  как в расписании
-                </button>
-              )}
+                )}
+              </div>
             </div>
           </div>
-          <div style={S.row} role="group" aria-label="Шкала">
-            <span style={S.label}>Шкала:</span>
-            {[
-              [100, "100-балльная"],
-              [5, "5-балльная"],
-            ].map(([v, label]) => (
-              <button key={v} type="button" aria-pressed={raw.scale === v} onClick={() => patch((g) => ({ ...g, scale: v }))} style={{ ...S.seg, ...(raw.scale === v ? S.segOn : null) }}>
-                {label}
+          <div style={S.setRow}>
+            <span style={S.setLabel}>Период</span>
+            <div style={{ ...S.setControl, ...S.period }}>
+              <input type="date" value={raw.from} onChange={(e) => patch((g) => ({ ...g, from: e.target.value }))} style={S.dateInput} aria-label="Начало периода" />
+              <span style={S.label}>—</span>
+              <input type="date" value={raw.to} onChange={(e) => patch((g) => ({ ...g, to: e.target.value }))} style={S.dateInput} aria-label="Конец периода" />
+              <button type="button" onClick={() => patch((g) => ({ ...g, ...monthRange(new Date()) }))} style={S.link}>
+                Этот месяц
               </button>
-            ))}
-            {(gb.skip || []).length > 0 && (
-              <span style={S.label}>
-                · скрытые даты:{" "}
+            </div>
+          </div>
+          <div style={S.setRow}>
+            <span style={S.setLabel}>Шкала</span>
+            <div style={{ ...S.setControl, ...S.row }} role="group" aria-label="Шкала">
+              {[
+                [100, "0–100 баллов"],
+                [5, "Оценки 1–5"],
+              ].map(([v, label]) => (
+                <button key={v} type="button" aria-pressed={raw.scale === v} onClick={() => patch((g) => ({ ...g, scale: v }))} style={{ ...S.seg, ...(raw.scale === v ? S.segOn : null) }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {authorField && (
+            <div style={S.setRow}>
+              <div style={{ ...S.setControl, maxWidth: 420 }}>{authorField}</div>
+            </div>
+          )}
+          {(gb.skip || []).length > 0 && (
+            <div style={S.setRow}>
+              <span style={S.setLabel}>Скрытые даты</span>
+              <div style={{ ...S.setControl, ...S.row }}>
                 {gb.skip.slice().sort().map((d) => (
                   <button key={d} type="button" onClick={() => patch((g) => ({ ...g, skip: g.skip.filter((x) => x !== d) }))} style={S.link} title="Вернуть дату">
                     {ddmm(d)} ↺
                   </button>
                 ))}
-              </span>
-            )}
+              </div>
+            </div>
+          )}
+          <div style={S.setFoot}>
+            <button type="button" onClick={() => setSettingsOpen(false)} style={S.primary}>
+              Готово
+            </button>
             <span style={{ flex: 1 }} />
             {confirmDelete ? (
               <span style={S.confirm} role="alertdialog" aria-label="Удалить журнал?">
@@ -1189,6 +1198,16 @@ const S = {
   // Ещё не выложено — жёлтое кольцо поверх цвета оценки.
   cellChanged: { boxShadow: "inset 0 0 0 2px var(--warmLine)", borderColor: "var(--warmLine)", borderStyle: "solid" },
   cellBad: { borderColor: "var(--red)", borderStyle: "solid", color: "var(--red)", background: "var(--redBg)" },
+  setHead: { fontSize: 15, fontWeight: 700 },
+  setRow: { display: "flex", alignItems: "flex-start", gap: "6px 14px", flexWrap: "wrap", paddingTop: 10, borderTop: "1px solid var(--line2, var(--line))" },
+  setLabel: { flex: "0 0 110px", paddingTop: 8, fontSize: 13, fontWeight: 600, color: "var(--ink2)" },
+  setControl: { flex: "1 1 220px", minWidth: 0 },
+  setNote: { marginTop: 6, fontSize: 12.5, color: "var(--ink3)" },
+  setFoot: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 12, borderTop: "1px solid var(--line2, var(--line))" },
+  period: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  // iPhone рисует поле даты своей шириной и не даёт его сжать — убираем
+  // системный вид и ограничиваем ширину.
+  dateInput: { flex: "1 1 130px", width: "auto", minWidth: 0, maxWidth: 170, boxSizing: "border-box", height: 38, padding: "0 10px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", font: "inherit", fontSize: 14, WebkitAppearance: "none", appearance: "none", display: "block" },
   setup: { display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", borderRadius: 12, border: "1px dashed var(--accent)", background: "color-mix(in srgb, var(--accent) 6%, transparent)" },
   setupTitle: { fontSize: 14, fontWeight: 700 },
   cardSolid: { backdropFilter: "none", WebkitBackdropFilter: "none", background: "var(--menuBg)" },

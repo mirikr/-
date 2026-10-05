@@ -726,7 +726,7 @@ function TeacherPanel({ subjects, sandbox, onPublished, gradebooks, setGradebook
 
   const authorField = (
     <label style={S.field}>
-      <span style={S.label}>Подпись (как вас увидят ученики)</span>
+      <span style={S.label}>Подпись — как вас увидят ученики</span>
       <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Например: Иванова А. Б." style={S.input} aria-label="Подпись учителя" />
     </label>
   );
