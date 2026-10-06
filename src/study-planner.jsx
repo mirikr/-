@@ -696,6 +696,8 @@ export default function StudyPlanner() {
   const timer = useStudyTimer();
   // «Распределение»: вкладка «План» или «Факт и прогноз».
   const [budgetTab, setBudgetTab] = useState("plan");
+  // «Пора повторить» показывает три темы; «Показать все» раскрывает список.
+  const [reviewAll, setReviewAll] = useState(false);
   function showScheduleNews(news) {
     setScheduleNews(news);
     try {
@@ -3015,7 +3017,9 @@ export default function StudyPlanner() {
       hours,
       note: [topic ? topic.name : "", done.note].filter(Boolean).join(" — "),
       ...(topic ? { lessonId: topic.id } : null),
-      ...(topic && done.markDone ? { auto: true } : null),
+      // Засечено таймером: пометка у урока и в «Занятиях» предмета. Не auto —
+      // иначе снятая галочка «пройден» удаляла бы и само занятие.
+      timer: true,
     };
     setJournal((prev) => [entry, ...prev]);
     if (topic && done.markDone) updateTopic(done.subjectId, topic.id, topic.custom, (t) => ({ ...t, done: true }));
@@ -3678,8 +3682,8 @@ export default function StudyPlanner() {
                   </div>
                   {dueForReview.length > 0 && (
                     <div style={styles.todayList}>
-                      <div style={styles.tasksLater}>Пора повторить</div>
-                      {dueForReview.slice(0, 3).map((row) => (
+                      <div style={styles.tasksLater}>Пора повторить · {dueForReview.length}</div>
+                      {(reviewAll ? dueForReview : dueForReview.slice(0, 3)).map((row) => (
                         <div key={row.topicId} style={styles.reviewRow}>
                           <span style={{ ...styles.dot, background: row.color }} />
                           <span style={styles.reviewText}>
@@ -3693,6 +3697,11 @@ export default function StudyPlanner() {
                           </button>
                         </div>
                       ))}
+                      {dueForReview.length > 3 && (
+                        <button type="button" onClick={() => setReviewAll(!reviewAll)} style={styles.reviewMore} aria-expanded={reviewAll} data-review-more>
+                          {reviewAll ? "Свернуть" : "Показать все · " + dueForReview.length}
+                        </button>
+                      )}
                     </div>
                   )}
                   <button onClick={() => goScreen("journal")} style={styles.goLink}>
@@ -4030,6 +4039,20 @@ export default function StudyPlanner() {
               const subjectHours =
                 Math.round(journalWithTrainer.filter((e) => e.subjectId === s.id).reduce((sum, e) => sum + (Number(e.hours) || 0), 0) * 10) / 10;
               const blocksCount = (notebooks["subj:" + s.id] || []).length;
+              // Занятия по предмету из дневника — новые сверху. Засеченные таймером
+              // ещё и у своего урока: сколько минут и сколько раз.
+              const sessions = journal
+                .filter((e) => e.subjectId === s.id)
+                .sort((a, b) => String(b.date).localeCompare(String(a.date)) || (Number(b.id) || 0) - (Number(a.id) || 0));
+              const timedByTopic = {};
+              sessions.forEach((e) => {
+                if (!e.timer || !e.lessonId) return;
+                const cur = timedByTopic[e.lessonId] || (timedByTopic[e.lessonId] = { minutes: 0, count: 0, last: e.date });
+                cur.minutes += Math.round((Number(e.hours) || 0) * 60);
+                cur.count += 1;
+              });
+              const sessionKind = (e) =>
+                e.timer ? "⏱ таймер" : e.review ? "повторение" : e.noteId ? "заметка" : e.auto ? "урок пройден" : "запись";
               // «Право: Семейное право» внутри предмета «Право» — просто «Семейное право».
               const shortName = (name) => {
                 if (!name.startsWith(s.name + ": ")) return name;
@@ -4127,7 +4150,7 @@ export default function StudyPlanner() {
                     {dueForReview.length > 0 && (
                       <section style={styles.studyReview}>
                         <div style={styles.studyReviewHead}>Пора повторить · {dueForReview.length}</div>
-                        {dueForReview.slice(0, 3).map((row) => (
+                        {(reviewAll ? dueForReview : dueForReview.slice(0, 3)).map((row) => (
                           <div key={row.topicId} style={styles.studyReviewRow}>
                             <div style={{ minWidth: 0, flex: 1 }}>
                               <div style={styles.reviewName}>{row.name}</div>
@@ -4140,6 +4163,11 @@ export default function StudyPlanner() {
                             </button>
                           </div>
                         ))}
+                        {dueForReview.length > 3 && (
+                          <button type="button" onClick={() => setReviewAll(!reviewAll)} style={styles.reviewMore} aria-expanded={reviewAll} data-review-more>
+                            {reviewAll ? "Свернуть" : "Показать все · " + dueForReview.length}
+                          </button>
+                        )}
                       </section>
                     )}
                   </div>
@@ -4197,6 +4225,7 @@ export default function StudyPlanner() {
                           ["lessons", "Уроки", allTopics.length],
                           ["notebook", "Тетрадь", blocksCount],
                           ["notes", "Заметки", notesAll.length],
+                          ["sessions", "Занятия", sessions.length],
                         ].map(([key, label, n]) => (
                           <button
                             key={key}
@@ -4287,6 +4316,8 @@ export default function StudyPlanner() {
                               onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
                               onRemoveTopic={() => removeTopic(s.id, t.id, t.custom)}
                               onUndo={showUndo}
+                              timed={timedByTopic[t.id]}
+                              onOpenSessions={() => setTab("sessions")}
                             />
                             )}
                           />
@@ -4311,6 +4342,36 @@ export default function StudyPlanner() {
                           onUndo={showUndo}
                           prefix={"subj-" + s.id}
                         />
+                      </div>
+                    )}
+
+                    {tab === "sessions" && (
+                      <div style={styles.notesAll} data-subject-sessions>
+                        {sessions.length === 0 && (
+                          <p style={styles.muted}>
+                            Занятий по предмету пока нет. Засеките время кнопкой «▶ Засечь» на «Сегодня» или в «Дневнике» — занятие
+                            появится здесь, а если выбран урок, то и у самого урока.
+                          </p>
+                        )}
+                        {sessions.slice(0, 60).map((e) => {
+                          const lesson = e.lessonId ? allTopics.find((t) => t.id === e.lessonId) : null;
+                          const title = lesson ? shortName(lesson.name) : e.note || "Весь предмет";
+                          const extra = lesson && e.note && e.note !== lesson.name ? e.note.replace(lesson.name + " — ", "") : "";
+                          return (
+                            <div key={e.id} style={styles.notesAllRow} data-session={e.timer ? "timer" : "other"}>
+                              <span style={styles.notesAllDate}>{new Date(e.date + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: "block" }}>{title}</span>
+                                <span style={styles.notesAllTopic}>
+                                  {sessionKind(e)}
+                                  {extra && extra !== title ? " · " + extra : ""}
+                                </span>
+                              </span>
+                              <span style={styles.noteMins}>{minutesLabel(Math.round((Number(e.hours) || 0) * 60))}</span>
+                            </div>
+                          );
+                        })}
+                        {sessions.length > 60 && <p style={styles.mutedSmall}>Показаны последние 60 — все записи в «Дневнике».</p>}
                       </div>
                     )}
 
@@ -5523,6 +5584,8 @@ function TopicItem({
   onRemoveTopic,
   onUndo,
   handleProps,
+  timed,
+  onOpenSessions,
 }) {
   const [noteText, setNoteText] = useState("");
   const [noteMins, setNoteMins] = useState("15");
@@ -5567,6 +5630,17 @@ function TopicItem({
         {notes.length > 0 && (
           <button type="button" onClick={onToggleNotes} aria-expanded={notesOpen} style={styles.noteBadge}>
             {notes.length} {notes.length === 1 ? "заметка" : notes.length < 5 ? "заметки" : "заметок"}
+          </button>
+        )}
+        {timed && (
+          <button
+            type="button"
+            onClick={onOpenSessions}
+            style={styles.timedMark}
+            title={"Засекали таймером: " + timed.count + " " + (timed.count === 1 ? "раз" : timed.count < 5 ? "раза" : "раз") + " — все занятия во вкладке «Занятия»"}
+            data-timed={topic.id}
+          >
+            ⏱ {minutesLabel(timed.minutes)}
           </button>
         )}
         <span className="ap-topic-mins" style={styles.topicMins}>{topic.duration || D} мин</span>
@@ -7429,6 +7503,27 @@ const styles = {
   aheadDaysWord: { display: "block", fontFamily: "var(--sans)", fontSize: 11, color: "var(--ink3)", marginTop: 2 },
   aheadName: { flex: 1, minWidth: 0, fontSize: 14 },
   aheadPlan: { color: "var(--ink3)", fontSize: 12.5 },
+  reviewMore: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+    padding: "4px 0",
+    border: "none",
+    background: "none",
+    color: "var(--accent)",
+    fontSize: 13,
+    fontWeight: 600,
+  },
+  timedMark: {
+    flexShrink: 0,
+    padding: "2px 8px",
+    border: "1px solid var(--line)",
+    borderRadius: 999,
+    background: "var(--panel2)",
+    color: "var(--ink2)",
+    fontSize: 12,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  },
   budgetTabs: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 12, background: "var(--neutralBg)" },
   budgetTab: {
     height: 38,
