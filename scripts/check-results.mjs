@@ -159,8 +159,9 @@ want("официальную можно скрыть у себя", !(await cards
 const todayKey = await page.evaluate(() => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); });
 await page.locator(".ap-nav", { hasText: "Дневник" }).first().click();
 await page.waitForTimeout(600);
-const dayMark = page.locator(`[data-day-result="${todayKey}"]`);
-want("дневник: день с результатами отмечен оценкой", (await dayMark.count()) === 1 && /^[2-5]\+1$/.test((await dayMark.innerText()).trim()), (await dayMark.count()) ? await dayMark.innerText() : "нет");
+// С 1.11 в клетке — до двух оценок цифрами (остальное — «+N»).
+const dayMarks = await page.locator(`[data-day-grade="${todayKey}"]`).allInnerTexts();
+want("дневник: день с результатами отмечен оценками", dayMarks.length === 2 && dayMarks.every((t) => /^[2-5]$/.test(t.trim())), dayMarks.join(", ") || "нет");
 const dayList = await text("[data-day-results]");
 want("дневник: в карточке дня — результаты", /Право · Урок 1/.test(dayList) && /Право · Урок 2/.test(dayList), dayList.replace(/\n/g, " | "));
 await page.locator("[data-day-results] button", { hasText: "Урок 1" }).click();

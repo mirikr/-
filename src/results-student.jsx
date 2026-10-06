@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import MoreMenu from "./more-menu.jsx";
-import { PERFECT_CLASS, ensurePerfectCss, isPerfect } from "./perfect-score.js";
+import { ensurePerfectCss, isPerfect, perfectProps } from "./perfect-score.js";
 import { KINDS, expandResults, gradeOf, kindName, olympiadStages, percentOfGrade, scoreColor, stageSummary, statusName, summarize } from "./results-model.js";
 
 // Экран ученика в «Результатах» — вариант B из макетов: слева предметы со
@@ -383,7 +383,7 @@ function NavSubject({ on, onClick, name, color, stats, count, mode }) {
         <span style={{ ...S.dot, background: color }} />
         <span style={S.navName}>{name}</span>
         <span style={{ ...S.navValue, color: tint(stats.avg, mode) }} data-nav-avg={name}>
-          {mode !== "grades" && isPerfect(stats.avg) ? <span className={PERFECT_CLASS}>{f1(stats.avg)}</span> : f1(stats.avg)}
+          {mode !== "grades" && isPerfect(stats.avg) ? <span {...perfectProps()}>{f1(stats.avg)}</span> : f1(stats.avg)}
         </span>
       </span>
       <span style={S.navBarRow}>
@@ -481,7 +481,7 @@ function SubjectPage({ title, color, list, mode, toggle, kind, setKind, withSubj
           <div style={S.phoneHead}>
             <h2 style={{ ...S.pageTitle, fontSize: 22 }}>{title}</h2>
             <span style={{ ...S.phoneBig, color: tint(st.avg, mode) }} data-page-avg>
-              {!grades && isPerfect(st.avg) ? <span className={PERFECT_CLASS}>{f1(st.avg)}</span> : f1(st.avg)} <span style={S.phoneUnit}>{grades ? "из 5" : "из 100"}</span>
+              {!grades && isPerfect(st.avg) ? <span {...perfectProps()}>{f1(st.avg)}</span> : f1(st.avg)} <span style={S.phoneUnit}>{grades ? "из 5" : "из 100"}</span>
             </span>
           </div>
           <div style={S.phoneLine}>
@@ -549,7 +549,7 @@ function Tile({ label, value, sub, id, color, perfect }) {
   return (
     <div style={S.tile} data-tile={id}>
       <div style={S.tileLabel}>{label}</div>
-      <div style={{ ...S.tileValue, ...(color ? { color } : null) }}>{perfect ? <span className={PERFECT_CLASS} data-perfect>{value}</span> : value}</div>
+      <div style={{ ...S.tileValue, ...(color ? { color } : null) }}>{perfect ? <span {...perfectProps()} data-perfect>{value}</span> : value}</div>
       <div style={S.tileSub}>{sub}</div>
     </div>
   );
@@ -580,7 +580,7 @@ function RecordRow({ r, mode, withSubject, hidden, onEdit, onRemove, onHide, nar
           {withSubject && r.subject && <div style={S.rowSub}>{r.subject}</div>}
         </div>
         <div style={S.rowScore}>
-          <div style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{mode !== "grades" && isPerfect(sc.pct) ? <span className={PERFECT_CLASS} data-perfect>{sc.big}</span> : sc.big}</div>
+          <div style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{mode !== "grades" && isPerfect(sc.pct) ? <span {...perfectProps()} data-perfect>{sc.big}</span> : sc.big}</div>
           <div style={S.scoreSub}>{r.kind !== "olympiad" && mode !== "grades" && summarize(r).main.includes(" из ") && Number(r.max) !== 100 && r.scale === "points" ? summarize(r).main : sc.sub}</div>
         </div>
         {menu}
@@ -596,7 +596,7 @@ function RecordRow({ r, mode, withSubject, hidden, onEdit, onRemove, onHide, nar
         <span style={S.rowSub}>{detailOf(r, withSubject)}</span>
       </span>
       <span style={S.rowScore}>
-        <span style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{mode !== "grades" && isPerfect(sc.pct) ? <span className={PERFECT_CLASS} data-perfect>{sc.big}</span> : sc.big}</span>
+        <span style={{ ...S.scoreBig, color: scoreColor(sc.pct) }} data-score-color>{mode !== "grades" && isPerfect(sc.pct) ? <span {...perfectProps()} data-perfect>{sc.big}</span> : sc.big}</span>
         <span style={S.scoreSub}>{sc.sub}</span>
       </span>
       {menu}

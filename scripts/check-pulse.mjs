@@ -105,15 +105,16 @@ const open = async (state) => {
   const screenText = await page.locator("main").innerText();
   want("порог взят — предложения больше нет", !/осталось \d+ задани|Реши \d+ задани/i.test(screenText),
     (screenText.match(/(осталось \d+ задани|Реши \d+ задани)[^\n]*/i) || [])[0] || "");
-  want("полчаса засчитаны в часы", /Сегодня записано 0,5 ч|Записано сегодня\s*0,5\s*ч/i.test(screenText),
-    (screenText.match(/(Сегодня записано|Записано сегодня)[^\n]*\n?[^\n]*/) || [])[0]);
+  want("полчаса засчитаны в часы", /Сегодня записано 0,5 ч|Записано сегодня\s*0,5\s*ч|сегодня\s*0,5\s*ч/i.test(screenText),
+    (screenText.match(/(Сегодня записано|Записано сегодня|сегодня)[^\n]*\n?[^\n]*/i) || [])[0]);
 
   // И в дневнике — отдельной строкой, которую руками не удалить.
   // Видимая кнопка: в полосе вкладок телефона есть своя «Дневник», на компьютере она скрыта.
   await page.locator("button:visible", { hasText: "Дневник" }).first().click();
   await page.waitForTimeout(900);
   const jour = await page.locator("body").innerText();
-  const row = (jour.match(/[^\n]*\n[^\n]*\n[^\n]*Тренажёр: 5 заданий/) || [])[0] || "";
+  // Строка записи: предмет, заметка, часы — часы с 1.11 стоят после заметки.
+  const row = (jour.match(/[^\n]*\n[^\n]*\n[^\n]*Тренажёр: 5 заданий[^\n]*(\n[^\n]*){0,2}/) || [])[0] || "";
   want("в дневнике есть строка тренажёра", /Тренажёр: 5 заданий/.test(jour), row.replace(/\n/g, " | "));
   want("у строки назван предмет", /Физика/.test(row), row.replace(/\n/g, " | "));
   want("в строке стоит полчаса", /0,5 ч/.test(row));
@@ -123,8 +124,8 @@ const open = async (state) => {
 }
 
 // --- запись с «Сегодня» — всегда за сегодня --------------------------------
-// Форма на «Сегодня» и форма в «Дневнике» делят одно состояние. Если в дневнике
-// открыт другой день, запись с «Сегодня» уходила туда, а не в сегодня.
+// В «Дневнике» выбранный день — свой. Запись с «Сегодня» уходит в сегодня, даже
+// если в дневнике открыт другой день; «+ Записать» под днём дневника — в этот день.
 {
   const where = "Сегодня";
   const { browser, page, errors } = await open({});
@@ -134,34 +135,87 @@ const open = async (state) => {
   }, shift);
   const todayLocal = await localDay(0);
   const yesterday = await localDay(-1);
+  const stored = (n) => page.evaluate((note) => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    return (value.journal || []).find((e) => e.note === note) || null;
+  }, n);
+  const writeInDialog = async (note) => {
+    const dialog = page.locator('[role="dialog"]').last();
+    await dialog.locator('textarea[placeholder^="Например: конституционные"]').fill(note);
+    await dialog.locator("button", { hasText: /^Записать$/ }).last().click();
+    await page.waitForTimeout(1600);
+  };
 
   // В дневнике выбираем вчерашний день.
   await page.locator("button:visible", { hasText: "Дневник" }).first().click();
   await page.waitForTimeout(700);
-  await page.locator('input[type="date"]:visible').first().fill(yesterday);
+  await page.locator(`[data-day="${yesterday}"]:visible`).first().click();
   await page.waitForTimeout(300);
 
   // Возвращаемся на «Сегодня» и пишем занятие оттуда.
   await page.locator("button:visible", { hasText: "Сегодня" }).first().click();
   await page.waitForTimeout(700);
+  await page.locator('button:visible[title="Записать уже прошедшее занятие"]').first().click();
+  await page.waitForTimeout(300);
   const note = "проверка даты " + where;
-  const field = page.locator('textarea:visible, input[type="text"]:visible')
-    .filter({ has: page.locator("xpath=self::*[contains(@placeholder, 'прошли') or contains(@placeholder, 'Например: конституционные')]") })
-    .first();
-  await field.fill(note);
-  const submit = page.locator("#quick-log button", { hasText: /^Записать$/ });
-  await submit.click();
-  await page.waitForTimeout(1600);
-
-  const entry = await page.evaluate((n) => {
-    const raw = localStorage.getItem("planner:planner-state-v5");
-    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
-    return (value.journal || []).find((e) => e.note === n) || null;
-  }, note);
+  await writeInDialog(note);
+  const entry = await stored(note);
   want(`${where}: запись с «Сегодня» сохранилась`, !!entry);
   want(`${where}: запись с «Сегодня» — за сегодня, а не за день из дневника`,
     entry && entry.date === todayLocal, entry ? entry.date + " вместо " + todayLocal : "записи нет");
+
+  // «+ Записать» под вчерашним днём в дневнике — запись за вчера.
+  await page.locator("button:visible", { hasText: "Дневник" }).first().click();
+  await page.waitForTimeout(700);
+  await page.locator(".ap-dbtn:visible", { hasText: "+ Записать" }).first().click();
+  await page.waitForTimeout(300);
+  const note2 = "проверка даты Дневник";
+  await writeInDialog(note2);
+  const entry2 = await stored(note2);
+  want("Дневник: «+ Записать» под днём — запись за этот день", entry2 && entry2.date === yesterday, entry2 ? entry2.date + " вместо " + yesterday : "записи нет");
   want(`${where}: ошибок нет`, errors.length === 0, errors[0] || "");
+  await browser.close();
+}
+
+// --- таймер без предмета и «+ задание» в дневнике -------------------------
+// Таймер запускается и без предмета: выбрать его можно в конце или не выбирать.
+// Кнопка «+ задание» у урока в дневнике видна сразу, без наведения.
+{
+  // Состояние пишется заново при каждой перезагрузке — расписание кладём сразу.
+  const dow = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date().getDay()];
+  const { browser, page, errors } = await open({ lyceumSchedule: [{ id: "l1", day: dow, start: "09:00", end: "09:45", subjectName: "Право" }] });
+  await page.locator("button:visible", { hasText: /Засечь/ }).first().click();
+  await page.waitForTimeout(300);
+  const dialog = page.locator('[role="dialog"]').last();
+  await dialog.locator("[data-no-subject]").first().click();
+  const start = dialog.locator("button", { hasText: "Начать" }).last();
+  want("таймер: «Без предмета» — «Начать» доступна", !(await start.isDisabled()));
+  await start.click();
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForTimeout(1200);
+  const stop = page.locator("button:visible", { hasText: /Стоп|стоп|■/ }).first();
+  want("таймер без предмета идёт и после перезагрузки", (await stop.count()) > 0);
+  if (await stop.count()) {
+    await stop.click();
+    await page.waitForTimeout(400);
+    await page.locator('[role="dialog"]').last().locator("button", { hasText: /^Записать$/ }).last().click();
+    await page.waitForTimeout(1600);
+  }
+  const entry = await page.evaluate(() => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const value = raw ? JSON.parse(JSON.parse(raw).value) : {};
+    return (value.journal || [])[0] || null;
+  });
+  want("таймер без предмета: запись в дневнике", entry && !entry.subjectId && entry.hours > 0, JSON.stringify(entry));
+
+  await page.locator("button:visible", { hasText: "Дневник" }).first().click();
+  await page.waitForTimeout(900);
+  const add = page.locator('[data-diary-lesson="Право"] .ap-dadd');
+  const opacity = (await add.count()) ? await add.evaluate((e) => getComputedStyle(e).opacity) : "нет кнопки";
+  want("дневник: «+ задание» у урока видно без наведения", opacity === "1", "opacity " + opacity);
+  want("таймер без предмета: ошибок нет", errors.length === 0, errors[0] || "");
   await browser.close();
 }
 
