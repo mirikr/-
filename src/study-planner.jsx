@@ -1844,6 +1844,49 @@ export default function StudyPlanner() {
     });
   }
 
+  // Перенос срока задания. Уроки предмета впереди — по расписанию: со дня после
+  // нынешнего срока (просроченное — начиная с сегодня).
+  const lessonsAhead = useCallback(
+    (subjectName, fromIso, count = 4) => {
+      if (!subjectName) return [];
+      const out = [];
+      const start = new Date(fromIso + "T00:00:00");
+      for (let i = 1; i <= 70 && out.length < count; i += 1) {
+        const day = new Date(start);
+        day.setDate(start.getDate() + i);
+        const dow = DOW_TO_KEY[day.getDay()];
+        const lesson = activeSchedule
+          .filter((e) => e.day === dow && e.subjectName === subjectName && e.kind !== "exam" && !e.skip)
+          .sort((a, b) => String(a.start).localeCompare(String(b.start)))[0];
+        if (lesson) out.push({ date: ymd(day), start: lesson.start || "" });
+      }
+      return out;
+    },
+    [activeSchedule]
+  );
+  const moveOptions = useCallback(
+    (hw) => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      const yesterday = ymd(d);
+      return lessonsAhead(hw.subjectName, hw.date && hw.date > yesterday ? hw.date : yesterday);
+    },
+    [lessonsAhead]
+  );
+  // Привязку к конкретному уроку недели снимаем: задание с предметом само встаёт
+  // под первый урок предмета в день нового срока (как задания из «Дневника»).
+  function moveHomeworkTo(hw, date) {
+    if (!date || date === hw.date) return;
+    const before = { date: hw.date, lessonId: hw.lessonId };
+    updateHomework(hw.id, { date, lessonId: undefined });
+    const label = new Date(date + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long" });
+    showUndo(`Срок перенесён: «${hw.text.length > 30 ? hw.text.slice(0, 28) + "…" : hw.text}» — на ${label}`, () => updateHomework(hw.id, before), null, {
+      hint: "Крестик — вернуть прежний срок.",
+      cancelTitle: "Вернуть прежний срок",
+      confirmTitle: "Готово",
+    });
+  }
+
   const lessonTasks = useMemo(() => {
     // Задание из «Дневника» знает предмет и дату, но не урок: его заводят на
     // день, а не на карточку урока. Раньше в неделе оно поэтому не показывалось
@@ -1884,11 +1927,13 @@ export default function StudyPlanner() {
       add: (entry, text, minutes, iso) =>
         addHomework(iso || nextDateForDay(entry.day), entry.subjectName || "", text, minutes, entry.id),
       toggle: (id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done }),
+      moveOptions,
+      move: (hw, date) => moveHomeworkTo(hw, date),
       folded: (lessonId, due) => !!taskFolds[lessonId + "|" + due],
       setFolded: (lessonId, due, folded) => setTaskFold(lessonId + "|" + due, folded),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homework, lyceumSchedule, taskFolds]);
+  }, [homework, lyceumSchedule, taskFolds, moveOptions]);
 
   // Уроки, на которые человек не ходит (выбрал другой из одновременных), в
   // «Сегодня» не считаются: в 14:05 у него один урок, а не три.
@@ -3314,6 +3359,11 @@ export default function StudyPlanner() {
           .ap-main section.ap-card.ap-study-detail { padding: 14px 16px 18px !important; }
           .ap-study-detail .ap-note-panel { margin-left: 0 !important; }
           .ap-study-detail .ap-study-nb { margin: 0 -16px -18px !important; }
+          /* Четыре вкладки предмета не влезали в ширину телефона: листаются
+             вбок, подписи — в одну строку. */
+          .ap-study-detail [role="tablist"] { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+          .ap-study-detail [role="tablist"]::-webkit-scrollbar { display: none; }
+          .ap-study-detail [role="tablist"] > button { flex-shrink: 0; white-space: nowrap; padding: 0 10px !important; }
           .ap-nbw { grid-template-columns: minmax(0, 1fr) !important; min-height: 0 !important; }
           .ap-nbw[data-view="outline"] .ap-nbw-editor { display: none !important; }
           .ap-nbw[data-view="editor"] .ap-nbw-outline { display: none !important; }
@@ -4367,7 +4417,7 @@ export default function StudyPlanner() {
                                   {extra && extra !== title ? " · " + extra : ""}
                                 </span>
                               </span>
-                              <span style={styles.noteMins}>{minutesLabel(Math.round((Number(e.hours) || 0) * 60))}</span>
+                              <span style={{ ...styles.noteMins, whiteSpace: "nowrap" }}>{minutesLabel(Math.round((Number(e.hours) || 0) * 60))}</span>
                             </div>
                           );
                         })}
@@ -4513,6 +4563,8 @@ export default function StudyPlanner() {
               onRemoveAttachment: (att) => removeAttachment(h.id, att),
               onUpdateReminder: (reminderDays) => updateHomework(h.id, { reminderDays }),
               onUpdatePriority: (priority) => updateHomework(h.id, { priority }),
+              moveOptions: moveOptions(h),
+              onMove: (date) => moveHomeworkTo(h, date),
             });
             const thisMonth =
               calMonth.getMonth() === todayDateOnly.getMonth() && calMonth.getFullYear() === todayDateOnly.getFullYear();
@@ -5859,8 +5911,9 @@ function AddSubjectForm({ onAdd, placeholder }) {
 // Минуты и «ещё» — строкой под текстом: справа от него в узкой колонке они
 // отнимали полширины, и текст шёл столбиком по слову.
 const TASK_FOLD_CHARS = 90;
-function LessonTaskRow({ task: h, due, onToggle }) {
+function LessonTaskRow({ task: h, due, onToggle, moveOptions, onMove }) {
   const [open, setOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const text = h.text || "";
   const long = text.length > TASK_FOLD_CHARS || text.split("\n").length > 2;
   const meta = [h.minutes ? h.minutes + " мин" : "", h.date && h.date !== due ? h.date.slice(8) + "." + h.date.slice(5, 7) : ""]
@@ -5881,9 +5934,21 @@ function LessonTaskRow({ task: h, due, onToggle }) {
         >
           {text}
         </span>
-        {(meta || long) && (
+        {(meta || long || (onMove && !h.done)) && (
           <span style={styles.lessonTaskMetaRow}>
             {meta && <span style={styles.lessonTaskMeta}>{meta}</span>}
+            {onMove && !h.done && (
+              <button
+                type="button"
+                onClick={() => setMoveOpen(!moveOpen)}
+                style={styles.lessonTaskMore}
+                aria-expanded={moveOpen}
+                aria-label={"Перенести срок: " + text.slice(0, 40)}
+                data-hw-move-open={h.id}
+              >
+                перенести
+              </button>
+            )}
             {long && (
               <button
                 type="button"
@@ -5897,6 +5962,57 @@ function LessonTaskRow({ task: h, due, onToggle }) {
             )}
           </span>
         )}
+        {moveOpen && onMove && (
+          <HwMovePanel
+            hw={h}
+            options={moveOptions ? moveOptions(h) : []}
+            onMove={(date) => {
+              setMoveOpen(false);
+              onMove(h, date);
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Перенос срока задания: на следующий урок предмета по расписанию, на любой из
+// ближайших его уроков или на выбранный день.
+function HwMovePanel({ hw, options, onMove }) {
+  const [day, setDay] = useState("");
+  const label = (o) => {
+    const t = new Date(o.date + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" });
+    return capitalizeFirst(t) + (o.start ? " · " + o.start : "");
+  };
+  return (
+    <div style={styles.hwMovePanel} data-hw-move={hw.id}>
+      <div style={styles.hwMoveTitle}>Перенести срок</div>
+      {options.length > 0 ? (
+        <>
+          <button type="button" onClick={() => onMove(options[0].date)} style={styles.hwMoveMain} data-move-next>
+            На следующий урок · {label(options[0])}
+          </button>
+          {options.length > 1 && (
+            <div style={styles.hwMoveChips}>
+              <span style={styles.mutedSmall}>или на урок:</span>
+              {options.slice(1).map((o) => (
+                <button key={o.date} type="button" onClick={() => onMove(o.date)} style={styles.hwMoveChip} data-move-date={o.date}>
+                  {label(o)}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        hw.subjectName && <div style={styles.mutedSmall}>Уроков «{hw.subjectName}» впереди в расписании нет — выберите день.</div>
+      )}
+      <div style={styles.hwMoveChips}>
+        <span style={styles.mutedSmall}>другой день:</span>
+        <input type="date" value={day} onChange={(e) => setDay(e.target.value)} style={styles.hwMoveDate} aria-label="Новый срок" />
+        <button type="button" onClick={() => day && onMove(day)} disabled={!day} style={styles.hwMoveChip} data-move-custom>
+          Перенести
+        </button>
       </div>
     </div>
   );
@@ -5904,7 +6020,7 @@ function LessonTaskRow({ task: h, due, onToggle }) {
 
 // Задания урока целиком можно свернуть в одну строку — и короткие тоже:
 // посмотрел, что задано, и убрал, чтобы день читался списком уроков.
-function LessonTasks({ list, due, folded, onFold, onToggle }) {
+function LessonTasks({ list, due, folded, onFold, onToggle, moveOptions, onMove }) {
   const left = list.filter((h) => !h.done).length;
   const label = list.length + " " + tasksWord(list.length) + (left < list.length ? " · осталось " + left : "");
   if (folded) {
@@ -5923,7 +6039,7 @@ function LessonTasks({ list, due, folded, onFold, onToggle }) {
   return (
     <div style={styles.lessonTasks}>
       {list.map((h) => (
-        <LessonTaskRow key={h.id} task={h} due={due} onToggle={() => onToggle(h.id)} />
+        <LessonTaskRow key={h.id} task={h} due={due} onToggle={() => onToggle(h.id)} moveOptions={moveOptions} onMove={onMove} />
       ))}
       <button
         type="button"
@@ -6586,9 +6702,10 @@ function HomeworkReminders({ items, onToggle, onOpen, colorOf, title = "Не з�
 
 // compact — в дневнике: важность и напоминание прячутся за «⋯», в строке остаётся
 // только метка важности.
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onUpdatePriority, compact = false }) {
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onUpdatePriority, compact = false, moveOptions, onMove }) {
   const fileInputRef = useRef(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const auto = hw.reminderDays === undefined || hw.reminderDays === null || hw.reminderDays === "";
   const reminderMode = auto ? "auto" : hw.reminderDays === "always" ? "always" : hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -6623,6 +6740,19 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, 
             e.target.value = "";
           }}
         />
+        {onMove && !hw.done && (
+          <button
+            type="button"
+            onClick={() => setMoveOpen(!moveOpen)}
+            aria-expanded={moveOpen}
+            style={styles.attachBtn}
+            title="Перенести срок"
+            aria-label={"Перенести срок: " + hw.text}
+            data-hw-move-open={hw.id}
+          >
+            ⇢
+          </button>
+        )}
         {compact && p > 1 && !moreOpen && <PriorityMark value={p} height={11} />}
         {compact && (
           <button
@@ -6644,6 +6774,16 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, 
         <div style={styles.attachmentsRow}>
           <FileGrid files={hw.attachments} onDownload={onOpenAttachment} onRemove={onRemoveAttachment} dragSource={{ kind: "homework", id: hw.id }} />
         </div>
+      )}
+      {moveOpen && onMove && (
+        <HwMovePanel
+          hw={hw}
+          options={moveOptions || []}
+          onMove={(date) => {
+            setMoveOpen(false);
+            onMove(date);
+          }}
+        />
       )}
       {(!compact || moreOpen) && (
       <div style={styles.hwReminderRow}>
@@ -6817,7 +6957,9 @@ const styles = {
   studyDetail: { background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "24px 28px 26px", display: "flex", flexDirection: "column", gap: 16, minWidth: 0, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "thin" },
   studyBack: { alignSelf: "flex-start", alignItems: "center", gap: 4, minHeight: 40, padding: "0 6px 0 0", border: "none", background: "none", color: "var(--ink3)", fontSize: 15 },
   studyHead: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
-  studyTitle: { margin: 0, flex: 1, minWidth: 0, fontFamily: "var(--serif)", fontWeight: 400, fontSize: 30, lineHeight: 1.15 },
+  // Основа 160 px: на узком экране счётчик и «⋯» уходят на вторую строку, а не
+  // налезают на длинное название.
+  studyTitle: { margin: 0, flex: "1 1 160px", minWidth: 0, overflowWrap: "anywhere", fontFamily: "var(--serif)", fontWeight: 400, fontSize: 30, lineHeight: 1.15 },
   studyMeta: { fontSize: 14, color: "var(--ink3)" },
   menuColor: { display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: "var(--ink)", cursor: "pointer", minHeight: 36 },
   studyTrack: { height: 8, borderRadius: 999, background: "var(--line2)", overflow: "hidden", marginTop: -4 },
@@ -7503,6 +7645,41 @@ const styles = {
   aheadDaysWord: { display: "block", fontFamily: "var(--sans)", fontSize: 11, color: "var(--ink3)", marginTop: 2 },
   aheadName: { flex: 1, minWidth: 0, fontSize: 14 },
   aheadPlan: { color: "var(--ink3)", fontSize: 12.5 },
+  hwMovePanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    margin: "6px 0 4px",
+    padding: "10px 12px",
+    border: "1px solid var(--line)",
+    borderRadius: 10,
+    background: "var(--panel2)",
+  },
+  hwMoveTitle: { fontSize: 12, fontWeight: 600, color: "var(--ink3)", textTransform: "uppercase", letterSpacing: ".05em" },
+  hwMoveMain: {
+    alignSelf: "flex-start",
+    minHeight: 36,
+    padding: "7px 14px",
+    textAlign: "left",
+    lineHeight: 1.3,
+    border: "none",
+    borderRadius: 9,
+    background: "var(--btnBg)",
+    color: "var(--btnInk)",
+    fontSize: 13.5,
+    fontWeight: 600,
+  },
+  hwMoveChips: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
+  hwMoveChip: {
+    minHeight: 32,
+    padding: "0 11px",
+    border: "1px solid var(--line)",
+    borderRadius: 999,
+    background: "var(--panel)",
+    color: "var(--ink)",
+    fontSize: 13,
+  },
+  hwMoveDate: { height: 32, padding: "0 8px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--panel)", color: "var(--ink)", fontSize: 13 },
   reviewMore: {
     alignSelf: "flex-start",
     marginTop: 4,

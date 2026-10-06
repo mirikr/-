@@ -278,6 +278,60 @@ const open = async (state) => {
   await browser.close();
 }
 
+// --- перенос задания: на следующий урок по расписанию, отмена, «Лицей» -----
+{
+  const fmt = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const nextDow = (from, dow) => { const d = new Date(from); d.setDate(d.getDate() + 1); while (d.getDay() !== dow) d.setDate(d.getDate() + 1); return d; };
+  const mon = nextDow(new Date(), 1);
+  const MON = fmt(mon);
+  const THU = fmt(nextDow(mon, 4));
+  const NEXT_MON = fmt(nextDow(mon, 1));
+  const { browser, page, errors } = await open({
+    lyceumSchedule: [
+      { id: "l1", day: "mon", start: "09:00", end: "09:45", subjectName: "Право" },
+      { id: "l2", day: "thu", start: "11:00", end: "11:45", subjectName: "Право" },
+    ],
+    homework: [
+      { id: "h1", date: MON, subjectName: "Право", text: "Параграф 5", minutes: 20, lessonId: "l1" },
+      { id: "h2", date: MON, subjectName: "Право", text: "Конспект", minutes: 20 },
+    ],
+  });
+  const dates = () => page.evaluate(() => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    const hw = (raw ? JSON.parse(JSON.parse(raw).value) : {}).homework || [];
+    return Object.fromEntries(hw.map((h) => [h.id, h.date + (h.lessonId ? "@" + h.lessonId : "")]));
+  });
+  await page.locator("button:visible", { hasText: "Дневник" }).first().click();
+  await page.waitForTimeout(700);
+  await page.locator(`[data-day="${MON}"]:visible`).first().click();
+  await page.waitForTimeout(300);
+  await page.locator('[data-hw-move-open="h1"]').first().click();
+  const panel = page.locator('[data-hw-move="h1"]');
+  want("перенос: предложен следующий урок — четверг", /На следующий урок/.test(await panel.innerText()) && (await panel.locator("[data-move-date]").count()) >= 1);
+  await panel.locator("[data-move-next]").click();
+  await page.waitForTimeout(1600);
+  let d = await dates();
+  want("перенос: срок — следующий урок, привязка к старому уроку снята", d.h1 === THU, d.h1 + " вместо " + THU);
+  await page.getByRole("button", { name: "Вернуть прежний срок" }).first().click();
+  await page.waitForTimeout(1600);
+  d = await dates();
+  want("перенос: крестик возвращает прежний срок и урок", d.h1 === MON + "@l1", d.h1);
+
+  await page.locator("button:visible", { hasText: "Лицей" }).first().click();
+  await page.waitForTimeout(700);
+  await page.getByRole("button", { name: "Следующая неделя" }).first().click();
+  await page.waitForTimeout(400);
+  await page.locator('[role="tablist"][aria-label="День недели"] [role="tab"]').first().click();
+  await page.waitForTimeout(400);
+  await page.locator('[data-hw-move-open="h2"]:visible').first().click();
+  await page.locator('[data-hw-move="h2"] [data-move-date]').first().click();
+  await page.waitForTimeout(1600);
+  d = await dates();
+  want("перенос из «Лицея»: на выбранный урок", d.h2 === NEXT_MON, d.h2 + " вместо " + NEXT_MON);
+  want("перенос: ошибок нет", errors.length === 0, errors[0] || "");
+  await browser.close();
+}
+
 server.close();
 if (problems.length) { console.error("\nНе так:\n- " + problems.join("\n- ")); process.exit(1); }
 console.log("\nтренажёр считается занятием");

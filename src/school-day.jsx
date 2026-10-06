@@ -233,6 +233,8 @@ function LessonCard({ unit, state, day, kit, colorOf, tasks, handlers }) {
             folded={tasks.folded(first.id, due)}
             onFold={(v) => tasks.setFolded(first.id, due, v)}
             onToggle={(id) => tasks.toggle(id)}
+            moveOptions={tasks.moveOptions}
+            onMove={tasks.move}
           />
         </div>
       )}
