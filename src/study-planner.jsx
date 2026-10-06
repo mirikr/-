@@ -6607,6 +6607,17 @@ const NEW_CSS = `
           min-height: 36px;
           transition: border-color .15s ease, box-shadow .15s ease;
         }
+        /* Телефон: iPhone сам увеличивает страницу, когда открывают поле с
+           текстом мельче 16 px, и после этого она ездит от любого касания.
+           Поля на сенсорных экранах — 16 px; двойное касание страницу тоже не
+           увеличивает (масштаб двумя пальцами остаётся). */
+        html { touch-action: manipulation; }
+        @media (pointer: coarse) {
+          input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+          select, textarea, [contenteditable="true"] {
+            font-size: 16px !important;
+          }
+        }
         .ap-main input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus,
         .ap-main select:focus, .ap-main textarea:focus, .ap-main [contenteditable="true"]:focus {
           outline: none;
