@@ -2976,7 +2976,18 @@ export default function StudyPlanner() {
     setFinishing({ ctx, minutes });
   }
 
+  // «Отменить» у записи с таймера не теряет занятие: запись убирается, и окно
+  // «Занятие окончено» открывается снова с тем же, что было выбрано.
+  const backToFinish = { hint: "Крестик — отменить запись и вернуться к окну занятия.", cancelTitle: "Отменить запись и вернуться к окну", confirmTitle: "Готово" };
+
   function saveFinished(done) {
+    const session = finishing;
+    const draft = {
+      minutes: done.minutes,
+      markDone: done.markDone,
+      ...(done.kind === "hw" ? null : { subjectId: done.subjectId, topicId: done.topic ? done.topic.id : "", note: done.note || "" }),
+    };
+    const reopen = () => session && setFinishing({ ...session, draft });
     setFinishing(null);
     const hours = Math.round((done.minutes / 60) * 100) / 100;
     if (done.kind === "hw") {
@@ -2984,8 +2995,14 @@ export default function StudyPlanner() {
       const hw = homework.find((h) => h.id === done.hwId);
       if (!hw) return;
       updateHomework(done.hwId, { done: done.markDone ? true : hw.done, spentMinutes: (Number(hw.spentMinutes) || 0) + done.minutes });
-      showUndo(`${done.markDone ? "Задание сделано" : "Время записано"} · ${minutesLabel(done.minutes)}`, () =>
-        updateHomework(done.hwId, { done: hw.done, spentMinutes: hw.spentMinutes })
+      showUndo(
+        `${done.markDone ? "Задание сделано" : "Время записано"} · ${minutesLabel(done.minutes)}`,
+        () => {
+          updateHomework(done.hwId, { done: hw.done, spentMinutes: hw.spentMinutes });
+          reopen();
+        },
+        null,
+        backToFinish
       );
       return;
     }
@@ -3003,9 +3020,28 @@ export default function StudyPlanner() {
     setJournal((prev) => [entry, ...prev]);
     if (topic && done.markDone) updateTopic(done.subjectId, topic.id, topic.custom, (t) => ({ ...t, done: true }));
     const subject = ALL_SUBJECTS.find((x) => x.id === done.subjectId);
-    showUndo(`Записано: ${subject ? subject.name : "занятие"} · ${minutesLabel(done.minutes)}${topic && done.markDone ? " · урок пройден" : ""}`, () => {
-      setJournal((prev) => prev.filter((e) => e.id !== id));
-      if (topic && done.markDone) updateTopic(done.subjectId, topic.id, topic.custom, (t) => ({ ...t, done: false }));
+    showUndo(
+      `Записано: ${subject ? subject.name : "занятие"} · ${minutesLabel(done.minutes)}${topic && done.markDone ? " · урок пройден" : ""}`,
+      () => {
+        setJournal((prev) => prev.filter((e) => e.id !== id));
+        if (topic && done.markDone) updateTopic(done.subjectId, topic.id, topic.custom, (t) => ({ ...t, done: false }));
+        reopen();
+      },
+      null,
+      backToFinish
+    );
+  }
+
+  // «Не записывать» и закрытие окна: занятие в дневник не идёт, но крестиком в
+  // уведомлении к окну можно вернуться.
+  function discardFinished() {
+    const session = finishing;
+    setFinishing(null);
+    if (!session) return;
+    showUndo(`Занятие не записано · ${minutesLabel(session.minutes)}`, () => setFinishing(session), null, {
+      hint: "Крестик — вернуться к окну занятия.",
+      cancelTitle: "Вернуться к окну занятия",
+      confirmTitle: "Да, не записывать",
     });
   }
 
@@ -5047,6 +5083,7 @@ export default function StudyPlanner() {
         <FinishDialog
           context={finishing.ctx}
           minutes={finishing.minutes}
+          draft={finishing.draft}
           subjects={ALL_SUBJECTS}
           topicsOf={topicsOf}
           homeworkItem={finishing.ctx && finishing.ctx.kind === "hw" ? homework.find((h) => h.id === finishing.ctx.hwId) : null}
@@ -5057,7 +5094,8 @@ export default function StudyPlanner() {
             timer.restore(finishing.ctx);
             setFinishing(null);
           }}
-          onClose={() => setFinishing(null)}
+          onDiscard={discardFinished}
+          onClose={discardFinished}
         />
       )}
       {logOpen && (
