@@ -4454,7 +4454,8 @@ export default function StudyPlanner() {
                     <div className="ap-dpills">
                       {(dayHours > 0 || (dayGoal > 0 && selectedDate <= today)) && (
                         <span className={"ap-dpill" + (dayGoal > 0 && dayHours >= dayGoal ? " is-ok" : "")}>
-                          {hoursLabel(Math.round(dayHours * 10) / 10)} из {hoursLabel(Math.round(dayGoal * 10) / 10)}
+                          {dayHours > 0 ? hoursLabel(Math.round(dayHours * 10) / 10) : "0 ч"}
+                          {dayGoal > 0 ? " из " + hoursLabel(Math.round(dayGoal * 10) / 10) : ""}
                           {dayGoal > 0 && dayHours >= dayGoal ? " ✓" : ""}
                         </span>
                       )}
@@ -4586,7 +4587,7 @@ export default function StudyPlanner() {
                       return (
                         <div key={e.id} className="ap-dentry" data-focus-id={"journal:" + e.id}>
                           <span className="ap-dot" style={{ background: s?.color }} />
-                          <b>{s?.name}</b>
+                          <b>{s?.name || "Без предмета"}</b>
                           <span className="ap-dentry-note" title={e.note}>
                             {e.note}
                           </span>
@@ -4628,7 +4629,7 @@ export default function StudyPlanner() {
                         <div key={e.id} style={styles.journalRow}>
                           <span style={{ ...styles.dot, background: s?.color }} />
                           <span style={styles.jDate}>{new Date(e.date).toLocaleDateString("ru-RU")}</span>
-                          <span style={styles.jSubj}>{s?.name}</span>
+                          <span style={styles.jSubj}>{s?.name || "Без предмета"}</span>
                           <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
                           <span style={styles.jNote}>{e.note}</span>
                           {e.fromTrainer ? (

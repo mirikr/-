@@ -307,7 +307,9 @@ const lyceumOrder = (p) => p.locator("[data-subject]").evaluateAll((els) => els.
   await p.evaluate(() => localStorage.setItem("planner-screen", "today"));
   await p.reload();
   await p.waitForTimeout(1800);
-  want("телефон: на «Сегодня» отсчёт до события есть", (await countdownShown()) >= 1);
+  // С 1.10 отсчёт на «Сегодня» — в карточке «Впереди», а не в шапке.
+  const ahead = await p.locator("button.ap-row", { hasText: "Региональный этап" }).evaluateAll((els) => els.filter((e) => e.offsetParent).length);
+  want("телефон: на «Сегодня» отсчёт до события есть", ahead >= 1);
   want("телефон: ошибок нет", errs.length === 0, errs[0] || "");
   await c.close();
 }

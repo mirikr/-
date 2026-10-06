@@ -44,7 +44,8 @@ function clock(seconds) {
 // Таймер помнит, чем заняты: { kind: "study", subjectId, topicId?, topicName?,
 // topicCustom? } — своя подготовка (предмет и, если выбран, урок курса), или
 // { kind: "hw", hwId, label } — домашнее задание, которое по окончании
-// отмечается сделанным.
+// отмечается сделанным. Предмет у подготовки необязателен: можно просто
+// засечь время и выбрать предмет в конце.
 const TIMER_KEY = "planner-study-timer";
 
 function readTimer() {
@@ -52,7 +53,7 @@ function readTimer() {
     const t = JSON.parse(localStorage.getItem(TIMER_KEY) || "null");
     if (!t || !t.startedAt) return null;
     if (t.kind === "hw") return t.hwId ? t : null;
-    return t.subjectId ? { kind: "study", ...t } : null;
+    return { kind: "study", ...t };
   } catch (e) {
     return null;
   }
@@ -164,8 +165,8 @@ export function TimerFab({ timer, show, onStart, onStop }) {
 export function timerLabel(ctx, subjects) {
   if (!ctx) return "";
   if (ctx.kind === "hw") return "ДЗ · " + (ctx.label || "задание");
-  const s = subjects.find((x) => x.id === ctx.subjectId);
-  return (s ? s.name : "") + (ctx.topicName ? " · " + ctx.topicName : "");
+  const s = ctx.subjectId ? subjects.find((x) => x.id === ctx.subjectId) : null;
+  return (s ? s.name : "Занятие") + (ctx.topicName ? " · " + ctx.topicName : "");
 }
 
 const dueWord = (d) => (d < 0 ? "просрочено" : d === 0 ? "сегодня" : d === 1 ? "завтра" : "через " + d + " дн.");
@@ -199,12 +200,12 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
       if (!hw) return;
       onStart({ kind: "hw", hwId: hw.id, label: hw.text.length > 40 ? hw.text.slice(0, 38) + "…" : hw.text });
     } else {
-      if (!subjectId) return;
+      if (!subjectId) return onStart({ kind: "study" });
       onStart(topic ? { kind: "study", subjectId, topicId: topic.id, topicName: topic.name, topicCustom: !!topic.custom } : { kind: "study", subjectId });
     }
   }
 
-  const ready = kind === "hw" ? !!hw : !!subjectId;
+  const ready = kind === "hw" ? !!hw : true;
   return (
     <SchoolSheet title="Засечь занятие" onClose={onClose}>
       <div style={S.kindTabs} role="tablist" aria-label="Чем заняты">
@@ -223,6 +224,22 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
         <div className="ap-start-grid" data-step={step}>
           <nav className="ap-start-subjects" aria-label="Предметы" style={S.pane}>
             <div style={S.groupLabel}>Предметы</div>
+            {/* Без предмета — просто засечь время; предмет выбирается, когда
+                таймер остановлен, или запись так и остаётся без него. */}
+            <button
+              type="button"
+              className="ap-notes-subject"
+              aria-current={!subjectId ? "true" : undefined}
+              data-no-subject
+              onClick={() => {
+                setSubjectId("");
+                setTopicId("");
+              }}
+              style={{ "--c": "var(--mute)", ...S.subjRow, ...(!subjectId ? S.subjRowOn : null) }}
+            >
+              <span style={{ ...S.dot, background: "var(--mute)" }} />
+              <span style={S.subjName}>Без предмета</span>
+            </button>
             {subjects.length === 0 && <div style={S.small}>Своих предметов пока нет — добавьте их в «Подготовке».</div>}
             {subjects.map((s) => {
               const st = statsOf(s.id);
@@ -253,8 +270,11 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
             </button>
             <div style={S.topicsHead}>
               <span style={{ ...S.dot, width: 11, height: 11, background: subject ? subject.color : "var(--line)" }} />
-              <span style={S.topicsTitle}>{subject ? subject.name : "Предмет"}</span>
+              <span style={S.topicsTitle}>{subject ? subject.name : "Без предмета"}</span>
             </div>
+            {!subject ? (
+              <div style={S.small}>Таймер просто считает время. Когда остановите, можно выбрать предмет или записать занятие без него.</div>
+            ) : (
             <div style={S.topicList}>
               <button type="button" onClick={() => setTopicId("")} aria-pressed={!topicId} className="ap-notes-subject" style={!topicId ? { ...S.topicRow, ...S.topicRowOn } : S.topicRow}>
                 <span style={S.radio(!topicId)} aria-hidden="true" />
@@ -281,6 +301,7 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
               })}
               {topics.length === 0 && <div style={S.small}>Уроков в курсе пока нет — время запишется на предмет.</div>}
             </div>
+            )}
           </section>
         </div>
       ) : (
@@ -316,9 +337,13 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
             ? hw
               ? "ДЗ · " + hw.text
               : "Выберите задание"
-            : (subject ? subject.name : "Выберите предмет") + (topic ? " · " + topic.name : "")}
+            : (subject ? subject.name : "Без предмета") + (topic ? " · " + topic.name : "")}
           <span style={{ display: "block", fontWeight: 400, color: "var(--ink3)", fontSize: 12.5 }}>
-            {kind === "hw" ? "когда остановите таймер, задание отметится сделанным" : "время запишется в дневник, когда остановите таймер"}
+            {kind === "hw"
+              ? "когда остановите таймер, задание отметится сделанным"
+              : subject
+                ? "время запишется в дневник, когда остановите таймер"
+                : "предмет можно выбрать, когда остановите таймер"}
           </span>
         </span>
         <button type="button" onClick={onClose} style={S.btnGhost}>
@@ -339,7 +364,7 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
 export function FinishDialog({ context, minutes: initialMinutes, subjects, topicsOf, homeworkItem, todayHours, goalHours, onSave, onResume, onClose }) {
   const isHw = context && context.kind === "hw";
   const [minutes, setMinutes] = useState(initialMinutes);
-  const [subjectId, setSubjectId] = useState((context && context.subjectId) || (subjects[0] && subjects[0].id) || "");
+  const [subjectId, setSubjectId] = useState((context && context.subjectId) || "");
   const [topicId, setTopicId] = useState((context && context.topicId) || "");
   const [markDone, setMarkDone] = useState(isHw ? true : false);
   const [note, setNote] = useState("");
@@ -351,7 +376,7 @@ export function FinishDialog({ context, minutes: initialMinutes, subjects, topic
   function save() {
     if (minutes <= 0) return;
     if (isHw) onSave({ kind: "hw", hwId: context.hwId, minutes, markDone });
-    else if (subjectId) onSave({ kind: "study", subjectId, topic: topic || null, markDone: !!topic && markDone && !topic.done, minutes, note: note.trim() });
+    else onSave({ kind: "study", subjectId, topic: topic || null, markDone: !!topic && markDone && !topic.done, minutes, note: note.trim() });
   }
 
   return (
@@ -359,7 +384,7 @@ export function FinishDialog({ context, minutes: initialMinutes, subjects, topic
       <div style={S.doneHead}>
         <span style={S.stoppedMark} aria-hidden="true">■</span>
         <div style={{ flex: 1 }}>
-          <div style={S.doneWhat}>{isHw ? "Домашнее задание" : subject ? subject.name + (topic ? " · " + topic.name : "") : "Подготовка"}</div>
+          <div style={S.doneWhat}>{isHw ? "Домашнее задание" : subject ? subject.name + (topic ? " · " + topic.name : "") : "Занятие без предмета"}</div>
           <div style={S.small}>таймер насчитал {minutesLabel(initialMinutes)} — можно поправить</div>
         </div>
         <div style={S.minuteEdit}>
@@ -388,6 +413,9 @@ export function FinishDialog({ context, minutes: initialMinutes, subjects, topic
           <div style={S.field}>
             <span style={S.label}>Предмет</span>
             <div style={S.chips}>
+              <button type="button" onClick={() => { setSubjectId(""); setTopicId(""); }} aria-pressed={!subjectId} data-no-subject style={!subjectId ? { ...S.chip, ...S.chipOn } : S.chip}>
+                Без предмета
+              </button>
               {subjects.map((s) => (
                 <button
                   key={s.id}
@@ -446,7 +474,7 @@ export function FinishDialog({ context, minutes: initialMinutes, subjects, topic
         <button type="button" onClick={onResume} style={S.btnGhost}>
           ▶ Продолжить таймер
         </button>
-        <button type="button" onClick={save} disabled={minutes <= 0 || (!isHw && !subjectId)} style={S.btnDark}>
+        <button type="button" onClick={save} disabled={minutes <= 0} style={S.btnDark}>
           Записать
         </button>
       </div>
@@ -467,7 +495,7 @@ export function LogDialog({ subjects, topicsOf, initialSubjectId, initialDate, t
     return ymd(d);
   })();
   const startDate = initialDate && initialDate < today ? initialDate : today;
-  const [subjectId, setSubjectId] = useState(initialSubjectId || (subjects[0] && subjects[0].id) || "");
+  const [subjectId, setSubjectId] = useState(initialSubjectId || "");
   const [minutes, setMinutes] = useState(60);
   const [custom, setCustom] = useState("");
   const [when, setWhen] = useState(startDate === today ? "today" : startDate === yesterday ? "yesterday" : "other");
@@ -483,7 +511,7 @@ export function LogDialog({ subjects, topicsOf, initialSubjectId, initialDate, t
   const after = round1(todayHours + total / 60);
 
   function save() {
-    if (!subjectId || total <= 0) return;
+    if (total <= 0) return;
     const text = [topic, note.trim()].filter(Boolean).join(" — ");
     // Две цифры после запятой: четверть часа — это 0,25, а не округлённые 0,3.
     onSave({ date, subjectId, hours: Math.round((total / 60) * 100) / 100, note: text });
@@ -494,6 +522,9 @@ export function LogDialog({ subjects, topicsOf, initialSubjectId, initialDate, t
       <div style={S.field}>
         <span style={S.label}>Предмет</span>
         <div style={S.chips}>
+          <button type="button" onClick={() => { setSubjectId(""); setTopic(""); }} aria-pressed={!subjectId} data-no-subject style={!subjectId ? { ...S.chip, ...S.chipOn } : S.chip}>
+            Без предмета
+          </button>
           {subjects.map((s) => (
             <button
               key={s.id}
@@ -593,7 +624,7 @@ export function LogDialog({ subjects, topicsOf, initialSubjectId, initialDate, t
 
       <div className="ap-sheet-foot" style={S.footer}>
         <span style={S.preview}>
-          {subject ? subject.name + " · " + minutesLabel(total) : "Выберите предмет"}
+          {(subject ? subject.name : "Без предмета") + " · " + minutesLabel(total)}
           {date === today && goalHours > 0 && total > 0 && (
             <span style={{ display: "block", color: after >= goalHours ? "var(--green)" : "var(--ink3)" }}>
               Сегодня станет {hours(after)} из {hours(goalHours)}
@@ -604,7 +635,7 @@ export function LogDialog({ subjects, topicsOf, initialSubjectId, initialDate, t
         <button type="button" onClick={onClose} style={S.btnGhost}>
           Отмена
         </button>
-        <button type="button" onClick={save} disabled={!subjectId || total <= 0} style={S.btnDark}>
+        <button type="button" onClick={save} disabled={total <= 0} style={S.btnDark}>
           Записать
         </button>
       </div>

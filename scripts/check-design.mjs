@@ -75,7 +75,7 @@ const announce = (page) => page.getByText("У ежедневника новый 
 {
   const { ctx, page, errors } = await fresh({ width: 1280, height: 900 }, { "planner-design-intro": "1.0.0", "planner-design": "classic" });
   want("сохранённый «старый дизайн» не включается", (await design(page)) !== "classic", String(await design(page)));
-  want("открыт новый вид: плитки дня на месте", /Записано сегодня/.test(await page.locator("main").innerText()));
+  want("открыт новый вид: итоги дня на месте", (await page.locator(".ap-today-pulse").count()) > 0);
   const stored = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value));
   want("записи не тронуты", stored.journal?.length === 1 && stored.events?.length === 1);
   await page.evaluate(() => localStorage.setItem("planner-screen", "prefs"));
@@ -263,9 +263,9 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   const budget = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).budget);
   want("норма: прежняя запомнилась до сегодняшнего дня", Array.isArray(budget.past) && budget.past.length === 1 && budget.past[0].until === today && budget.past[0].daily[dk] === 120, JSON.stringify(budget.past));
   want("норма: новая — в текущих настройках", budget.daily[dk] === 60);
-  await page.evaluate(() => localStorage.setItem("planner-screen", "today"));
-  await page.reload();
-  await page.waitForTimeout(2200);
+  // График часов по дням с 1.10 — в «Распределении», вкладка «Факт и прогноз».
+  await page.getByRole("tab", { name: "Факт и прогноз" }).click();
+  await page.waitForTimeout(1200);
   const goalOf = (key) => page.locator(`[data-bucket="${key}"]`).first().getAttribute("data-goal");
   const old = await goalOf(weekAgo);
   const now2 = await goalOf(today);
@@ -961,7 +961,8 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
       await page.evaluate((k) => localStorage.setItem("planner-screen", k), screen);
       await page.reload();
       await page.waitForTimeout(1000);
-      const n = await page.locator("main .ap-grid2").first().evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
+      // «Дневник» с 1.11 — своя сетка: месяц и выбранный день.
+      const n = await page.locator(screen === "journal" ? "main .ap-diary" : "main .ap-grid2").first().evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
       want(`${tag}: «${screen === "journal" ? "Дневник" : "События"}» — колонок: ${cols}`, n === cols, "колонок " + n);
     }
     const note = await page.locator(".ap-head-note").first().evaluate((el) => getComputedStyle(el).display !== "none").catch(() => false);

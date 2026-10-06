@@ -333,9 +333,10 @@ export const DIARY_CSS = `
 .ap-dlesson-name small { font-weight: 400; color: var(--ink3); }
 .ap-dlesson-side { display: flex; align-items: center; gap: 6px; }
 .ap-dlesson-side .ap-dgrade { height: 22px; min-width: 24px; font-size: 12.5px; cursor: pointer; }
-.ap-dadd { border: none; background: none; color: var(--ink3); font-size: 12.5px; padding: 2px 4px; white-space: nowrap; opacity: 0; transition: opacity .15s ease; }
-.ap-dlesson:hover .ap-dadd, .ap-dadd:focus-visible, .ap-dadd[aria-expanded="true"], .ap-dfree .ap-dadd { opacity: 1; }
-@media (hover: none) { .ap-dadd { opacity: 1; } }
+/* «+ задание» видно всегда: спрятанное до наведения его просто не находили. */
+.ap-dadd { border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink2); font-size: 12.5px; padding: 3px 9px; white-space: nowrap; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.ap-dadd:hover { background: var(--panel2); color: var(--ink); border-color: var(--ink3); }
+.ap-dadd[aria-expanded="true"] { color: var(--ink3); }
 .ap-dlesson-body { padding-left: 57px; display: flex; flex-direction: column; gap: 4px; margin-top: 5px; }
 .ap-dlesson-body:empty { display: none; }
 .ap-dentry { display: flex; align-items: center; gap: 8px; font-size: 13.5px; padding: 4px 0; }

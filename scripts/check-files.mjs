@@ -101,7 +101,8 @@ st = await stored();
 want("файл из тетради прикреплён к заданию", st.homework.find((h) => h.id === "hw-2").attachments.some((f) => f.key === MAP.key));
 want("и виден у задания плиткой", /Карта Европы/.test(await hw2.innerText()));
 
-// 3. Новое задание — сразу с файлом из тетради.
+// 3. Новое задание — сразу с файлом из тетради. Форма открывается «+ дело».
+await page.locator(".ap-dfree .ap-dadd").click();
 const freeForm = page.getByPlaceholder("Например: подать заявку на олимпиаду");
 await freeForm.fill("Нанести столицы");
 const formRow = freeForm.locator("xpath=..");
