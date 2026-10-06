@@ -22,6 +22,8 @@ import { CardHead } from "./card-head.jsx";
 import MoreMenu from "./more-menu.jsx";
 import NotebookWorkspace from "./notebook-workspace.jsx";
 import BudgetScreen, { BUDGET_CSS, BUDGET_MOBILE_CSS } from "./budget-screen.jsx";
+import { DiaryLayers, DiaryMonth, DueStrip, useDiaryLayers, DIARY_CSS, DIARY_MOBILE_CSS } from "./diary-parts.jsx";
+import { BudgetFact, FinishDialog, LogActions, LogDialog, StartDialog, TimerFab, WeekCard, minutesLabel, timerLabel, useStudyTimer, TODAY_CSS, TODAY_MOBILE_CSS } from "./today-parts.jsx";
 import InstallHint from "./install-hint.jsx";
 import CloudPanel from "./cloud-panel.jsx";
 import { currentUser, signOut, authReady, cloudConfigured } from "./supabase.js";
@@ -580,25 +582,6 @@ function ymd(date) {
 // Клетка календаря: высота заливки — доля выполненной цели, и цвет идёт следом,
 // плавно от красноватого к зелёному. Ступеньки «пусто — средне — цель» врали на
 // границах: 39 % и 41 % выглядели как разные миры.
-const CELL_SCALE = {
-  light: { low: [226, 185, 180], mid: [230, 215, 154], full: [182, 207, 188] },
-  night: { low: [110, 58, 52], mid: [122, 101, 40], full: [58, 92, 68] },
-};
-
-function mixRgb(a, b, t) {
-  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
-  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-}
-
-function cellColor(ratio, theme) {
-  const scale = CELL_SCALE[theme === "night" ? "night" : "light"];
-  const clamped = Math.max(0, Math.min(1, ratio));
-  return clamped <= 0.5
-    ? mixRgb(scale.low, scale.mid, clamped / 0.5)
-    : mixRgb(scale.mid, scale.full, (clamped - 0.5) / 0.5);
-}
-
-
 // Deterministic color for a lyceum subject name, so the same subject looks the same across days.
 function subjectColor(name) {
   let hash = 0;
@@ -661,7 +644,6 @@ export default function StudyPlanner() {
   });
   const [openNotes, setOpenNotes] = useState({});
   const [openLinks, setOpenLinks] = useState({});
-  const [jForm, setJForm] = useState({ date: todayStr(), subjectId: "law", hours: "1", note: "" });
   const [saveErr, setSaveErr] = useState(false);
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date();
@@ -699,6 +681,21 @@ export default function StudyPlanner() {
   const [presetOpenRequest, setPresetOpenRequest] = useState(0);
   // Какое окно «Лицея» открыто: настройка расписания или предметы.
   const [schoolSheet, setSchoolSheet] = useState(null);
+  // «+ Записать»: окно записи занятия; true — на сегодня, строка с датой — на этот день.
+  const [logOpen, setLogOpen] = useState(false);
+  // Слои месяца в «Дневнике»: оценки, задания, события, часы (diary-parts.jsx).
+  const [diaryLayers, toggleDiaryLayer] = useDiaryLayers();
+  // Где в выбранном дне открыта форма задания: название предмета (у его урока),
+  // "" — «+ дело» без урока, null — нигде.
+  const [diaryAdd, setDiaryAdd] = useState(null);
+  // Телефон: месяц дневника свёрнут до этой недели и следующей.
+  const [diaryCompact, setDiaryCompact] = useState(true);
+  // Окно «Засечь занятие» и окно «Занятие окончено» ({ ctx, minutes }).
+  const [startOpen, setStartOpen] = useState(false);
+  const [finishing, setFinishing] = useState(null);
+  const timer = useStudyTimer();
+  // «Распределение»: вкладка «План» или «Факт и прогноз».
+  const [budgetTab, setBudgetTab] = useState("plan");
   function showScheduleNews(news) {
     setScheduleNews(news);
     try {
@@ -829,12 +826,6 @@ export default function StudyPlanner() {
       })),
     [ALL_SUBJECTS, data]
   );
-
-  useEffect(() => {
-    if (!ALL_SUBJECTS.length) return;
-    if (ALL_SUBJECTS.some((s) => s.id === jForm.subjectId)) return;
-    setJForm((prev) => ({ ...prev, subjectId: ALL_SUBJECTS[0].id }));
-  }, [ALL_SUBJECTS, jForm.subjectId]);
 
   // Предметы лицея живут не списком, а названиями в расписании, поэтому цвет ищем по имени.
   const lyceumColorOf = useCallback(
@@ -1476,18 +1467,6 @@ export default function StudyPlanner() {
     );
   }
 
-  function addJournalEntry(dateOverride) {
-    if (!jForm.note.trim() && Number(jForm.hours) <= 0) return;
-    // Дата приходит аргументом: на экране «Сегодня» запись всегда за сегодня,
-    // даже если в дневнике открыт другой день.
-    // Кнопка в дневнике зовёт функцию напрямую, и первым аргументом прилетает
-    // событие клика — дату принимаем только строкой.
-    const date = typeof dateOverride === "string" ? dateOverride : jForm.date;
-    const entry = { id: Date.now(), ...jForm, date, hours: Number(jForm.hours) || 0 };
-    setJournal((prev) => [entry, ...prev]);
-    setJForm({ ...jForm, note: "", hours: "1" });
-  }
-
   function removeJournalEntry(id) {
     const index = journal.findIndex((e) => e.id === id);
     if (index === -1) return;
@@ -2057,11 +2036,6 @@ export default function StudyPlanner() {
       return next;
     });
     if (openSubject === id) setOpenSubject(null);
-    if (jForm.subjectId === id) {
-      const rest = ALL_SUBJECTS.filter((x) => x.id !== id);
-      setJForm((prev) => ({ ...prev, subjectId: rest[0] ? rest[0].id : "" }));
-    }
-
     showUndo(
       `Вы удалили предмет «${subject.name}»`,
       () => {
@@ -2509,77 +2483,70 @@ export default function StudyPlanner() {
     [journalWithTrainer]
   );
 
-  const hwDates = useMemo(() => new Set(homework.map((h) => h.date)), [homework]);
-  // Самое важное несделанное задание дня — точкой в календаре дневника.
-  const hwTopPriority = useMemo(() => {
-    const map = {};
-    homework.forEach((h) => {
-      if (h.done) return;
-      map[h.date] = Math.max(map[h.date] || 1, hwPriority(h));
-    });
-    return map;
-  }, [homework]);
-
-  // Дни с экзаменом или олимпиадой видно в календаре сразу: это те даты, ради
-  // которых весь план и считается.
-  const examDates = useMemo(
-    () => new Set(lyceumSchedule.filter((e) => e.kind === "exam" && e.date).map((e) => e.date)),
-    [lyceumSchedule]
-  );
-
-  // Точки над числом — пройденные в этот день уроки, каждая в цвете своего предмета.
-  // Берём только записи об отметке урока: заметки со временем сюда не считаются.
-  const lessonDotsByDate = useMemo(() => {
-    const map = {};
-    journal.forEach((e) => {
-      if (!e.auto || !e.lessonId || e.noteId) return;
-      const subject = ALL_SUBJECTS.find((x) => x.id === e.subjectId);
-      if (!subject) return;
-      if (!map[e.date]) map[e.date] = [];
-      if (!map[e.date].includes(subject.color)) map[e.date].push(subject.color);
-    });
-    return map;
-  }, [journal, ALL_SUBJECTS]);
-
-  const selectedDaySubjects = useMemo(() => {
-    const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
-    const names = [];
-    activeSchedule
-      .filter((e) => e.day === dow && e.kind !== "exam")
-      .sort((a, b) => a.start.localeCompare(b.start))
-      .forEach((e) => {
-        if (e.subjectName && !names.includes(e.subjectName)) names.push(e.subjectName);
-      });
-    // Homework outlives the timetable: moving a lesson to another day must not hide what was
-    // already set on it, so subjects that still carry homework for this date stay listed.
-    homework.forEach((h) => {
-      if (h.date === selectedDate && h.subjectName && !names.includes(h.subjectName)) names.push(h.subjectName);
-    });
-    return names;
-  }, [activeSchedule, selectedDate, homework]);
-
-  // Highest level among that weekday's lessons, per subject.
-  const selectedDayLevels = useMemo(() => {
-    const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
-    const map = {};
-    activeSchedule
-      .filter((e) => e.day === dow && e.subjectName && e.kind !== "exam")
-      .forEach((e) => {
-        const current = map[e.subjectName];
-        const priority = Number(e.priority) || 1;
-        if (!current || priority > current.priority) {
-          map[e.subjectName] = { level: e.level || "base", priority };
-        }
-      });
-    return map;
-  }, [activeSchedule, selectedDate]);
-
   const homeworkForSelectedDate = useMemo(() => homework.filter((h) => h.date === selectedDate), [homework, selectedDate]);
 
   const freeHomework = useMemo(
     () => homeworkForSelectedDate.filter((h) => !h.subjectName),
     [homeworkForSelectedDate]
   );
+
+  // Клетки месяца дневника: у каждой — часы занятий против цели, оценки,
+  // задания к этому дню (не сданные вовремя — сверху) и события. far — неделя
+  // далеко от сегодняшней и выбранной: на телефоне месяц свёрнут до них.
+  const diaryCells = useMemo(() => {
+    const today = todayStr();
+    const hwByDate = {};
+    homework.forEach((h) => {
+      if (h.date) (hwByDate[h.date] = hwByDate[h.date] || []).push(h);
+    });
+    const eventsByDate = {};
+    allEvents.forEach((e) => {
+      if (e.date) (eventsByDate[e.date] = eventsByDate[e.date] || []).push(e);
+    });
+    const keys = calendarDays.map((d) => ymd(d));
+    const todayWeek = keys.indexOf(today) >= 0 ? Math.floor(keys.indexOf(today) / 7) : -1;
+    const selectedWeek = keys.indexOf(selectedDate) >= 0 ? Math.floor(keys.indexOf(selectedDate) / 7) : -1;
+    return calendarDays.map((date, i) => {
+      const key = keys[i];
+      const week = Math.floor(i / 7);
+      const hw = (hwByDate[key] || [])
+        .map((h) => ({ id: h.id, label: h.subjectName || h.text, done: !!h.done, late: !h.done && key < today, priority: hwPriority(h) }))
+        .sort((a, b) => Number(b.late) - Number(a.late) || Number(a.done) - Number(b.done) || b.priority - a.priority);
+      return {
+        key,
+        date,
+        inMonth: date.getMonth() === calMonth.getMonth(),
+        future: key > today,
+        today: key === today,
+        hours: dailyTotals[key] || 0,
+        goal: goalHoursForDate(budget, date),
+        grades: (resultDays && resultDays[key]) || [],
+        hw,
+        events: (eventsByDate[key] || []).map((e) => ({ id: e.id, name: e.name })),
+        far: todayWeek >= 0 && week !== todayWeek && week !== todayWeek + 1 && week !== selectedWeek,
+      };
+    });
+  }, [calendarDays, calMonth, homework, allEvents, resultDays, dailyTotals, budget, selectedDate]);
+
+  // Уроки выбранного дня по расписанию — по предмету один раз (пара — count 2),
+  // по порядку. Предметы, у которых на этот день есть задание, а урока нет
+  // (урок перенесли), — тоже здесь: задание не должно пропасть.
+  const selectedDayLessons = useMemo(() => {
+    const dow = DOW_TO_KEY[new Date(selectedDate + "T00:00:00").getDay()];
+    const map = new Map();
+    activeSchedule
+      .filter((e) => e.day === dow && e.kind !== "exam" && e.subjectName && !e.skip)
+      .sort((a, b) => String(a.start).localeCompare(String(b.start)))
+      .forEach((e) => {
+        const cur = map.get(e.subjectName);
+        if (cur) cur.count += 1;
+        else map.set(e.subjectName, { name: e.subjectName, start: e.start || "", count: 1 });
+      });
+    homeworkForSelectedDate.forEach((h) => {
+      if (h.subjectName && !map.has(h.subjectName)) map.set(h.subjectName, { name: h.subjectName, start: "", count: 0 });
+    });
+    return Array.from(map.values());
+  }, [activeSchedule, selectedDate, homeworkForSelectedDate]);
 
   const homeworkReminders = useMemo(() => {
     return homework
@@ -2956,7 +2923,7 @@ export default function StudyPlanner() {
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
     trainer: ["Тренажёр", "Банк ФИПИ по обществознанию, физике и информатике и тесты ВсОШ по обществознанию"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
-    journal: ["Дневник занятий", "Календарь занятий, записи за день и домашние задания"],
+    journal: ["Дневник", "Оценки, задания, события и занятия — по дням"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
     results: ["Результаты", "КТ, экзамены, олимпиады и оценки за уроки — свои записи и официальные"],
     search: ["Поиск", "По темам, дневнику, домашке, событиям, расписанию, тетрадям и заданиям банка — в том числе по номеру задания"],
@@ -3000,15 +2967,131 @@ export default function StudyPlanner() {
     return days;
   })();
 
-  // Кнопка «Записать занятие» в шапке ведёт к форме и сразу ставит курсор в
-  // поле: на телефоне форма ниже первого экрана, и искать её прокруткой долго.
-  function focusQuickLog() {
-    const el = document.getElementById("quick-log");
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    const field = el.querySelector("select, input, textarea");
-    if (field) field.focus({ preventScroll: true });
+  // Таймер занятия (today-parts.jsx). «Стоп» — окно «Занятие окончено»: минуты
+  // там можно поправить, урок — отметить пройденным, задание — сделанным.
+  function stopTimer() {
+    const ctx = timer.context;
+    if (!ctx) return;
+    const minutes = timer.stop();
+    setFinishing({ ctx, minutes });
   }
+
+  function saveFinished(done) {
+    setFinishing(null);
+    const hours = Math.round((done.minutes / 60) * 100) / 100;
+    if (done.kind === "hw") {
+      // Время на задание запоминается у него самого: в часы подготовки оно не идёт.
+      const hw = homework.find((h) => h.id === done.hwId);
+      if (!hw) return;
+      updateHomework(done.hwId, { done: done.markDone ? true : hw.done, spentMinutes: (Number(hw.spentMinutes) || 0) + done.minutes });
+      showUndo(`${done.markDone ? "Задание сделано" : "Время записано"} · ${minutesLabel(done.minutes)}`, () =>
+        updateHomework(done.hwId, { done: hw.done, spentMinutes: hw.spentMinutes })
+      );
+      return;
+    }
+    const id = Date.now();
+    const topic = done.topic;
+    const entry = {
+      id,
+      date: todayStr(),
+      subjectId: done.subjectId,
+      hours,
+      note: [topic ? topic.name : "", done.note].filter(Boolean).join(" — "),
+      ...(topic ? { lessonId: topic.id } : null),
+      ...(topic && done.markDone ? { auto: true } : null),
+    };
+    setJournal((prev) => [entry, ...prev]);
+    if (topic && done.markDone) updateTopic(done.subjectId, topic.id, topic.custom, (t) => ({ ...t, done: true }));
+    const subject = ALL_SUBJECTS.find((x) => x.id === done.subjectId);
+    showUndo(`Записано: ${subject ? subject.name : "занятие"} · ${minutesLabel(done.minutes)}${topic && done.markDone ? " · урок пройден" : ""}`, () => {
+      setJournal((prev) => prev.filter((e) => e.id !== id));
+      if (topic && done.markDone) updateTopic(done.subjectId, topic.id, topic.custom, (t) => ({ ...t, done: false }));
+    });
+  }
+
+  // Несделанные задания по сроку — для «Домашнего задания» в окне таймера.
+  const timerHomework = homework
+    .filter((h) => !h.done && h.text)
+    .map((h) => ({ ...h, daysUntil: h.date ? daysUntilDate(h.date) : 99 }))
+    .sort((a, b) => a.daysUntil - b.daysUntil);
+  // Предмет по умолчанию в окнах — тот, которым занимались последним.
+  const lastSubjectId = (() => {
+    const ids = new Set(ALL_SUBJECTS.map((x) => x.id));
+    const last = journal.find((e) => ids.has(e.subjectId));
+    return last ? last.subjectId : ALL_SUBJECTS[0] ? ALL_SUBJECTS[0].id : "";
+  })();
+
+  // «+ Записать»: прошедшее занятие одной записью.
+  function saveLogged(entry) {
+    const id = Date.now();
+    setJournal((prev) => [{ id, ...entry }, ...prev]);
+    setLogOpen(false);
+    const subject = ALL_SUBJECTS.find((x) => x.id === entry.subjectId);
+    showUndo(`Записано: ${subject ? subject.name : "занятие"} · ${minutesLabel(Math.round(entry.hours * 60))}`, () =>
+      setJournal((prev) => prev.filter((e) => e.id !== id))
+    );
+  }
+
+  // Уроки курса предмета для окон таймера и записи — в порядке курса.
+  const topicsOf = useCallback(
+    (subjectId) =>
+      orderedTopics(subjectData(data, subjectId))
+        .map((t) => ({
+          id: t.id,
+          name: t.name || t.title || "",
+          done: !!t.done,
+          duration: Number(t.duration) || D,
+          custom: subjectData(data, subjectId).custom.some((c) => c.id === t.id),
+        }))
+        .filter((t) => t.name),
+    [data]
+  );
+  // Сколько уроков и часов осталось по каждому предмету — подписи в окне таймера.
+  const subjectStats = useMemo(() => {
+    const map = {};
+    ALL_SUBJECTS.forEach((s) => {
+      const all = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
+      const left = all.filter((t) => !t.done);
+      map[s.id] = { lessons: left.length, total: all.length, hours: left.reduce((sum, t) => sum + (Number(t.duration) || D) / 60, 0) };
+    });
+    return map;
+  }, [data, ALL_SUBJECTS]);
+  // Сколько минут заданий на сегодня и завтра — для «После уроков».
+  const soonMinutes = upcomingHomework
+    .filter((h) => !h.done && h.daysUntil >= 0 && h.daysUntil <= 1)
+    .reduce((sum, h) => sum + (Number(h.minutes) || 0), 0);
+
+  // Три числа дня строкой в шапке «Сегодня» (на телефоне — полосой под ней).
+  const todayPulse = (
+    <div className="ap-today-pulse" aria-label="Итоги дня">
+      <div>
+        <span style={styles.pulseLabel}>сегодня</span>
+        <span style={styles.pulseValue}>
+          {studyPulse.todayHours > 0 ? hoursLabel(studyPulse.todayHours) : "0 ч"}
+          {todayGoalHours > 0 && (
+            <span style={{ ...styles.pulseOf, color: studyPulse.todayHours >= todayGoalHours ? "var(--green)" : "var(--ink3)" }}>
+              {" "}
+              из {hoursLabel(todayGoalHours)}
+              {studyPulse.todayHours >= todayGoalHours ? " ✓" : ""}
+            </span>
+          )}
+        </span>
+      </div>
+      <div>
+        <span style={styles.pulseLabel}>серия</span>
+        <span style={styles.pulseValue}>
+          {streakShown} <span style={{ ...styles.pulseOf, color: streakAtRisk ? "var(--warmInk)" : "var(--ink3)" }}>{streakAtRisk ? "продлите" : daysWord(streakShown)}</span>
+        </span>
+      </div>
+      <div>
+        <span style={styles.pulseLabel}>неделя</span>
+        <span style={styles.pulseValue}>
+          {weeklyJournalHours > 0 ? hoursLabel(weeklyJournalHours) : "0 ч"}
+          {weeklyBudget > 0 && <span style={styles.pulseOf}> из {hoursLabel(weeklyBudget)}</span>}
+        </span>
+      </div>
+    </div>
+  );
   const pad2 = (n) => String(n).padStart(2, "0") + ":00";
   const modeLabel =
     mode === "auto"
@@ -3103,6 +3186,8 @@ export default function StudyPlanner() {
         ${NEW_CSS}
         ${SCHOOL_CSS}
         ${BUDGET_CSS}
+        ${TODAY_CSS}
+        ${DIARY_CSS}
         .ap-pill { background: transparent; color: var(--railInk2); transition: background .22s ease, color .22s ease; }
         .ap-pill:hover { background: var(--railActive); color: var(--railInk); }
         .ap-pill.is-on { background: var(--accent); color: var(--accentInk); }
@@ -3174,6 +3259,8 @@ export default function StudyPlanner() {
           ${NEW_MOBILE_CSS}
           ${SCHOOL_MOBILE_CSS}
           ${BUDGET_MOBILE_CSS}
+          ${TODAY_MOBILE_CSS}
+          ${DIARY_MOBILE_CSS}
           /* Телефон: и «Подготовка», и тетрадь — два шага вместо двух колонок.
              Список → предмет, оглавление → ветка; назад — кнопкой сверху. */
           .ap-mobile-only { display: inline-flex !important; }
@@ -3262,23 +3349,63 @@ export default function StudyPlanner() {
           title={screenInfo.title}
           // На «Сегодня» подзаголовок пересказывал карточки под ним — дата над
           // названием говорит о том же короче.
-          note={screen === "today" ? null : screen === "school" ? schoolNote : screenInfo.note}
+          note={
+            screen === "today"
+              ? null
+              : screen === "school"
+              ? schoolNote
+              : screen === "budget" && budgetTab === "fact"
+              ? "Как время уходило на самом деле — и что из этого следует для плана"
+              : screenInfo.note
+          }
           badge={screen === "trainer" ? "ALPHA" : null}
           date={screen === "today" ? todayHeadLabel : null}
         >
-          {/* На телефоне отсчёт до события — только на «Сегодня»: на каждой
-              вкладке он вставал над её названием и сдвигал весь экран вниз. */}
+          {/* Три числа дня — строкой в шапке; на телефоне — полосой под ней. */}
+          {screen === "today" && <div className="ap-desktop-only">{todayPulse}</div>}
+          {/* Самое частое действие дня — на виду: таймер и «+ Записать». */}
           {screen === "today" && (
-            <div className="ap-only-mobile">
-              <Countdowns next={nextCountdown} main={mainCountdown} onOpen={openEvent} />
-            </div>
+            <LogActions
+              timer={timer}
+              subjectName={timerLabel(timer.context, ALL_SUBJECTS)}
+              onStart={() => setStartOpen(true)}
+              onStop={stopTimer}
+              onOpen={() => setLogOpen(true)}
+            />
           )}
-          {/* Самое частое действие дня — на виду, а не в середине экрана. */}
-          {screen === "today" && (
-            <button type="button" onClick={focusQuickLog} className="ap-desktop-only" style={styles.headAction}>
-              <Icon name="plus" size={17} strokeWidth={2} />
-              Записать занятие
-            </button>
+          {/* «Дневник»: какие метки показывать в месяце. */}
+          {screen === "journal" && (
+            <DiaryLayers
+              layers={diaryLayers}
+              onToggle={toggleDiaryLayer}
+              hasGrades={!!resultDays}
+              counts={diaryCells
+                .filter((c) => c.inMonth)
+                .reduce((sum, c) => ({ grades: sum.grades + c.grades.length, hw: sum.hw + c.hw.length, events: sum.events + c.events.length }), {
+                  grades: 0,
+                  hw: 0,
+                  events: 0,
+                })}
+            />
+          )}
+          {screen === "budget" && (
+            <div role="tablist" aria-label="Распределение" style={styles.budgetTabs}>
+              {[
+                ["plan", "План"],
+                ["fact", "Факт и прогноз"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={budgetTab === id}
+                  onClick={() => setBudgetTab(id)}
+                  style={budgetTab === id ? { ...styles.budgetTab, ...styles.budgetTabOn } : styles.budgetTab}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
           {/* Настройка расписания и предметы — окнами по кнопкам: раньше они
               стояли над уроками, и до сегодняшнего дня надо было листать. */}
@@ -3384,62 +3511,8 @@ export default function StudyPlanner() {
               </section>
             )}
 
-            {/* Три числа дня — плитками в ряд. Раньше «сколько записано» и
-                «серия» жили в карточке напоминания, а недельный план — только в
-                разделе «Распределение», и сверить день с неделей было негде. */}
-            <div className="ap-tiles" style={styles.tiles}>
-              <div className="ap-card" style={styles.tile}>
-                <div style={styles.tileLabel}>Записано сегодня</div>
-                <div style={styles.tileValueRow}>
-                  <span style={styles.tileValue}>{studyPulse.todayHours > 0 ? hoursLabel(studyPulse.todayHours) : "0 ч"}</span>
-                  {todayGoalHours > 0 && <span style={styles.tileOf}>из {hoursLabel(todayGoalHours)}</span>}
-                </div>
-                <div style={styles.tileTrack}>
-                  <div
-                    className="ap-fill"
-                    style={{
-                      ...styles.tileFill,
-                      width: (todayGoalHours > 0 ? Math.min(100, (studyPulse.todayHours / todayGoalHours) * 100) : 0) + "%",
-                      background: todayGoalHours > 0 && studyPulse.todayHours >= todayGoalHours ? "var(--green)" : "var(--accent)",
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="ap-card" style={styles.tile}>
-                <div style={styles.tileLabel}>Серия</div>
-                {/* Серия, которая шла до вчера, ещё жива: сегодня её можно
-                    продлить, и сказать об этом полезнее, чем показать ноль. */}
-                <div style={styles.tileValueRow}>
-                  <span style={styles.tileValue}>{streakShown}</span>
-                  <span style={{ ...styles.tileOf, color: streakAtRisk ? "var(--warmInk)" : "var(--ink3)" }}>
-                    {streakAtRisk ? "продлите сегодня" : daysWord(streakShown) + " подряд"}
-                  </span>
-                </div>
-                {/* Последние семь дней: закрашен день, в который занимались. */}
-                <div style={styles.streakDots} aria-label="Занятия за последние семь дней">
-                  {last7.map((on, i) => (
-                    <span key={i} style={{ ...styles.streakDot, background: on ? "var(--accent)" : "var(--line)" }} />
-                  ))}
-                </div>
-              </div>
-              <div className="ap-card" style={styles.tile}>
-                <div style={styles.tileLabel}>За неделю</div>
-                <div style={styles.tileValueRow}>
-                  <span style={styles.tileValue}>{weeklyJournalHours > 0 ? hoursLabel(weeklyJournalHours) : "0 ч"}</span>
-                  {weeklyBudget > 0 && <span style={styles.tileOf}>из {hoursLabel(weeklyBudget)} по плану</span>}
-                </div>
-                <div style={styles.tileTrack}>
-                  <div
-                    className="ap-fill"
-                    style={{
-                      ...styles.tileFill,
-                      width: (weeklyBudget > 0 ? Math.min(100, (weeklyJournalHours / weeklyBudget) * 100) : 0) + "%",
-                      background: "var(--green)",
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
+            {/* Три числа дня — на телефоне полосой под шапкой, на компьютере они в шапке. */}
+            <div className="ap-only-mobile">{todayPulse}</div>
 
             {/* Напоминание крупным планом: строчкой внизу карточки его не замечали.
                 Когда день уже засчитан и подсказывать нечего, плитки выше говорят
@@ -3487,264 +3560,169 @@ export default function StudyPlanner() {
             </section>
             )}
 
-            {/* Уроки дня одной карточкой: что идёт сейчас и весь день лентой, как
-                в «Лицее». Вечером — про завтра. */}
-            <NowCard
-              entriesFor={dayEntries}
-              tasksFor={lessonTasks.forLesson}
-              homeworkOn={homeworkOnDate}
-              colorOf={lyceumColorOf}
-              kit={SCHOOL_KIT}
-              onOpen={() => goScreen("school")}
-              onTasks={() => {
-                const el = document.getElementById("today-tasks");
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              styles={styles}
-            />
-
-            {/* Дела и сроки — одним блоком сразу под уроками. Раньше задания на
-                завтра были ещё и списком под уроками — теперь там строка-указатель
-                сюда, а напоминание («Не забудь») — сверху этого блока, заметной
-                плашкой: что скоро сдавать и что важно. */}
-            {!homeworkEmpty && (
-              <section className="ap-card" style={styles.card} id="today-tasks" data-today-tasks>
-                <CardHead id="today-homework" title="Дела и сроки" note="Сверху — что скоро сдавать и что важно; ниже — остальное по сроку" />
-                <HomeworkReminders
-                  items={homeworkReminders}
-                  onToggle={(id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done })}
-                  onOpen={openHomework}
+            {/* День тремя частями: в лицее (уроки), после уроков (сдать, цель дня,
+                повторить) и впереди (события и неделя). Раньше — восемь карточек
+                одной колонкой. */}
+            <div className="ap-today3">
+              <div>
+                <NowCard
+                  entriesFor={dayEntries}
+                  tasksFor={lessonTasks.forLesson}
+                  homeworkOn={homeworkOnDate}
                   colorOf={lyceumColorOf}
+                  kit={SCHOOL_KIT}
+                  onOpen={() => goScreen("school")}
+                  onTasks={() => {
+                    const el = document.getElementById("today-tasks");
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  styles={styles}
                 />
-                {(() => {
-                  const shownIds = new Set(homeworkReminders.map((h) => h.id));
-                  const rest = upcomingHomework.filter((h) => !shownIds.has(h.id));
-                  if (!rest.length) return null;
-                  return (
-                    <div style={styles.todayList}>
-                      {homeworkReminders.length > 0 && <div style={styles.tasksLater}>Дальше</div>}
-                      {rest.map((h) => {
-                        const p = hwPriority(h);
+              </div>
+
+              <div>
+                <section className="ap-card" style={styles.card} id="today-tasks" data-today-tasks>
+                  <CardHead id="today-after" title="После уроков" note="Что сдать, цель дня и что повторить — одним списком">
+                    {soonMinutes > 0 && <span style={styles.cardMeta}>≈ {minutesLabel(soonMinutes)} на сегодня и завтра</span>}
+                  </CardHead>
+                  {homeworkEmpty ? (
+                    <p style={styles.muted}>Ничего не горит по срокам.</p>
+                  ) : (
+                    <>
+                      <HomeworkReminders
+                        items={homeworkReminders}
+                        onToggle={(id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done })}
+                        onOpen={openHomework}
+                        colorOf={lyceumColorOf}
+                      />
+                      {(() => {
+                        const shownIds = new Set(homeworkReminders.map((h) => h.id));
+                        const rest = upcomingHomework.filter((h) => !shownIds.has(h.id));
+                        if (!rest.length) return null;
                         return (
-                          <label key={h.id} style={styles.taskRow} data-today-task={h.text}>
-                            <input type="checkbox" checked={!!h.done} onChange={() => updateHomework(h.id, { done: !h.done })} />
-                            <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>{h.text || "без описания"}</span>
-                            {p > 1 && !h.done && <PriorityMark value={p} height={11} />}
-                            <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
-                              {relativeDayLabel(h.daysUntil)}
-                              {h.subjectName ? " · " + h.subjectName : ""}
+                          <div style={styles.todayList}>
+                            {homeworkReminders.length > 0 && <div style={styles.tasksLater}>Дальше</div>}
+                            {rest.map((h) => {
+                              const p = hwPriority(h);
+                              return (
+                                <label key={h.id} style={styles.taskRow} data-today-task={h.text}>
+                                  <input type="checkbox" checked={!!h.done} onChange={() => updateHomework(h.id, { done: !h.done })} />
+                                  <span style={{ ...styles.taskText, textDecoration: h.done ? "line-through" : "none" }}>{h.text || "без описания"}</span>
+                                  {p > 1 && !h.done && <PriorityMark value={p} height={11} />}
+                                  <span style={{ ...styles.taskMeta, color: h.daysUntil < 0 ? "var(--red)" : "var(--ink3)" }}>
+                                    {relativeDayLabel(h.daysUntil)}
+                                    {h.subjectName ? " · " + h.subjectName : ""}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                  {/* Цель дня по подготовке — строкой в том же списке, с кнопкой записи. */}
+                  <div style={styles.todayGoalRow}>
+                    <span
+                      style={{ ...styles.todayGoalMark, background: todayGoalHours > 0 && studyPulse.todayHours >= todayGoalHours ? "var(--green)" : "var(--line)" }}
+                      aria-hidden="true"
+                    >
+                      {todayGoalHours > 0 && studyPulse.todayHours >= todayGoalHours ? "✓" : ""}
+                    </span>
+                    <span style={styles.todayGoalText}>
+                      Подготовка: цель дня {todayGoalHours > 0 ? hoursLabel(todayGoalHours) : "не задана"}
+                      <span style={styles.todayGoalNote}>
+                        записано {studyPulse.todayHours > 0 ? hoursLabel(studyPulse.todayHours) : "0 ч"}
+                        {streakShown > 0 ? " · серия " + streakShown + " " + daysWord(streakShown) : ""}
+                      </span>
+                    </span>
+                    <button type="button" onClick={() => setLogOpen(true)} style={styles.todayGoalBtn}>
+                      {timer.running ? "Таймер идёт" : "+ Записать"}
+                    </button>
+                  </div>
+                  {dueForReview.length > 0 && (
+                    <div style={styles.todayList}>
+                      <div style={styles.tasksLater}>Пора повторить</div>
+                      {dueForReview.slice(0, 3).map((row) => (
+                        <div key={row.topicId} style={styles.reviewRow}>
+                          <span style={{ ...styles.dot, background: row.color }} />
+                          <span style={styles.reviewText}>
+                            <span style={styles.reviewName}>{row.name}</span>
+                            <span style={styles.reviewNote}>
+                              {row.subjectName} · {agoWord(row.days)}
                             </span>
-                          </label>
+                          </span>
+                          <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
+                            Повторил
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={() => goScreen("journal")} style={styles.goLink}>
+                    Дневник и задания →
+                  </button>
+                </section>
+              </div>
+
+              <div>
+                <section className="ap-card" style={styles.card}>
+                  <div style={styles.cardTitle}>Впереди</div>
+                  {laterEvents.length === 0 ? (
+                    <p style={styles.muted}>
+                      {todayEvents.length ? "Дальше пока ничего не назначено." : "Событий пока нет — добавьте экзамен или олимпиаду в разделе «События»."}
+                    </p>
+                  ) : (
+                    <div style={styles.todayList}>
+                      {laterEvents.slice(0, 3).map((e) => {
+                        const left = daysUntilDate(e.date);
+                        const info = priorityInfo(e.priority);
+                        return (
+                          <button key={e.id} type="button" onClick={() => openEvent(e.id)} style={styles.aheadRow} className="ap-row">
+                            <span style={{ ...styles.aheadDays, color: info.strong }}>
+                              {left}
+                              <span style={styles.aheadDaysWord}>{daysWord(left)}</span>
+                            </span>
+                            <span style={styles.aheadName}>
+                              {e.name}
+                              {mainEvent && mainEvent.id === e.id && <span style={styles.aheadPlan}> · план</span>}
+                            </span>
+                          </button>
                         );
                       })}
                     </div>
-                  );
-                })()}
-                <button onClick={() => goScreen("journal")} style={styles.goLink}>
-                  Дневник и задания →
-                </button>
-              </section>
-            )}
-
-            {dueForReview.length > 0 && (
-              <section className="ap-card" style={styles.card}>
-                <CardHead
-                  id="today-review"
-                  title="Пора повторить"
-                  note="Тема забывается не сразу: чем дольше к ней не возвращались, тем выше она в списке"
-                />
-                <div style={styles.reviewList}>
-                  {dueForReview.slice(0, 3).map((row) => (
-                    <div key={row.topicId} style={styles.reviewRow}>
-                      <span style={{ ...styles.dot, background: row.color }} />
-                      <span style={styles.reviewText}>
-                        <span style={styles.reviewName}>{row.name}</span>
-                        <span style={styles.reviewNote}>
-                          {row.subjectName} · {agoWord(row.days)}
-                          {row.reviews > 0 ? " · повторений: " + row.reviews : ""}
-                        </span>
-                      </span>
-                      <button onClick={() => reviewTopic(row)} style={styles.reviewBtn}>
-                        Повторил
-                      </button>
+                  )}
+                  {/* Тот же вердикт, что и в «Распределении»: ради этого ответа и считаются часы. */}
+                  {mainEvent && (
+                    <div
+                      style={{
+                        ...styles.verdictLine,
+                        color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
+                      }}
+                    >
+                      {capacity.feasible === null
+                        ? "Часы на неделю не заданы — темп считать не от чего."
+                        : capacity.feasible
+                        ? `Времени хватит: нужно ${capacity.neededHours} ч, до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`
+                        : `Может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
                     </div>
-                  ))}
-                </div>
-                {dueForReview.length > 3 && (
-                  <button onClick={() => goScreen("study")} style={styles.goLink}>
-                    Ещё {dueForReview.length - 3} — в «Подготовке» →
+                  )}
+                  <button onClick={() => goScreen("events")} style={styles.goLink}>
+                    Все события →
                   </button>
-                )}
-              </section>
-            )}
-
-          <section className="ap-card" style={styles.card}>
-            <CardHead
-              id="hours"
-              title="Часы занятий"
-              empty={!stats.totalAll}
-              note="Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята."
-            >
-              {stats.totalAll > 0 && (
-                <span style={styles.cardMeta}>
-                  пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
-                </span>
-              )}
-            </CardHead>
-            {/* График не сворачивается: ради него карточка и существует. */}
-            <HoursChart journal={journalWithTrainer} homework={homework} subjects={subjectsWithTrainer} goalForDate={goalForDate} />
-          </section>
-
-          {/* Карточка, которой нечего показать, — не карточка: три «ничего нет»
-              подряд занимали пол-экрана в обычный день. Пустые сворачиваются
-              в одну строку ниже и возвращаются, как только в них что-то есть. */}
-          <div className="ap-grid2" style={styles.grid2}>
-            {!eventsEmpty && (
-            <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Ближайшие события</div>
-              {/* Сегодняшнее событие показано отдельной карточкой наверху —
-                  здесь оно было бы вторым упоминанием об одном и том же. */}
-              {laterEvents.length === 0 ? (
-                <p style={styles.muted}>
-                  {todayEvents.length ? "Дальше пока ничего не назначено." : "Событий пока нет — добавьте экзамен или олимпиаду в разделе «События»."}
-                </p>
-              ) : (
-                <div style={styles.todayList}>
-                  {laterEvents.slice(0, 4).map((e) => {
-                    const left = daysUntilDate(e.date);
-                    const info = priorityInfo(e.priority);
-                    return (
-                      <div key={e.id} style={{ ...styles.todayRow, borderLeftColor: info.strong, background: info.tint }}>
-                        <span style={styles.eventMarkCol}>
-                          <PriorityMark value={e.priority} height={11} />
-                        </span>
-                        <span style={styles.todayName}>{e.name}</span>
-                        <span style={styles.todayMeta}>
-                          {left} {daysWord(left)}
-                          {mainEvent && mainEvent.id === e.id ? " · план" : ""}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {/* Тот же вердикт, что и в «Распределении»: ради этого ответа и считаются часы. */}
-              {mainEvent && (
-                <div
-                  style={{
-                    ...styles.verdictLine,
-                    color: capacity.feasible === null ? "var(--ink3)" : capacity.feasible ? "var(--green)" : "var(--red)",
+                </section>
+                <WeekCard
+                  journal={journalWithTrainer}
+                  subjects={ALL_SUBJECTS}
+                  alloc={budget.alloc}
+                  goalForDate={goalForDate}
+                  onFact={() => {
+                    setBudgetTab("fact");
+                    goScreen("budget");
                   }}
-                >
-                  {capacity.feasible === null
-                    ? "Часы на неделю не заданы — темп считать не от чего."
-                    : capacity.feasible
-                    ? `При таком темпе времени хватит: нужно ${capacity.neededHours} ч, до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`
-                    : `При таком темпе может не хватить: нужно ${capacity.neededHours} ч, а до «${mainEvent.name}» доступно ${capacity.totalCapacityHours} ч.`}
-                </div>
-              )}
-              <button onClick={() => goScreen("events")} style={styles.goLink}>
-                Все события →
-              </button>
-            </section>
-            )}
-
-            <section id="quick-log" className="ap-card" style={styles.card}>
-              <CardHead id="quick-entry" title="Записать занятие" note="Запись попадёт в дневник за сегодня" />
-              <div style={styles.quickGrid}>
-                <label style={styles.quickField}>
-                  <span style={styles.quickLabel}>Предмет</span>
-                  <select
-                    value={jForm.subjectId}
-                    onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })}
-                    style={styles.quickControl}
-                  >
-                    {ALL_SUBJECTS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ ...styles.quickField, flex: "0 0 96px" }}>
-                  <span style={styles.quickLabel}>Часы</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    inputMode="decimal"
-                    value={jForm.hours}
-                    onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
-                    style={styles.quickControl}
-                  />
-                </label>
-              </div>
-              <label style={{ ...styles.quickField, marginTop: 12 }}>
-                <span style={styles.quickLabel}>Что прошли</span>
-                <AutoGrow
-                  placeholder="Например: конституционные права, § 4"
-                  value={jForm.note}
-                  onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
-                  onEnter={() => {
-                    addJournalEntry(todayStr());
-                  }}
-                  style={styles.quickControl}
                 />
-              </label>
-              <button
-                onClick={() => {
-                  addJournalEntry(todayStr());
-                }}
-                style={styles.quickSubmit}
-              >
-                Записать
-              </button>
-            </section>
-
-            {!studyEmpty && (
-            <section className="ap-card" style={styles.card}>
-              <div style={styles.cardTitle}>Подготовка</div>
-              <div style={styles.todayList}>
-                {ALL_SUBJECTS.map((s) => {
-                  const st = stats.perSubject[s.id];
-                  if (!st || !st.total) return null;
-                  return (
-                    <div key={s.id}>
-                      <div style={styles.progressRow}>
-                        <span>{s.name}</span>
-                        <span style={styles.mutedSmall}>
-                          {st.done}/{st.total}
-                        </span>
-                      </div>
-                      <div style={styles.miniTrack}>
-                        <div className="ap-fill" style={{ ...styles.miniFill, width: st.pct + "%", background: s.color }} />
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
-              <button onClick={() => goScreen("study")} style={styles.goLink}>
-                Открыть подготовку →
-              </button>
-            </section>
-            )}
-          </div>
-
-          {(eventsEmpty || homeworkEmpty || studyEmpty) && (
-            <div style={styles.emptyStrip}>
-              {eventsEmpty && (
-                <button onClick={() => goScreen("events")} style={styles.goLink}>
-                  Событий нет — добавить →
-                </button>
-              )}
-              {homeworkEmpty && <span style={styles.emptyStripNote}>Ничего не горит по срокам</span>}
-              {studyEmpty && (
-                <button onClick={() => goScreen("study")} style={styles.goLink}>
-                  Своих предметов нет — добавить →
-                </button>
-              )}
             </div>
-          )}
           </>
         )}
 
@@ -3914,7 +3892,37 @@ export default function StudyPlanner() {
 
         {/* «Распределение времени (КПВ)»: слева шаги ① дни и ② предметы, справа —
             что получается, с графиком КПВ (src/budget-screen.jsx). */}
-        {screen === "budget" && (
+        {screen === "budget" && budgetTab === "fact" && (
+          <BudgetFact
+            journal={journalWithTrainer}
+            subjects={ALL_SUBJECTS}
+            extraSubjects={subjectsWithTrainer.filter((x) => x.fromTrainer)}
+            alloc={budget.alloc}
+            weeklyBudget={weeklyBudget}
+            remaining={subjectStats}
+            mainEvent={mainEvent}
+            formatDate={formatEventDate}
+            onPlan={() => setBudgetTab("plan")}
+          >
+            <section className="ap-card" style={styles.card}>
+              <CardHead
+                id="hours"
+                title="Часы по дням"
+                empty={!journalWithTrainer.length}
+                note="Столбец — факт за день, полоса под ним — коридор дневной цели. Зелёный столбец значит, что цель взята."
+              >
+                {stats.totalAll > 0 && (
+                  <span style={styles.cardMeta}>
+                    пройдено {stats.doneAll} из {stats.totalAll} уроков · {stats.overallPct}%
+                  </span>
+                )}
+              </CardHead>
+              <HoursChart journal={journalWithTrainer} homework={homework} subjects={subjectsWithTrainer} goalForDate={goalForDate} />
+            </section>
+          </BudgetFact>
+        )}
+
+        {screen === "budget" && budgetTab === "plan" && (
           <BudgetScreen
             subjects={ALL_SUBJECTS}
             budget={budget}
@@ -4382,345 +4390,267 @@ export default function StudyPlanner() {
           />
         )}
 
-        {screen === "journal" && homeworkReminders.length > 0 && (
-          <section style={{ marginBottom: 6 }} data-journal-reminders>
-            <HomeworkReminders
-              items={homeworkReminders}
-              title="Скоро сдавать"
-              onToggle={(id) => updateHomework(id, { done: !(homework.find((h) => h.id === id) || {}).done })}
-              onOpen={openHomework}
-              colorOf={lyceumColorOf}
-            />
-          </section>
-        )}
+        {screen === "journal" && <DueStrip items={homeworkReminders} colorOf={lyceumColorOf} onOpen={openHomework} />}
 
-        {screen === "journal" && (
-          <div className="ap-grid2" style={styles.grid2}>
-            <section className="ap-card" style={styles.card}>
-            <CardHead
-              id="journal-calendar"
-              title={"За 7 дней — " + String(weeklyJournalHours).replace(".", ",") + " ч"}
-              note={
-                "Записи с уроками и заметками к ним добавляются сюда автоматически — можно также добавить запись " +
-                "вручную. Высота заливки дня — доля дневной цели, а цель на каждый день недели задаётся " +
-                "в «Распределении». Точки сверху — пройденные уроки, точка снизу — домашнее задание на этот день. " +
-                "Красная рамка — день экзамена или олимпиады." +
-                (resultDays ? " Цифра в углу — результат за этот день: оценка или балл, цвет — по баллу (чем выше, тем зеленее)." : "")
-              }
-            />
-
-            <div style={styles.calendarWrap}>
-              <div style={styles.calHeader}>
-                <button
-                  onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1))}
-                  style={styles.calNavBtn}
-                >
-                  ‹
-                </button>
-                <div style={styles.calMonthLabel}>
-                  {capitalizeFirst(calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" }))}
-                </div>
-                <button
-                  onClick={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1))}
-                  style={styles.calNavBtn}
-                >
-                  ›
-                </button>
-              </div>
-              <div style={styles.calWeekdays}>
-                {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
-                  <div key={d} style={styles.calWeekday}>
-                    {d}
-                  </div>
-                ))}
-              </div>
-              <div style={styles.calGrid}>
-                {calendarDays.map((cellDate) => {
-                  const key = ymd(cellDate);
-                  const hours = dailyTotals[key] || 0;
-                  const goal = goalHoursForDate(budget, cellDate);
-                  const inMonth = cellDate.getMonth() === calMonth.getMonth();
-                  const isFuture = cellDate > todayDateOnly;
-                  const ratio = goal > 0 ? Math.min(hours / goal, 1) : hours > 0 ? 1 : 0;
-                  const selected = key === selectedDate;
-                  const hasHw = hwDates.has(key);
-                  const hasExam = examDates.has(key);
-                  const lessonDots = lessonDotsByDate[key] || [];
-                  const dayRes = resultDays && resultDays[key];
-                  const resMark = dayRes ? resultsLib.daySummary(dayRes) : null;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setSelectedDate(key)}
-                      title={
-                        `${Math.round(hours * 10) / 10} ч из ${Math.round(goal * 10) / 10} ч цели` +
-                        (dayRes ? "\nРезультаты: " + dayRes.map((m) => (m.subject ? m.subject + " — " : "") + m.label).join(", ") : "")
-                      }
-                      className="ap-day"
-                      style={{
-                        ...styles.calCell,
-                        opacity: inMonth ? 1 : 0.4,
+        {/* Дневник: слева месяц со слоями (часы, оценки, задания, события),
+            справа выбранный день — по урокам расписания, с заданиями к каждому. */}
+        {screen === "journal" &&
+          (() => {
+            const today = todayStr();
+            const dayResults = (resultDays && resultDays[selectedDate]) || [];
+            const toneOf = (m) =>
+              m.percent !== null && m.percent !== undefined && resultsLib ? resultsLib.scoreTone(m.percent) : styles.calResultAbsent;
+            const dayHours = dailyTotals[selectedDate] || 0;
+            const dayGoal = goalHoursForDate(budget, new Date(selectedDate + "T00:00:00"));
+            const openTasks = homeworkForSelectedDate.filter((h) => !h.done).length;
+            const dayEvents = allEvents.filter((ev) => ev.date === selectedDate);
+            const looseResults = dayResults.filter((m) => !selectedDayLessons.some((l) => l.name === m.subject));
+            const itemProps = (h) => ({
+              hw: h,
+              compact: true,
+              onToggleDone: () => updateHomework(h.id, { done: !h.done }),
+              onRemove: () => removeHomework(h.id),
+              onAttach: (file) => attachFileToHomework(h.id, file),
+              onAttachExisting: (files) => attachExistingToHomework(h.id, files),
+              onOpenAttachment: openAttachment,
+              onRemoveAttachment: (att) => removeAttachment(h.id, att),
+              onUpdateReminder: (reminderDays) => updateHomework(h.id, { reminderDays }),
+              onUpdatePriority: (priority) => updateHomework(h.id, { priority }),
+            });
+            const thisMonth =
+              calMonth.getMonth() === todayDateOnly.getMonth() && calMonth.getFullYear() === todayDateOnly.getFullYear();
+            return (
+              <>
+                <div className="ap-diary">
+                  <section className="ap-card" style={{ ...styles.card, padding: 0, marginBottom: 0 }} data-diary-calendar>
+                    <DiaryMonth
+                      title={capitalizeFirst(calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" })).replace(/\s*г\.$/, "")}
+                      cells={diaryCells}
+                      selected={selectedDate}
+                      layers={{ ...diaryLayers, grades: diaryLayers.grades && !!resultDays }}
+                      toneOf={toneOf}
+                      onSelect={(key) => {
+                        setSelectedDate(key);
+                        setDiaryAdd(null);
                       }}
-                    >
-                      {/* Клетка заливается снизу вверх на долю выполненной цели: так видно
-                          не только «сделал или нет», но и насколько. */}
-                      {!isFuture && ratio > 0 && (
-                        <span
-                          className="ap-fill-up"
-                          style={{ ...styles.calFill, height: Math.round(ratio * 100) + "%", background: cellColor(ratio, theme) }}
-                        />
-                      )}
-                      {lessonDots.length > 0 && (
-                        <span style={styles.lessonDots}>
-                          {lessonDots.slice(0, 3).map((color) => (
-                            <span key={color} style={{ ...styles.lessonDot, background: color }} />
-                          ))}
+                      onPrev={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1))}
+                      onNext={() => setCalMonth(new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1))}
+                      showToday={!thisMonth || selectedDate !== today}
+                      onToday={() => {
+                        setCalMonth(new Date(todayDateOnly.getFullYear(), todayDateOnly.getMonth(), 1));
+                        setSelectedDate(today);
+                        setDiaryAdd(null);
+                      }}
+                      compact={diaryCompact}
+                      onCompact={setDiaryCompact}
+                    />
+                  </section>
+
+                  <section className="ap-card ap-dday" style={{ ...styles.card, padding: undefined, marginBottom: 0 }} data-diary-day={selectedDate}>
+                    <div className="ap-dday-kicker">{selectedDate === today ? "Сегодня" : selectedDate < today ? "Прошедший день" : "Впереди"}</div>
+                    <h3 className="ap-dday-date">
+                      {capitalizeFirst(new Date(selectedDate + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" }))}
+                    </h3>
+                    <div className="ap-dpills">
+                      {(dayHours > 0 || (dayGoal > 0 && selectedDate <= today)) && (
+                        <span className={"ap-dpill" + (dayGoal > 0 && dayHours >= dayGoal ? " is-ok" : "")}>
+                          {hoursLabel(Math.round(dayHours * 10) / 10)} из {hoursLabel(Math.round(dayGoal * 10) / 10)}
+                          {dayGoal > 0 && dayHours >= dayGoal ? " ✓" : ""}
                         </span>
                       )}
-                      <span style={styles.calDayNum}>{cellDate.getDate()}</span>
-                      {hasHw && (
-                        <span
-                          style={{ ...styles.hwDot, ...((hwTopPriority[key] || 1) > 1 ? { background: priorityInfo(hwTopPriority[key]).strong, width: 6, height: 6 } : null) }}
-                          data-hw-dot={hwTopPriority[key] || 1}
-                        />
-                      )}
-                      {resMark && (
-                        <span
-                          style={{ ...styles.calResult, ...(resMark.percent !== null ? resultsLib.scoreTone(resMark.percent) : styles.calResultAbsent) }}
-                          data-day-result={key}
-                        >
-                          {resMark.label}
-                          {resMark.more > 0 && <sup style={styles.calResultMore}>+{resMark.more}</sup>}
+                      {selectedDate > today && dayGoal > 0 && <span className="ap-dpill">план {hoursLabel(Math.round(dayGoal * 10) / 10)}</span>}
+                      {dayResults.length > 0 && (
+                        <span className="ap-dpill">
+                          {dayResults.length} {dayResults.length === 1 ? "оценка" : dayResults.length < 5 ? "оценки" : "оценок"}
                         </span>
                       )}
-                      {/* Рамка выбранного дня — отдельным слоем поверх заливки: и тень,
-                          и обводка рисуются под детьми элемента, поэтому заливка их
-                          перекрывала и выступала из-под рамки полоской. Обводка
-                          экзамена живёт по тому же правилу, только слоем ниже:
-                          выбранный день должен быть виден и на дне экзамена. */}
-                      {hasExam && <span style={styles.calExamRing} />}
-                      {selected && <span style={styles.calRing} />}
-                    </button>
-                  );
-                })}
-              </div>
-              <div style={styles.calLegend}>
-                <span style={styles.calLegendItem}>0</span>
-                <span
-                  style={{
-                    ...styles.calLegendScale,
-                    backgroundImage: `linear-gradient(to right, ${cellColor(0, theme)}, ${cellColor(0.5, theme)}, ${cellColor(1, theme)})`,
-                  }}
-                />
-                <span style={styles.calLegendItem}>цель</span>
-              </div>
-            </div>
-            </section>
-            <section className="ap-card" style={styles.card}>
-            <div style={styles.dayDetail}>
-              <div style={styles.dayDetailTitle}>
-                {new Date(selectedDate + "T00:00:00").toLocaleDateString("ru-RU", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}{" "}
-                — {Math.round((dailyTotals[selectedDate] || 0) * 10) / 10} ч из{" "}
-                {Math.round(goalHoursForDate(budget, new Date(selectedDate + "T00:00:00")) * 10) / 10} ч цели
-              </div>
-              {selectedDayEntries.length === 0 && <div style={styles.muted}>В этот день записей нет.</div>}
-              {selectedDayEntries.map((e) => {
-                const s = anySubjectById.get(e.subjectId);
-                return (
-                  <div key={e.id} style={styles.journalRow} data-focus-id={"journal:" + e.id}>
-                    <span style={{ ...styles.dot, background: s?.color }} />
-                    <span style={styles.jSubj}>{s?.name}</span>
-                    <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
-                    <span style={styles.jNote}>{e.note}</span>
-                    {e.fromTrainer ? (
-                      // Эта строка — не отдельная запись, а тот же журнал попыток
-                      // в другом виде. Удалять её нечем: удалять надо попытки.
-                      <span style={styles.jAuto} title="Время из тренажёра">секундомер</span>
-                    ) : (
-                      <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
-                        ×
+                      {homeworkForSelectedDate.length > 0 && (
+                        <span className={"ap-dpill" + (openTasks === 0 ? " is-ok" : "")}>
+                          {openTasks === 0
+                            ? "задания сделаны ✓"
+                            : openTasks + " " + (openTasks === 1 ? "задание" : openTasks < 5 ? "задания" : "заданий") + (selectedDate < today ? " не сдано" : "")}
+                        </span>
+                      )}
+                    </div>
+
+                    {dayEvents.map((ev) => (
+                      <button key={ev.id} type="button" className="ap-devent" onClick={() => openEvent(ev.id)} title="Открыть в «Событиях»">
+                        <span className="ap-dflag" />
+                        {ev.name}
                       </button>
-                    )}
-                  </div>
-                );
-              })}
+                    ))}
 
-              {resultDays && (resultDays[selectedDate] || []).length > 0 && (
-                <div style={styles.homeworkBlock} data-day-results>
-                  <div style={styles.homeworkTitle}>Результаты</div>
-                  {resultDays[selectedDate].map((m) => (
-                    <button key={m.id} type="button" onClick={() => openResults(m.subject)} style={styles.dayResultRow} title="Открыть в «Результатах»">
-                      <span style={{ ...styles.dot, background: m.subject ? resultsColorOf(m.subject) : "var(--ink3)" }} />
-                      <span style={styles.dayResultName}>
-                        <b>{m.subject || "Без предмета"}</b> · {m.title}
-                        <span style={styles.dayResultKind}>
-                          {m.title.toLowerCase() === m.kindName.toLowerCase() ? "" : " · " + m.kindName.toLowerCase()}
-                          {m.official ? " · 🔒" : ""}
-                        </span>
-                      </span>
-                      <span style={{ ...styles.dayResultScore, ...(m.percent !== null ? resultsLib.scoreTone(m.percent) : styles.calResultAbsent) }}>{m.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div style={styles.homeworkBlock}>
-                <div style={styles.homeworkTitle}>Домашнее задание и дела</div>
-                {selectedDaySubjects.length === 0 ? (
-                  <div style={styles.mutedSmall}>На этот день по расписанию лицея уроков нет.</div>
-                ) : (
-                  selectedDaySubjects.map((name) => {
-                    const items = homeworkForSelectedDate.filter((h) => h.subjectName === name);
-                    const dayInfo = selectedDayLevels[name];
-                    return (
-                      <div key={name} style={styles.homeworkSubjectBlock}>
-                        <div style={{ ...styles.homeworkSubjectName, color: lyceumColorOf(name) }}>
-                          {name}
-                          {resultDays &&
-                            (resultDays[selectedDate] || [])
-                              .filter((m) => m.subject === name)
-                              .map((m) => (
-                                <span key={m.id} style={{ ...styles.subjectResult, ...(m.percent !== null ? resultsLib.scoreTone(m.percent) : styles.calResultAbsent) }} title={m.title} data-subject-result={name}>
-                                  {m.label}
-                                </span>
+                    <div className="ap-dlabel">{selectedDayLessons.length ? "Уроки и задания" : "Уроков по расписанию нет"}</div>
+                    <div>
+                      {selectedDayLessons.map((lesson) => {
+                        const items = homeworkForSelectedDate.filter((h) => h.subjectName === lesson.name);
+                        const grades = dayResults.filter((m) => m.subject === lesson.name);
+                        const adding = diaryAdd === lesson.name;
+                        return (
+                          <div key={lesson.name} className="ap-dlesson" data-diary-lesson={lesson.name}>
+                            <div className="ap-dlesson-row">
+                              <span className="ap-dlesson-time">{lesson.start}</span>
+                              <span className="ap-dlesson-strip" style={{ background: lyceumColorOf(lesson.name) }} />
+                              <span className="ap-dlesson-name">
+                                {lesson.name}
+                                {lesson.count > 1 && (
+                                  <small>
+                                    {" "}
+                                    · {lesson.count} {lessonsWord(lesson.count)}
+                                  </small>
+                                )}
+                              </span>
+                              <span className="ap-dlesson-side">
+                                {grades.map((m) => (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    className="ap-dgrade"
+                                    style={toneOf(m)}
+                                    onClick={() => openResults(m.subject)}
+                                    title={m.title + (m.official ? " · выложил учитель" : "") + " — открыть в «Результатах»"}
+                                    data-subject-result={lesson.name}
+                                  >
+                                    {m.label}
+                                  </button>
+                                ))}
+                                <button type="button" className="ap-dadd" aria-expanded={adding} onClick={() => setDiaryAdd(adding ? null : lesson.name)}>
+                                  {adding ? "закрыть" : "+ задание"}
+                                </button>
+                              </span>
+                            </div>
+                            <div className="ap-dlesson-body">
+                              {items.map((h) => (
+                                <HomeworkItem key={h.id} {...itemProps(h)} />
                               ))}
-                          {dayInfo && (
-                            <>
-                              <span style={styles.dayPriority}>
-                                <PriorityMark value={dayInfo.priority} height={10} />
-                              </span>
-                              <span
-                                style={{
-                                  ...styles.levelChip,
-                                  color: levelInfo(dayInfo.level).color,
-                                  borderColor: levelInfo(dayInfo.level).color,
-                                }}
-                              >
-                                {levelInfo(dayInfo.level).short}
-                              </span>
-                            </>
+                              {adding && (
+                                <HomeworkAddForm
+                                  subject={lesson.name}
+                                  onAdd={(text, minutes, files, priority) => addHomework(selectedDate, lesson.name, text, minutes, undefined, files, priority)}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="ap-dlesson ap-dfree">
+                        <div className="ap-dlesson-row" style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}>
+                          <span className="ap-dlesson-name" style={{ color: "var(--ink3)", fontWeight: 500 }}>
+                            Без привязки к уроку
+                          </span>
+                          <span className="ap-dlesson-side">
+                            <button type="button" className="ap-dadd" aria-expanded={diaryAdd === ""} onClick={() => setDiaryAdd(diaryAdd === "" ? null : "")}>
+                              {diaryAdd === "" ? "закрыть" : "+ дело"}
+                            </button>
+                          </span>
+                        </div>
+                        <div className="ap-dlesson-body" style={{ paddingLeft: 0 }}>
+                          {freeHomework.map((h) => (
+                            <HomeworkItem key={h.id} {...itemProps(h)} />
+                          ))}
+                          {diaryAdd === "" && (
+                            <HomeworkAddForm
+                              placeholder="Например: подать заявку на олимпиаду"
+                              onAdd={(text, minutes, files, priority) => addHomework(selectedDate, "", text, minutes, undefined, files, priority)}
+                            />
                           )}
                         </div>
-                        {items.map((h) => (
-                          <HomeworkItem
-                            key={h.id}
-                            hw={h}
-                            onToggleDone={() => updateHomework(h.id, { done: !h.done })}
-                            onRemove={() => removeHomework(h.id)}
-                            onAttach={(file) => attachFileToHomework(h.id, file)}
-                            onAttachExisting={(files) => attachExistingToHomework(h.id, files)}
-                            onOpenAttachment={openAttachment}
-                            onRemoveAttachment={(att) => removeAttachment(h.id, att)}
-                            onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                            onUpdatePriority={(priority) => updateHomework(h.id, { priority })}
-                                />
-                        ))}
-                        <HomeworkAddForm subject={name} onAdd={(text, minutes, files, priority) => addHomework(selectedDate, name, text, minutes, undefined, files, priority)} />
                       </div>
-                    );
-                  })
-                )}
+                    </div>
 
-                <div style={styles.homeworkSubjectBlock}>
-                  <div style={{ ...styles.homeworkSubjectName, color: "var(--ink3)" }}>Без привязки к уроку</div>
-                  {freeHomework.map((h) => (
-                    <HomeworkItem
-                      key={h.id}
-                      hw={h}
-                      onToggleDone={() => updateHomework(h.id, { done: !h.done })}
-                      onRemove={() => removeHomework(h.id)}
-                      onAttach={(file) => attachFileToHomework(h.id, file)}
-                      onAttachExisting={(files) => attachExistingToHomework(h.id, files)}
-                      onOpenAttachment={openAttachment}
-                      onRemoveAttachment={(att) => removeAttachment(h.id, att)}
-                      onUpdateReminder={(reminderDays) => updateHomework(h.id, { reminderDays })}
-                      onUpdatePriority={(priority) => updateHomework(h.id, { priority })}
-                    />
-                  ))}
-                  <HomeworkAddForm
-                    placeholder="Например: подать заявку на олимпиаду"
-                    onAdd={(text, minutes, files, priority) => addHomework(selectedDate, "", text, minutes, undefined, files, priority)}
-                  />
+                    {looseResults.length > 0 && (
+                      <div data-day-results>
+                        <div className="ap-dlabel">Результаты</div>
+                        {looseResults.map((m) => (
+                          <button key={m.id} type="button" onClick={() => openResults(m.subject)} style={styles.dayResultRow} title="Открыть в «Результатах»">
+                            <span style={{ ...styles.dot, background: m.subject ? resultsColorOf(m.subject) : "var(--ink3)" }} />
+                            <span style={styles.dayResultName}>
+                              <b>{m.subject || "Без предмета"}</b> · {m.title}
+                              <span style={styles.dayResultKind}>
+                                {m.title.toLowerCase() === m.kindName.toLowerCase() ? "" : " · " + m.kindName.toLowerCase()}
+                                {m.official ? " · 🔒" : ""}
+                              </span>
+                            </span>
+                            <span style={{ ...styles.dayResultScore, ...toneOf(m) }}>{m.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="ap-dlabel">Занятия</div>
+                    {selectedDayEntries.length === 0 && (
+                      <div style={styles.mutedSmall}>{selectedDate > today ? "День ещё впереди." : "В этот день записей нет."}</div>
+                    )}
+                    {selectedDayEntries.map((e) => {
+                      const s = anySubjectById.get(e.subjectId);
+                      return (
+                        <div key={e.id} className="ap-dentry" data-focus-id={"journal:" + e.id}>
+                          <span className="ap-dot" style={{ background: s?.color }} />
+                          <b>{s?.name}</b>
+                          <span className="ap-dentry-note" title={e.note}>
+                            {e.note}
+                          </span>
+                          <span className="ap-dentry-h">{hoursLabel(e.hours)}</span>
+                          {e.fromTrainer ? (
+                            // Эта строка — не отдельная запись, а тот же журнал попыток
+                            // в другом виде. Удалять её нечем: удалять надо попытки.
+                            <span style={styles.jAuto} title="Время из тренажёра">секундомер</span>
+                          ) : (
+                            <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn} aria-label="Удалить запись">
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {selectedDate <= today && (
+                      <div className="ap-dactions">
+                        {selectedDate === today && !timer.running && (
+                          <button type="button" className="ap-dbtn is-go" onClick={() => setStartOpen(true)}>
+                            ▶ Засечь
+                          </button>
+                        )}
+                        <button type="button" className="ap-dbtn" onClick={() => setLogOpen(selectedDate === today || selectedDate)}>
+                          + Записать
+                        </button>
+                      </div>
+                    )}
+                  </section>
                 </div>
-              </div>
-            </div>
 
-            {/* Без заголовка эта форма читалась продолжением «Домашнего задания»
-                выше — две одинаковые строки полей подряд, и какая для чего, не
-                понять. Теперь у неё своё имя и черта сверху, как на «Сегодня». */}
-            <div style={styles.journalEntryHead}>
-              <CardHead
-                id="journal-entry"
-                title="Записать занятие"
-                note="Занятие попадёт в дневник на выбранную дату и в часы занятий."
-              />
-            </div>
-            <div style={styles.journalForm}>
-              <input type="date" value={jForm.date} onChange={(e) => setJForm({ ...jForm, date: e.target.value })} style={styles.dateInput} />
-              <select value={jForm.subjectId} onChange={(e) => setJForm({ ...jForm, subjectId: e.target.value })} style={styles.select}>
-                {ALL_SUBJECTS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={jForm.hours}
-                onChange={(e) => setJForm({ ...jForm, hours: e.target.value })}
-                style={styles.smallNumInput}
-              />
-              <input
-                type="text"
-                placeholder="Что прошли сегодня?"
-                value={jForm.note}
-                onChange={(e) => setJForm({ ...jForm, note: e.target.value })}
-                style={styles.textInput}
-              />
-              <button onClick={addJournalEntry} style={styles.addBtn}>
-                Записать
-              </button>
-            </div>
-
-            <div style={styles.journalList}>
-              {journalListed.length > 0 && <div style={styles.journalListHead}>Все записи</div>}
-              {journalListed.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
-              {journalListed.slice(0, journalShown).map((e) => {
-                const s = anySubjectById.get(e.subjectId);
-                return (
-                  <div key={e.id} style={styles.journalRow}>
-                    <span style={{ ...styles.dot, background: s?.color }} />
-                    <span style={styles.jDate}>{new Date(e.date).toLocaleDateString("ru-RU")}</span>
-                    <span style={styles.jSubj}>{s?.name}</span>
-                    <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
-                    <span style={styles.jNote}>{e.note}</span>
-                    {e.fromTrainer ? (
-                      // Эта строка — не отдельная запись, а тот же журнал попыток
-                      // в другом виде. Удалять её нечем: удалять надо попытки.
-                      <span style={styles.jAuto} title="Время из тренажёра">секундомер</span>
-                    ) : (
-                      <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
-                        ×
+                <details className="ap-card ap-dall" style={{ ...styles.card, padding: 0, marginTop: 16 }}>
+                  <summary>Все записи занятий · {journalListed.length}</summary>
+                  <div style={{ padding: "6px 16px 14px" }}>
+                    {journalListed.length === 0 && <div style={styles.muted}>Записей пока нет — начните с первой.</div>}
+                    {journalListed.slice(0, journalShown).map((e) => {
+                      const s = anySubjectById.get(e.subjectId);
+                      return (
+                        <div key={e.id} style={styles.journalRow}>
+                          <span style={{ ...styles.dot, background: s?.color }} />
+                          <span style={styles.jDate}>{new Date(e.date).toLocaleDateString("ru-RU")}</span>
+                          <span style={styles.jSubj}>{s?.name}</span>
+                          <span style={styles.jHours}>{hoursLabel(e.hours)}</span>
+                          <span style={styles.jNote}>{e.note}</span>
+                          {e.fromTrainer ? (
+                            <span style={styles.jAuto} title="Время из тренажёра">секундомер</span>
+                          ) : (
+                            <button onClick={() => removeJournalEntry(e.id)} style={styles.removeBtn}>
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {journalListed.length > journalShown && (
+                      <button onClick={() => setJournalShown(journalShown + JOURNAL_PAGE)} style={styles.eventsToggle}>
+                        Показать ещё {Math.min(JOURNAL_PAGE, journalListed.length - journalShown)} из {journalListed.length - journalShown}
                       </button>
                     )}
                   </div>
-                );
-              })}
-              {journalListed.length > journalShown && (
-                <button onClick={() => setJournalShown(journalShown + JOURNAL_PAGE)} style={styles.eventsToggle}>
-                  Показать ещё {Math.min(JOURNAL_PAGE, journalListed.length - journalShown)} из {journalListed.length - journalShown}
-                </button>
-              )}
-            </div>
-            </section>
-          </div>
-        )}
+                </details>
+              </>
+            );
+          })()}
 
         {screen === "notes" && (
           // Вариант A: предметы · оглавление тетради · открытая ветка. Раньше
@@ -5094,6 +5024,61 @@ export default function StudyPlanner() {
         )}
         </div>
       </main>
+
+      {/* Таймер занятия: кнопка на «Сегодня», окна запуска и итога, ручная запись. */}
+      <TimerFab timer={timer} show={screen === "today"} onStart={() => setStartOpen(true)} onStop={stopTimer} />
+      {startOpen && (
+        <StartDialog
+          subjects={ALL_SUBJECTS}
+          statsOf={(id) => stats.perSubject[id] || { done: 0, total: 0 }}
+          topicsOf={topicsOf}
+          homework={timerHomework}
+          colorOfLyceum={lyceumColorOf}
+          defaultSubjectId={lastSubjectId}
+          onStart={(ctx) => {
+            timer.start(ctx);
+            setStartOpen(false);
+          }}
+          onClose={() => setStartOpen(false)}
+        />
+      )}
+      {finishing && (
+        <FinishDialog
+          context={finishing.ctx}
+          minutes={finishing.minutes}
+          subjects={ALL_SUBJECTS}
+          topicsOf={topicsOf}
+          homeworkItem={finishing.ctx && finishing.ctx.kind === "hw" ? homework.find((h) => h.id === finishing.ctx.hwId) : null}
+          todayHours={studyPulse.todayHours}
+          goalHours={todayGoalHours}
+          onSave={saveFinished}
+          onResume={() => {
+            timer.restore(finishing.ctx);
+            setFinishing(null);
+          }}
+          onClose={() => setFinishing(null)}
+        />
+      )}
+      {logOpen && (
+        <LogDialog
+          subjects={ALL_SUBJECTS}
+          topicsOf={topicsOf}
+          initialSubjectId={lastSubjectId}
+          initialDate={typeof logOpen === "string" ? logOpen : null}
+          todayHours={studyPulse.todayHours}
+          goalHours={todayGoalHours}
+          onSave={saveLogged}
+          onTimer={
+            timer.running
+              ? null
+              : () => {
+                  setLogOpen(false);
+                  setStartOpen(true);
+                }
+          }
+          onClose={() => setLogOpen(false)}
+        />
+      )}
 
       {/* Окна «Лицея» — вне экрана, рядом с остальными окнами: внутри экрана
           нижняя полоса разделов на телефоне ложилась бы поверх листа. */}
@@ -6486,8 +6471,11 @@ function HomeworkReminders({ items, onToggle, onOpen, colorOf, title = "Не з�
   );
 }
 
-function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onUpdatePriority }) {
+// compact — в дневнике: важность и напоминание прячутся за «⋯», в строке остаётся
+// только метка важности.
+function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, onOpenAttachment, onRemoveAttachment, onUpdateReminder, onUpdatePriority, compact = false }) {
   const fileInputRef = useRef(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const auto = hw.reminderDays === undefined || hw.reminderDays === null || hw.reminderDays === "";
   const reminderMode = auto ? "auto" : hw.reminderDays === "always" ? "always" : hw.reminderDays === 1 ? "1" : "custom";
   const customDays = typeof hw.reminderDays === "number" && hw.reminderDays !== 1 ? hw.reminderDays : 3;
@@ -6522,6 +6510,19 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, 
             e.target.value = "";
           }}
         />
+        {compact && p > 1 && !moreOpen && <PriorityMark value={p} height={11} />}
+        {compact && (
+          <button
+            type="button"
+            onClick={() => setMoreOpen(!moreOpen)}
+            aria-expanded={moreOpen}
+            style={styles.attachBtn}
+            title="Важность и напоминание"
+            aria-label="Важность и напоминание"
+          >
+            ⋯
+          </button>
+        )}
         <button onClick={onRemove} style={styles.removeBtn}>
           ×
         </button>
@@ -6531,6 +6532,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, 
           <FileGrid files={hw.attachments} onDownload={onOpenAttachment} onRemove={onRemoveAttachment} dragSource={{ kind: "homework", id: hw.id }} />
         </div>
       )}
+      {(!compact || moreOpen) && (
       <div style={styles.hwReminderRow}>
         {onUpdatePriority && <HwPriorityButton value={p} onChange={onUpdatePriority} />}
         <span style={styles.mutedSmall}>Напоминать:</span>
@@ -6563,6 +6565,7 @@ function HomeworkItem({ hw, onToggleDone, onRemove, onAttach, onAttachExisting, 
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -7336,6 +7339,68 @@ const styles = {
     fontSize: 13.5,
     whiteSpace: "nowrap",
   },
+  pulseLabel: { fontSize: 11.5, color: "var(--ink3)" },
+  pulseValue: { fontFamily: "var(--serif)", fontSize: 20, lineHeight: 1.2, whiteSpace: "nowrap" },
+  pulseOf: { fontFamily: "var(--sans)", fontSize: 12.5, fontWeight: 600 },
+  todayGoalRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 0",
+    borderTop: "1px solid var(--line2)",
+    marginTop: 8,
+  },
+  todayGoalMark: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#FBF8F1",
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  todayGoalText: { flex: 1, minWidth: 0, fontSize: 14, display: "flex", flexDirection: "column" },
+  todayGoalNote: { fontSize: 12.5, color: "var(--ink3)" },
+  todayGoalBtn: {
+    height: 34,
+    padding: "0 12px",
+    border: "1px solid var(--line)",
+    borderRadius: 9,
+    background: "var(--panel2)",
+    fontSize: 13,
+    fontWeight: 600,
+    flexShrink: 0,
+  },
+  aheadRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+    padding: "6px 4px",
+    border: "none",
+    borderRadius: 10,
+    background: "transparent",
+    textAlign: "left",
+    color: "var(--ink)",
+  },
+  aheadDays: { width: 44, flexShrink: 0, textAlign: "center", fontFamily: "var(--serif)", fontSize: 26, lineHeight: 1 },
+  aheadDaysWord: { display: "block", fontFamily: "var(--sans)", fontSize: 11, color: "var(--ink3)", marginTop: 2 },
+  aheadName: { flex: 1, minWidth: 0, fontSize: 14 },
+  aheadPlan: { color: "var(--ink3)", fontSize: 12.5 },
+  budgetTabs: { display: "inline-flex", gap: 2, padding: 3, borderRadius: 12, background: "var(--neutralBg)" },
+  budgetTab: {
+    height: 38,
+    padding: "0 16px",
+    border: "none",
+    borderRadius: 9,
+    background: "transparent",
+    fontSize: 14,
+    color: "var(--ink2)",
+  },
+  budgetTabOn: { background: "var(--panel)", color: "var(--ink)", fontWeight: 600, boxShadow: "0 1px 2px rgba(0,0,0,.08)" },
   headAction: {
     display: "inline-flex",
     alignItems: "center",
