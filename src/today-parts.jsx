@@ -361,13 +361,17 @@ export function StartDialog({ subjects, statsOf, topicsOf, homework, colorOfLyce
 // --- окно «Занятие окончено» -------------------------------------------------
 // Таймер остановлен: время уже стоит, остаётся проверить и записать. Домашнее
 // задание отмечается сделанным, урок курса — пройденным (по галочке).
-export function FinishDialog({ context, minutes: initialMinutes, subjects, topicsOf, homeworkItem, todayHours, goalHours, onSave, onResume, onClose }) {
+// draft — что было выбрано, если запись отменили и вернулись к окну: окно
+// открывается с теми же минутами, предметом, уроком и заметкой.
+// onDiscard — «Не записывать»: занятие не попадёт в дневник.
+export function FinishDialog({ context, minutes: initialMinutes, draft, subjects, topicsOf, homeworkItem, todayHours, goalHours, onSave, onResume, onDiscard, onClose }) {
   const isHw = context && context.kind === "hw";
-  const [minutes, setMinutes] = useState(initialMinutes);
-  const [subjectId, setSubjectId] = useState((context && context.subjectId) || "");
-  const [topicId, setTopicId] = useState((context && context.topicId) || "");
-  const [markDone, setMarkDone] = useState(isHw ? true : false);
-  const [note, setNote] = useState("");
+  const d = draft || {};
+  const [minutes, setMinutes] = useState(d.minutes || initialMinutes);
+  const [subjectId, setSubjectId] = useState(d.subjectId !== undefined ? d.subjectId : (context && context.subjectId) || "");
+  const [topicId, setTopicId] = useState(d.topicId !== undefined ? d.topicId : (context && context.topicId) || "");
+  const [markDone, setMarkDone] = useState(d.markDone !== undefined ? d.markDone : isHw ? true : false);
+  const [note, setNote] = useState(d.note || "");
   const topics = useMemo(() => (subjectId && !isHw ? topicsOf(subjectId) : []), [subjectId, topicsOf, isHw]);
   const topic = topics.find((t) => t.id === topicId);
   const subject = subjects.find((s) => s.id === subjectId);
@@ -471,6 +475,9 @@ export function FinishDialog({ context, minutes: initialMinutes, subjects, topic
             </span>
           )}
         </span>
+        <button type="button" onClick={onDiscard} style={S.btnGhost} data-discard>
+          Не записывать
+        </button>
         <button type="button" onClick={onResume} style={S.btnGhost}>
           ▶ Продолжить таймер
         </button>

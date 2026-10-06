@@ -210,6 +210,27 @@ const open = async (state) => {
   });
   want("таймер без предмета: запись в дневнике", entry && !entry.subjectId && entry.hours > 0, JSON.stringify(entry));
 
+  // «Отменить» у записи — запись убрана, окно занятия снова открыто.
+  const journalLen = () => page.evaluate(() => {
+    const raw = localStorage.getItem("planner:planner-state-v5");
+    return ((raw ? JSON.parse(JSON.parse(raw).value) : {}).journal || []).length;
+  });
+  const finishOpen = () => page.locator('[role="dialog"][aria-label="Занятие окончено"]').count();
+  await page.getByRole("button", { name: "Отменить запись и вернуться к окну" }).first().click();
+  await page.waitForTimeout(1600);
+  want("отмена записи с таймера: окно занятия снова открыто", (await finishOpen()) === 1);
+  want("отмена записи с таймера: запись убрана", (await journalLen()) === 0);
+  // «Не записывать» — окно закрыто, записи нет; крестиком в уведомлении — назад к окну.
+  await page.locator('[role="dialog"] [data-discard]').click();
+  await page.waitForTimeout(1600);
+  want("«Не записывать»: окно закрыто, записи нет", (await finishOpen()) === 0 && (await journalLen()) === 0);
+  await page.getByRole("button", { name: "Вернуться к окну занятия" }).first().click();
+  await page.waitForTimeout(400);
+  want("«Не записывать» можно отменить — окно вернулось", (await finishOpen()) === 1);
+  await page.locator('[role="dialog"]').last().locator("button", { hasText: /^Записать$/ }).last().click();
+  await page.waitForTimeout(1600);
+  want("после возврата запись сохраняется", (await journalLen()) === 1);
+
   await page.locator("button:visible", { hasText: "Дневник" }).first().click();
   await page.waitForTimeout(900);
   const add = page.locator('[data-diary-lesson="Право"] .ap-dadd');
