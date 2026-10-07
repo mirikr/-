@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { retryImport } from "./chunk-reload.js";
 import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
 import { loadBank, withBase } from "./bank-load.js";
 import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
@@ -10,7 +11,7 @@ import { VOSH_INDEX } from "./vosh-index.js";
 
 // Тесты ВсОШ — отдельный раздел со своим видом заданий. Грузится, только когда
 // его открыли: набор олимпиад с текстами весит как целый предмет банка.
-const VoshTrainer = lazy(() => import("./vosh-trainer.jsx"));
+const VoshTrainer = lazy(retryImport(() => import("./vosh-trainer.jsx")));
 const VOSH_OPEN = "vosh";
 const VOSH_IDS = VOSH_INDEX.flatMap((o) => o.ids);
 

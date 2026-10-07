@@ -7,6 +7,7 @@ import { orderOwners, togglePin, moveOwner, ownerMeta, setSort } from "./noteboo
 import SortableList from "./sortable-list.jsx";
 import { moveTopicOrder, orderedTopics } from "./topic-order.js";
 import RichText from "./rich-text.jsx";
+import { retryImport } from "./chunk-reload.js";
 import Collapsible from "./collapsible.jsx";
 import HoursChart from "./hours-chart.jsx";
 import { buildIcs } from "./calendar.js";
@@ -41,7 +42,7 @@ import SchoolDay, { SchoolSheet, SCHOOL_CSS, SCHOOL_MOBILE_CSS } from "./school-
 import { buildDay, dayCountLabel } from "./school-timeline.js";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
-const Trainer = lazy(() => import("./trainer.jsx"));
+const Trainer = lazy(retryImport(() => import("./trainer.jsx")));
 import { BANK_SUBJECTS } from "./fipi-index.js";
 import { VOSH_SUBJECTS } from "./vosh-index.js";
 import { goalMinutesFor, withDaily } from "./budget-history.js";
@@ -242,9 +243,9 @@ const SANDBOX = import.meta.env.VITE_SANDBOX === "1";
 // не включат (VITE_RESULTS=1 или сборка предпросмотра).
 const RESULTS_ON = SANDBOX || import.meta.env.VITE_RESULTS === "1";
 // На сайте, пока раздел выключен, его код в сборку не попадает.
-const ResultsScreen = RESULTS_ON ? lazy(() => import("./results-screen.jsx")) : null;
+const ResultsScreen = RESULTS_ON ? lazy(retryImport(() => import("./results-screen.jsx"))) : null;
 // Данные результатов для дневника и расписания — тоже только там, где раздел есть.
-const loadResultsData = RESULTS_ON ? () => import("./results-data.js") : null;
+const loadResultsData = RESULTS_ON ? retryImport(() => import("./results-data.js")) : null;
 const TASK_FOLDS_KEY = "planner-task-folds";
 function readTaskFolds() {
   try {
@@ -2636,12 +2637,19 @@ export default function StudyPlanner() {
   );
 
   function goScreen(key) {
-    setScreen(key);
     try {
       localStorage.setItem(SCREEN_KEY, key);
     } catch (e) {
       /* приватный режим — экран просто не запомнится */
     }
+    // Новая версия уже встала, а на экране старая: переход в другой раздел —
+    // удобный момент перезапуститься. Раздел откроется уже в новой версии, а
+    // старая не станет подгружать куски, которых больше нет.
+    if (window.__plannerUpdateReady && !updateBusy()) {
+      window.location.reload();
+      return;
+    }
+    setScreen(key);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

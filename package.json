@@ -1,7 +1,7 @@
 {
   "name": "study-planner",
   "private": true,
-  "version": "1.11.2",
+  "version": "1.11.2.1",
   "type": "module",
   "description": "Ежедневник обществоведа — планировщик подготовки к экзамену и олимпиаде",
   "scripts": {
@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "node tests/merge.test.mjs && node tests/calendar.test.mjs && node tests/schedule.test.mjs && node tests/files.test.mjs && node tests/now.test.mjs && node tests/olympiads.test.mjs && node tests/repetition.test.mjs && node tests/search.test.mjs && node tests/trainer-time.test.mjs && node tests/trainer-order.test.mjs && node tests/schedule-switch.test.mjs && node tests/school-timeline.test.mjs && node tests/event-details.test.mjs && node tests/notebook-order.test.mjs && node tests/styles.test.mjs && node tests/chart-labels.test.mjs && node tests/file-library.test.mjs && node tests/file-move.test.mjs && node tests/topic-order.test.mjs && node tests/outline-drag.test.mjs && node tests/results.test.mjs && node tests/gradebook.test.mjs && node tests/budget-history.test.mjs && node tests/vosh.test.mjs && node tests/bank.test.mjs",
     "check:quick": "node scripts/check-quick.mjs",
+    "check:update": "node scripts/check-update.mjs",
     "check:render": "node scripts/check-render.mjs",
     "check:upgrade": "node scripts/check-upgrade.mjs",
     "check:crash": "node scripts/check-crash.mjs",

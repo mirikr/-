@@ -1,6 +1,13 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
+import { reloadOnce } from "./chunk-reload.js";
+
+// Vite сам сообщает, что не смог подгрузить кусок (обычно — кусок старой
+// версии после обновления): перезагружаемся на новой вместо ошибки.
+window.addEventListener("vite:preloadError", (event) => {
+  if (reloadOnce()) event.preventDefault();
+});
 
 // Обновление приложения. Оно работает офлайн, поэтому открывается из своей
 // копии, а новая версия скачивается в фоне. Когда новая версия встала на

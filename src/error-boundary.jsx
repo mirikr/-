@@ -1,5 +1,6 @@
 import React from "react";
 import { THEME_CSS } from "./theme.js";
+import { isChunkError, reloadOnce } from "./chunk-reload.js";
 
 // Последняя страховка: если что-то в приложении упало, человек не должен
 // видеть белый лист.
@@ -52,10 +53,20 @@ export default class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
-    return { failed: true, message: String((error && error.message) || error || "неизвестная ошибка") };
+    return { failed: true, chunk: isChunkError(error), message: String((error && error.message) || error || "неизвестная ошибка") };
   }
 
   componentDidCatch(error, info) {
+    // Не загрузился кусок старой версии — приложение обновилось, пока было
+    // открыто. Это не поломка: перезагружаемся на новой версии сами. Только
+    // если и это не помогло (перезагрузка была только что), показываем экран.
+    if (isChunkError(error)) {
+      if (reloadOnce()) {
+        this.setState({ reloading: true });
+        return;
+      }
+      this.setState({ chunk: false });
+    }
     // В консоль — целиком: по одной строке на экране причину не найти.
     try {
       console.error("Ежедневник упал:", error, info);
@@ -94,6 +105,14 @@ export default class ErrorBoundary extends React.Component {
 
   render() {
     if (!this.state.failed) return this.props.children;
+    if (this.state.chunk || this.state.reloading) {
+      return (
+        <div style={styles.page}>
+          <style>{THEME_CSS}</style>
+          <div style={{ ...styles.text, marginTop: 40 }}>Обновляем приложение…</div>
+        </div>
+      );
+    }
     const raw = readAll();
     const records = countRecords(raw);
     return (
