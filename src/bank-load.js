@@ -6,6 +6,8 @@
 //
 // Список файлов Vite собирает сам во время сборки, поэтому каждый предмет
 // оказывается отдельным куском и подтягивается по требованию.
+import { isChunkError, reloadOnce } from "./chunk-reload.js";
+
 const FILES = import.meta.glob("./bank/*.js");
 
 const loaded = new Map();
@@ -26,6 +28,8 @@ export async function loadBank(file) {
     loaded.set(file, tasks);
     return tasks;
   } catch (e) {
+    // Набор старой версии после обновления — перезагружаемся на новой.
+    if (typeof window !== "undefined" && window.__plannerUpdateReady && isChunkError(e) && reloadOnce()) return new Promise(() => {});
     // Без сети и без кеша набор не придёт. Пустой список приложение переживает:
     // тренажёр честно скажет, что задания не загрузились.
     return null;
