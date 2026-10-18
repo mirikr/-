@@ -37,12 +37,13 @@ const problems = [];
 const want = (n, ok, note) => { if (!ok) problems.push(n + (note ? ": " + note : "")); console.log((ok ? "✓ " : "✗ ") + n + (note ? " — " + note : "")); };
 
 const index = await import("../src/fipi-index.js");
-const phys = index.BANK_SUBJECTS.find((s) => s.name === "Физика");
+// В тренажёре с 1.11.2.2 одно обществознание: порог дня — 15 заданий.
+const soc = index.BANK_SUBJECTS.find((s) => s.name === "Обществознание");
 const today = new Date().toISOString().slice(0, 10);
 
-// Кладём готовый журнал попыток: пять заданий по физике, по 6 минут каждое.
+// Кладём готовый журнал попыток по обществознанию.
 const seed = (ids, seconds) => ({
-  trainerLog: ids.map((id, i) => ({ id: "try-" + id, at: today + "T10:0" + i + ":00.000Z", taskId: id, answer: "1", ok: true, seconds })),
+  trainerLog: ids.map((id, i) => ({ id: "try-" + id, at: today + "T10:" + String(i).padStart(2, "0") + ":00.000Z", taskId: id, answer: "1", ok: true, seconds })),
 });
 
 // Карточка-напоминание о занятиях. Ищем её по содержимому, а не по номеру:
@@ -76,7 +77,7 @@ const open = async (state) => {
   const card = await reminder(page);
   want("на чистом приложении предложение есть", /Реши \d+ задани/i.test(card),
     (card.match(/Реши[^\n]*/i) || [])[0] || card.slice(0, 80));
-  want("названы и предмет, и порог пониже", /Обществознание/.test(card) && /хватит 5/.test(card),
+  want("назван предмет, без физики и информатики", /Обществознание/.test(card) && !/Физика|Информатика/.test(card),
     (card.match(/Реши[^\n]*/i) || [])[0] || "");
   want("предложение ведёт в тренажёр", /В тренажёр/.test(card));
   want("ошибок нет", errors.length === 0, errors[0] || "");
@@ -85,10 +86,10 @@ const open = async (state) => {
 
 // --- мало заданий: день ещё не засчитан, но предложение видно --------------
 {
-  const { browser, page, errors } = await open(seed(phys.ids.slice(0, 2), 360));
+  const { browser, page, errors } = await open(seed(soc.ids.slice(0, 2), 360));
   const card = await reminder(page);
-  want("предложение показано с остатком", /осталось 3 задания/i.test(card), (card.match(/Решено[^\n]*/) || [])[0]);
-  want("назван предмет", /Физика/.test(card));
+  want("предложение показано с остатком", /осталось 13 заданий/i.test(card), (card.match(/Решено[^\n]*/) || [])[0]);
+  want("назван предмет", /Обществознание/.test(card));
   want("две задачи серию не продлевают", !/подряд/.test(card), (card.match(/\d+\s*\n?дн\S*\s*подряд/) || [])[0] || "");
   const tile = ((await page.locator("main").innerText()).match(/Серия\s*\n\s*(\d+)/) || [])[1];
   want("и в плитке серии ноль", tile === undefined || tile === "0", "серия: " + tile);
@@ -97,9 +98,9 @@ const open = async (state) => {
   await browser.close();
 }
 
-// --- пять заданий: день засчитан ------------------------------------------
+// --- пятнадцать заданий: день засчитан ------------------------------------
 {
-  const { browser, page, errors } = await open(seed(phys.ids.slice(0, 5), 360));
+  const { browser, page, errors } = await open(seed(soc.ids.slice(0, 15), 120));
   // Когда день засчитан, в новом дизайне напоминание уходит совсем, а часы и
   // серия видны в плитках. Поэтому смотрим весь экран, а не одну карточку.
   const screenText = await page.locator("main").innerText();
@@ -114,12 +115,28 @@ const open = async (state) => {
   await page.waitForTimeout(900);
   const jour = await page.locator("body").innerText();
   // Строка записи: предмет, заметка, часы — часы с 1.11 стоят после заметки.
-  const row = (jour.match(/[^\n]*\n[^\n]*\n[^\n]*Тренажёр: 5 заданий[^\n]*(\n[^\n]*){0,2}/) || [])[0] || "";
-  want("в дневнике есть строка тренажёра", /Тренажёр: 5 заданий/.test(jour), row.replace(/\n/g, " | "));
-  want("у строки назван предмет", /Физика/.test(row), row.replace(/\n/g, " | "));
+  const row = (jour.match(/[^\n]*\n[^\n]*\n[^\n]*Тренажёр: 15 заданий[^\n]*(\n[^\n]*){0,2}/) || [])[0] || "";
+  want("в дневнике есть строка тренажёра", /Тренажёр: 15 заданий/.test(jour), row.replace(/\n/g, " | "));
+  want("у строки назван предмет", /Обществознание/.test(row), row.replace(/\n/g, " | "));
   want("в строке стоит полчаса", /0,5 ч/.test(row));
   want("строку тренажёра не удалить", /секундомер/.test(jour));
   want("ошибок нет", errors.length === 0, errors[0] || "");
+  await browser.close();
+}
+
+// --- физику убрали из тренажёра: решённое по ней не пропадает -------------
+// Попытки по физике (сделанные до 1.11.2.2) остаются временем в дневнике, а
+// «Сегодня» не зовёт решать физику: открыть её в тренажёре больше негде.
+{
+  const phys = index.BANK_SUBJECTS.find((s) => s.name === "Физика");
+  const { browser, page, errors } = await open(seed(phys.ids.slice(0, 2), 360));
+  const card = await reminder(page);
+  want("решали физику — «Сегодня» в физику не зовёт", !/Физика/.test(card) && /Обществознание/.test(card), (card.match(/Реши[^\n]*|Решено[^\n]*/) || [])[0] || card.slice(0, 80));
+  await page.locator("button:visible", { hasText: "Дневник" }).first().click();
+  await page.waitForTimeout(900);
+  const jour = await page.locator("body").innerText();
+  want("время по физике осталось в дневнике", /Тренажёр: 2 задания/.test(jour) && /Физика/.test(jour), (jour.match(/[^\n]*Тренажёр[^\n]*/) || [])[0] || "");
+  want("физика: ошибок нет", errors.length === 0, errors[0] || "");
   await browser.close();
 }
 
@@ -183,8 +200,10 @@ const open = async (state) => {
 // Кнопка «+ задание» у урока в дневнике видна сразу, без наведения.
 {
   // Состояние пишется заново при каждой перезагрузке — расписание кладём сразу.
-  const dow = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][new Date().getDay()];
-  const { browser, page, errors } = await open({ lyceumSchedule: [{ id: "l1", day: dow, start: "09:00", end: "09:45", subjectName: "Право" }] });
+  // Урок — по понедельникам: воскресенье приложение по умолчанию не показывает,
+  // и привязка к сегодняшнему дню ломала проверку по воскресеньям.
+  const monday = (() => { const d = new Date(); while (d.getDay() !== 1) d.setDate(d.getDate() + 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
+  const { browser, page, errors } = await open({ lyceumSchedule: [{ id: "l1", day: "mon", start: "09:00", end: "09:45", subjectName: "Право" }] });
   await page.locator("button:visible", { hasText: /Засечь/ }).first().click();
   await page.waitForTimeout(300);
   const dialog = page.locator('[role="dialog"]').last();
@@ -233,6 +252,8 @@ const open = async (state) => {
 
   await page.locator("button:visible", { hasText: "Дневник" }).first().click();
   await page.waitForTimeout(900);
+  await page.locator(`[data-day="${monday}"]:visible`).first().click();
+  await page.waitForTimeout(300);
   const add = page.locator('[data-diary-lesson="Право"] .ap-dadd');
   const opacity = (await add.count()) ? await add.evaluate((e) => getComputedStyle(e).opacity) : "нет кнопки";
   want("дневник: «+ задание» у урока видно без наведения", opacity === "1", "opacity " + opacity);
@@ -319,10 +340,17 @@ const open = async (state) => {
 
   await page.locator("button:visible", { hasText: "Лицей" }).first().click();
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: "Следующая неделя" }).first().click();
+  // Понедельник срока — в этой неделе «Лицея» или в следующей: в воскресенье
+  // «Лицей» уже показывает наступающую неделю.
+  const firstDay = () => page.locator('[role="tablist"][aria-label="День недели"] [role="tab"]').first().click();
+  await firstDay();
   await page.waitForTimeout(400);
-  await page.locator('[role="tablist"][aria-label="День недели"] [role="tab"]').first().click();
-  await page.waitForTimeout(400);
+  if (!(await page.locator('[data-hw-move-open="h2"]:visible').count())) {
+    await page.getByRole("button", { name: "Следующая неделя" }).first().click();
+    await page.waitForTimeout(400);
+    await firstDay();
+    await page.waitForTimeout(400);
+  }
   await page.locator('[data-hw-move-open="h2"]:visible').first().click();
   await page.locator('[data-hw-move="h2"] [data-move-date]').first().click();
   await page.waitForTimeout(1600);

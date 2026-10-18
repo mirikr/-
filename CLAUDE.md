@@ -13,7 +13,11 @@
 
 Сборки для проверок:
 
-- сайт: `BASE_PATH=/-/ npx vite build` (без `BASE_PATH` проверки не найдут файлы);
+- сайт: `BASE_PATH=/-/ npx vite build` (без `BASE_PATH` проверки не найдут файлы). Нужны ключи облака
+  `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` в окружении — те же публичные, что в сборке сайта
+  (`https://wrivraarzsghtjyirioa.supabase.co`, `sb_publishable_6kEbzVcT1eQzSRat5_wcxw_-Q_MAWMP`). Без них
+  сборка выходит без облака, встроенные предметы «Подготовки» видны всем, и `check:notebook`,
+  `check:drag`, `check:files`, `check:design` падают на задвоенных предметах — это не поломка кода;
 - без облака (для `check:pe`): `BASE_PATH=/-/ VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= npx vite build --outDir dist-nocloud`;
 - предпросмотр (для `check:results`): `VITE_SANDBOX=1 VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY= BASE_PATH=./ npx vite build --outDir <папка>`, затем `DIST=<папка> npm run check:results`.
 

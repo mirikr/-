@@ -114,10 +114,13 @@ want("секундомер идёт", secs(second) > secs(first), first + " → 
 // Какое задание показано и какой у него ответ — берём из набора приложения.
 const shownId = (head.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
 const index = await import("../src/fipi-index.js");
+// В тренажёре с 1.11.2.2 только обществознание; физика и информатика остались
+// в описи (по ней подписывается уже решённое время), но открыть их нельзя.
+const { TRAINER_SUBJECTS } = await import("../src/trainer-subjects.js");
 const bankOf = async (file) => (await import("../src/bank/" + file + ".js")).TASKS;
 const society = await bankOf("society");
 const task = society.find((t) => t.id === shownId);
-want("в описи три предмета", index.BANK_SUBJECTS.length === 3, index.BANK_SUBJECTS.map((s) => s.name).join(", "));
+want("в тренажёре одно обществознание", TRAINER_SUBJECTS.map((s) => s.name).join() === "Обществознание", TRAINER_SUBJECTS.map((s) => s.name).join(", "));
 want("задание из набора", !!task, shownId);
 
 // Неверный ответ: приложение должно сказать «Неверно», показать ключ и разбор.
@@ -188,23 +191,17 @@ want("сказано, откуда берётся счёт ключей", /сч�
   (stats.match(/[^\n]*счёт[^\n]*/) || [])[0]);
 
 // Итоги должны относиться к выбранному предмету, а не ко всему сразу.
-const firstSubject = index.BANK_SUBJECTS[0].name;
+const firstSubject = TRAINER_SUBJECTS[0].name;
 want("в заголовке итогов назван предмет", stats.toLowerCase().includes("как идут дела · " + firstSubject.toLowerCase()),
   (stats.match(/Как идут дела[^\n]*/) || [])[0]);
-const otherSubject = index.BANK_SUBJECTS[1].name;
 const openSubject = async (name) => {
   const back = page.getByRole("button", { name: "К выбору предмета" });
   if (await back.count()) { await back.first().click(); await page.waitForTimeout(300); }
   const row = page.locator("section.ap-card div").filter({ hasText: new RegExp("^" + name) });
-  await page.getByRole("button", { name: /Начать тест|Продолжить/ }).nth(index.BANK_SUBJECTS.findIndex((s) => s.name === name)).click();
+  await page.getByRole("button", { name: /Начать тест|Продолжить/ }).nth(TRAINER_SUBJECTS.findIndex((s) => s.name === name)).click();
   await page.waitForTimeout(900);
   return row;
 };
-await openSubject(otherSubject);
-const otherStats = await page.locator("#root").innerText();
-const done = (otherStats.match(/(\d+)\s*\nрешено/) || [])[1];
-want("у другого предмета свои итоги", done === "0", otherSubject + ": решено " + done);
-want("списки жалоб тоже по предмету", !/Спорные ключи/.test(otherStats) && !/Задания, на которые пожаловались/.test(otherStats));
 await openSubject(firstSubject);
 want("у своего предмета итоги на месте", /Спорные ключи/.test(await page.locator("#root").innerText()));
 
@@ -253,21 +250,13 @@ const brokenSaved = await page.evaluate(() => {
 });
 want("жалоба на задание сохранилась", brokenSaved === 1, "записей: " + brokenSaved);
 
-// Предметы переключаются, и набор меняется.
-for (const s of index.BANK_SUBJECTS.slice(1)) {
-  await openSubject(s.name);
-  const t = await card.innerText();
-  const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
-  const found = (await bankOf(s.file)).find((x) => x.id === id);
-  want("предмет «" + s.name + "» открывается", !!found && found.subject === s.name, id + " → " + (found ? found.subject : "не нашлось"));
-}
 
 // «Решать все задания подряд» открывает тот же предмет, но вместе с решённым:
 // задание, которое только что решили верно, из набора не выпадает.
 {
   await page.getByRole("button", { name: "К выбору предмета" }).first().click();
   await page.waitForTimeout(400);
-  const one = index.BANK_SUBJECTS[0];
+  const one = TRAINER_SUBJECTS[0];
   const i = 0;
   await page.getByRole("button", { name: "Решать все задания подряд" }).nth(i).click();
   await page.waitForTimeout(1200);
@@ -296,12 +285,11 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
 {
   await page.getByRole("button", { name: "К выбору предмета" }).first().click();
   await page.waitForTimeout(400);
-  const i = index.BANK_SUBJECTS.findIndex((x) => x.name === "Информатика");
-  await page.getByRole("button", { name: /Начать тест|Продолжить/ }).nth(i).click();
+  await page.getByRole("button", { name: /Начать тест|Продолжить/ }).first().click();
   await page.waitForTimeout(1200);
   const first = await card.innerText();
   const id = (first.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
-  const t = (await bankOf("informatics")).find((x) => x.id === id);
+  const t = (await bankOf("society")).find((x) => x.id === id);
   want("первое задание предмета показано", !!t, "№ " + id);
   await page.getByLabel("Ваш ответ").fill(t.answer);
   await page.getByRole("button", { name: "Ответить" }).click();
@@ -347,6 +335,8 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
   await page.waitForTimeout(500);
   const picker = await card.innerText();
   want("на выборе предмета есть общий итог", /Всего в тренажёре/.test(picker));
+  want("физики и информатики в тренажёре нет", !/Физика|Информатика/.test(picker),
+    (picker.match(/[^\n]*(Физика|Информатика)[^\n]*/) || [])[0] || "");
   want("в итоге назван весь набор", /из \d{3,} решено/.test(picker),
     (picker.match(/из \d+ решено/) || [])[0] || "");
   want("в итоге есть доля верных и время", /% ?\nверных|верных/.test(picker) && /за секундомером/.test(picker));
@@ -354,8 +344,11 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
     /из \d+ в банке ФИПИ — [\d,]+%/.test(picker),
     (picker.match(/из \d+ в банке[^\n]*/) || [])[0] || "");
   // Число заданий стоит один раз — в шапке карточки, а не ещё и в строке ниже.
-  want("число заданий не задвоено", (picker.match(/392/g) || []).length === 1,
-    (picker.match(/[^\n]*392[^\n]*/g) || []).join(" · "));
+  // Считаем только карточки: общий итог ниже с одним предметом в тренажёре
+  // законно называет то же число.
+  const cards = picker.split("Всего в тренажёре")[0];
+  want("число заданий не задвоено", (cards.match(/392/g) || []).length === 1,
+    (cards.match(/[^\n]*392[^\n]*/g) || []).join(" · "));
   // Заголовок карточки повторял заголовок экрана — его быть не должно.
   want("заголовок не задвоен", (picker.match(/Тренажёр по банку ФИПИ/g) || []).length === 0);
   // Подсказка про кнопки одна на все предметы, а не на каждой карточке, и та свёрнута.
@@ -367,7 +360,14 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
 // Неверно решённые задания должны возвращаться отдельной кнопкой: разобрать
 // ошибку — это и есть подготовка, а искать её среди сотен заданий нечем.
 {
-  // Мы уже на выборе предмета — сюда вернулись в проверке общего итога.
+  // Нарочно ошибаемся: верный ответ выше исправил прежнюю ошибку, а без
+  // неверно решённых этой кнопки нет.
+  await openSubject(firstSubject);
+  await page.getByLabel("Ваш ответ").fill("заведомо не тот ответ");
+  await page.getByRole("button", { name: "Ответить" }).click();
+  await page.waitForTimeout(1600);
+  await page.getByRole("button", { name: "К выбору предмета" }).first().click();
+  await page.waitForTimeout(500);
   const picker = await card.innerText();
   want("на карточке есть «Перерешать неверные»", /Перерешать неверные \(\d+\)/.test(picker),
     (picker.match(/Перерешать неверные[^\n]*/) || [])[0] || "кнопки нет");
@@ -390,7 +390,7 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
     (opened.match(/показаны только[^\n]*/) || [])[0] || "");
 
   // Ответили верно — задание уходит из набора неверных.
-  const t = (await bankOf(index.BANK_SUBJECTS[0].file)).find((x) => x.id === id);
+  const t = (await bankOf(TRAINER_SUBJECTS[0].file)).find((x) => x.id === id);
   await page.getByLabel("Ваш ответ").fill(t.answer);
   await page.getByRole("button", { name: "Ответить" }).click();
   await page.waitForTimeout(1600);
@@ -509,16 +509,17 @@ for (const s of index.BANK_SUBJECTS.slice(1)) {
 }
 
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
-await openSubject("Физика");
+await openSubject(firstSubject);
+await page.getByRole("button", { name: "По порядку" }).first().click();
+await page.waitForTimeout(500);
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,
 // где в разметку не попал.
-const physics = await bankOf("physics");
-const withPictures = new Set(physics
+const withPictures = new Set(society
   .filter((t) => t.pictures.length || /<img/.test(t.body || ""))
   .map((t) => t.id));
 want("в наборе есть задания с рисунками", withPictures.size > 0, withPictures.size + " шт.");
 let shownPicture = 0;
-for (let step = 0; step < 40; step += 1) {
+for (let step = 0; step < 80; step += 1) {
   const t = await card.innerText();
   const id = (t.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
   if (withPictures.has(id)) {
@@ -536,7 +537,9 @@ want("рисунок задания виден на экране", shownPicture 
 // нему задание и ищут; найденное должно открываться сразу на нём, а не «где-то
 // там в тренажёре» — и открываться даже тогда, когда его уже решали.
 {
-  const wanted = (await bankOf("physics"))[3];
+  const wanted = society[3];
+  // Задания убранных из тренажёра предметов в поиске не всплывают: открыть их негде.
+  const gone = (await bankOf("physics"))[3];
   await page.getByRole("button", { name: /Поиск/ }).first().click();
   await page.waitForTimeout(400);
   const box = page.locator('[aria-label="Поиск по записям"]');
@@ -547,6 +550,11 @@ want("рисунок задания виден на экране", shownPicture 
   want("задание нашлось по номеру", list.includes("№ " + wanted.id) && /задания банка/i.test(list),
     (list.match(/№\s*\S+/) || [])[0] || list.slice(0, 80));
   want("у находки подписан предмет", list.includes(wanted.subject));
+  await box.fill(gone.id);
+  await page.waitForTimeout(500);
+  want("задание физики в поиске не находится", !(await page.locator("section.ap-card").first().innerText()).includes("№ " + gone.id));
+  await box.fill(wanted.id);
+  await page.waitForTimeout(500);
 
   // По началу номера — тоже: весь номер на память никто не держит.
   await box.fill(wanted.id.slice(0, 4));

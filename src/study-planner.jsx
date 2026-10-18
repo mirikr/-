@@ -44,6 +44,7 @@ import { buildDay, dayCountLabel } from "./school-timeline.js";
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(retryImport(() => import("./trainer.jsx")));
 import { BANK_SUBJECTS } from "./fipi-index.js";
+import { TRAINER_SUBJECTS, inTrainer } from "./trainer-subjects.js";
 import { VOSH_SUBJECTS } from "./vosh-index.js";
 import { goalMinutesFor, withDaily } from "./budget-history.js";
 import { FileLibraryContext, PickExistingButton } from "./file-picker.jsx";
@@ -1699,11 +1700,11 @@ export default function StudyPlanner() {
     const today = todayStr();
     const counted = journal.some((e) => e.date === today && (Number(e.hours) || 0) > 0) || dayCounts(trainerByDay, today);
     if (counted) return null;
-    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", BANK_SUBJECTS);
+    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", TRAINER_SUBJECTS);
     if (!offer || offer.left <= 0) return null;
     // Пятнадцать заданий по обществознанию выглядят неподъёмно, когда времени
     // нет совсем. Поэтому рядом называем предмет, где хватит пяти.
-    return { ...offer, cheaper: offer.solved ? null : cheapestGoal(BANK_SUBJECTS, offer.subject) };
+    return { ...offer, cheaper: offer.solved ? null : cheapestGoal(TRAINER_SUBJECTS, offer.subject) };
   }, [journal, trainerByDay, trainerState]);
 
   // В календарь уходит всё, у чего есть дата: события, экзамены из расписания и
@@ -2780,7 +2781,8 @@ export default function StudyPlanner() {
   const found = useMemo(
     () =>
       searchAll(query, {
-        bankTasks: bankFind || [],
+        // В поиске — только задания предметов, что остались в тренажёре.
+        bankTasks: (bankFind || []).filter((t) => inTrainer(t.subject)),
         subjects: subjectsWithTopics,
         journal,
         subjectName: subjectNameById,
@@ -2925,7 +2927,7 @@ export default function StudyPlanner() {
   const trainerToday = (() => {
     const today = todayStr();
     if (dayCounts(trainerByDay, today)) return "✓ сегодня";
-    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", BANK_SUBJECTS);
+    const offer = offerFor(trainerByDay, today, (trainerState && trainerState.open) || "", TRAINER_SUBJECTS);
     return offer && offer.solved > 0 ? offer.solved + " из " + offer.need : "";
   })();
   // Какие карточки внизу «Сегодня» пусты. События не пусты, пока есть главное:
@@ -2976,7 +2978,7 @@ export default function StudyPlanner() {
     events: ["События", "Приоритет решает, до какого события считается план"],
     budget: ["Распределение времени (КПВ)", "Слева — что вы задаёте, справа — что из этого получается"],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
-    trainer: ["Тренажёр", "Банк ФИПИ по обществознанию, физике и информатике и тесты ВсОШ по обществознанию"],
+    trainer: ["Тренажёр", "Банк ФИПИ и тесты ВсОШ по обществознанию"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник", "Оценки, задания, события и занятия — по дням"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
