@@ -27,6 +27,9 @@ let bad = 0;
 const want = (name, ok, note = "") => { if (!ok) bad += 1; console.log((ok ? "✓ " : "✗ ") + name + (note ? " — " + note : "")); };
 
 const fixture = JSON.parse(await readFile(resolve(process.cwd(), "scripts/fixtures/lyceum-grid-2026-09-01.json"), "utf8"));
+// Номер выпуска сетки — из самих данных лицея: он поднимается при каждой правке
+// расписания, и проверка не должна ломаться от этого.
+const { LYCEUM_REVISION } = await import(resolve(process.cwd(), "src/lyceum-schedule-10.js"));
 const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 // Следующая неделя: понедельник после сегодняшнего дня.
 const now = new Date();
@@ -86,7 +89,7 @@ const stored = await page.evaluate(() => JSON.parse(JSON.parse(localStorage.getI
 const lessons = stored.lyceumSchedule || [];
 const ids = new Set(lessons.map((e) => e.id));
 const hw = Object.fromEntries((stored.homework || []).map((h) => [h.id, h]));
-want("расписание пересобрано по новой сетке", stored.lyceumRevision === 3 && lessons.some((e) => e.subjectName === "Логика" && e.day === "tue" && e.start === "12:20"));
+want("расписание пересобрано по новой сетке", stored.lyceumRevision === LYCEUM_REVISION && lessons.some((e) => e.subjectName === "Логика" && e.day === "tue" && e.start === "12:20"));
 want("урок, заведённый руками, на месте", lessons.some((e) => e.id === "sch-manual-1"));
 want("обществознание: вторник → среда той же недели, к новому уроку", hw["hw-soc"].date === WED && ids.has(hw["hw-soc"].lessonId), hw["hw-soc"].date + " " + hw["hw-soc"].lessonId);
 want("логика: понедельник → вторник той же недели", hw["hw-logic"].date === TUE && ids.has(hw["hw-logic"].lessonId), hw["hw-logic"].date);
@@ -140,7 +143,7 @@ await ctx.close();
   const schedule = buildSchedule(choices).map((e) => (e.subjectName === "Обществознание" ? { ...e, priority: 3 } : e));
   const soc = schedule.find((e) => e.subjectName === "Обществознание");
   const st13 = {
-    lyceumRevision: 3,
+    lyceumRevision: LYCEUM_REVISION,
     presetChoices: choices,
     lyceumSchedule: [...schedule, manual],
     homework: [{ id: "hw-1", lessonId: soc.id, date: TUE, subjectName: "Обществознание", text: "Эссе", minutes: 40, done: false, attachments: [] }],
@@ -176,7 +179,7 @@ await ctx.close();
   want("1.3 → 1.5: задания не тронуты", noStamp(got.homework) === noStamp(st13.homework));
   want("1.3 → 1.5: записи дневника и события не тронуты", noStamp(got.journal) === noStamp(st13.journal) && noStamp(got.events) === noStamp(st13.events));
   want("1.3 → 1.5: тетради не тронуты", Object.keys(notebooks).every((k) => strip(got.notebooks[k]) === strip(notebooks[k])));
-  want("1.3 → 1.5: пересборки сетки не было (окна о смене нет)", got.lyceumRevision === 3 && !(await p2.getByRole("dialog", { name: "Расписание лицея изменилось" }).isVisible()));
+  want("1.3 → 1.5: пересборки сетки не было (окна о смене нет)", got.lyceumRevision === LYCEUM_REVISION && !(await p2.getByRole("dialog", { name: "Расписание лицея изменилось" }).isVisible()));
 
   // Одновременные уроки: выбор — пометка, а не удаление.
   let picked = null;

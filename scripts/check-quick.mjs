@@ -20,6 +20,13 @@ const run = (title, cmd, env = {}) => {
   }
 };
 
+// Без ключей облака сборка «сайта» выходит без облака: встроенные предметы
+// «Подготовки» видны всем, и проверки «Тетрадей», файлов и вида падают на
+// задвоенных предметах. Сам набор от этого не зависит — просто предупреждаем.
+if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
+  console.log("⚠ нет VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY — сайт соберётся без облака (см. CLAUDE.md)");
+}
+
 let ok = true;
 ok = run("юнит-тесты", "npm test") && ok;
 ok = run("сборка сайта", "npx vite build", { BASE_PATH: "/-/" }) && ok;

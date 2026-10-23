@@ -149,10 +149,24 @@ check("уроки встают по звонкам и помечены набо�
   assert.equal(new Set(list.map((e) => e.id)).size, list.length);
 });
 
+check("волейбол по понедельникам 15:00–16:30 — у всех, как внеурочная деятельность", () => {
+  for (const school of ["law", "math", "hum"]) {
+    const vb = buildSchedule({ school, groups: {}, specs: [] }).filter((e) => e.subjectName === "Волейбол");
+    assert.equal(vb.length, 1, school);
+    assert.deepEqual([vb[0].day, vb[0].start, vb[0].end, vb[0].level], ["mon", "15:00", "16:30", "extra"]);
+  }
+});
+
+check("в четверг у трека «Обществознание» два урока права подряд", () => {
+  const law = buildSchedule({ school: "law", groups: {}, specs: ["soc"] }).filter((e) => e.day === "thu" && e.subjectName === "Право");
+  assert.deepEqual(law.map((e) => e.start), ["14:05", "14:50"]);
+});
+
 check("у каждой строки сетки есть звонок и кому она адресована", () => {
   SLOTS.forEach((slot) => {
     assert.ok(BELLS[slot.n], `нет звонка для ${slot.day} ${slot.n}`);
-    assert.ok(slot.subject && slot.teacher && slot.room, `${slot.day} ${slot.n}`);
+    // У внеурочной деятельности (волейбол) преподаватель и место могут быть не указаны.
+    assert.ok(slot.subject && (slot.who.extra || (slot.teacher && slot.room)), `${slot.day} ${slot.n}`);
     [].concat(slot.who.spec || []).forEach((id) => assert.ok(SPECS.some((s) => s.id === id), "нет трека " + id));
     // Физкультура выбирается днями, а не из списка групп: клетка — вт–пт, 7–8 урок.
     if (slot.who.v === "pe") {

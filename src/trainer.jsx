@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { retryImport } from "./chunk-reload.js";
-import { BANK_SOURCE, BANK_SUBJECTS, BANK_URL } from "./fipi-index.js";
+import { BANK_SOURCE, BANK_URL } from "./fipi-index.js";
+import { TRAINER_SUBJECTS, inTrainer } from "./trainer-subjects.js";
 import { loadBank, withBase } from "./bank-load.js";
 import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
 import { ORDERS, newSeed, orderTasks } from "./trainer-order.js";
@@ -39,7 +40,10 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // Что открыто: имя предмета, «Все предметы» или пусто — тогда показан выбор.
   // Этот выбор хранится вместе с остальными записями, поэтому приложение
   // открывается там же, где его закрыли, — хоть на другом устройстве.
-  const open = (state && state.open) || "";
+  // Предмет, которого в тренажёре больше нет (физика, информатика), — как если
+  // бы ничего не было открыто: показываем список предметов.
+  const saved = (state && state.open) || "";
+  const open = saved === VOSH_OPEN || inTrainer(saved) ? saved : "";
   const [section, setSection] = useState((state && state.section) || "");
   // Какие задания в наборе: "" — только нерешённые, "all" — все подряд,
   // "wrong" — те, где последний ответ был неверным. Прежние записи знали лишь
@@ -79,7 +83,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     if (!open || open === VOSH_OPEN) { setTasks(null); setFailed(false); return undefined; }
     let alive = true;
     setFailed(false);
-    const card = BANK_SUBJECTS.find((s) => s.name === open);
+    const card = TRAINER_SUBJECTS.find((s) => s.name === open);
     if (!card) { setFailed(true); setTasks(null); return undefined; }
     loadBank(card.file).then((list) => {
       if (!alive) return;
@@ -108,7 +112,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     [mine],
   );
   const subject = open;
-  const card = BANK_SUBJECTS.find((s) => s.name === subject);
+  const card = TRAINER_SUBJECTS.find((s) => s.name === subject);
   // Сколько заданий по этому предмету всего в банке ФИПИ и какую часть мы уже перенесли.
   const whole = (card && card.whole) || 0;
   const percent = whole ? Math.max(0.1, (mine.length / whole) * 100).toFixed(1).replace(".0", "").replace(".", ",") : "";
@@ -364,11 +368,11 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // не открыт, набор ещё не загружен, и считать можно только по описи.
   const allIds = useMemo(() => {
     const set = new Set();
-    BANK_SUBJECTS.forEach((s) => (s.ids || []).forEach((id) => set.add(id)));
+    TRAINER_SUBJECTS.forEach((s) => (s.ids || []).forEach((id) => set.add(id)));
     return set;
   }, []);
   const allStats = useMemo(() => trainerStats(log, allIds), [log, allIds]);
-  const allCount = useMemo(() => BANK_SUBJECTS.reduce((n, s) => n + s.count, 0), []);
+  const allCount = useMemo(() => TRAINER_SUBJECTS.reduce((n, s) => n + s.count, 0), []);
   const allSeconds = useMemo(
     () => (log || []).filter((a) => allIds.has(a.taskId)).reduce((n, a) => n + (Number(a.seconds) || 0), 0),
     [log, allIds],
@@ -387,7 +391,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     return n;
   };
 
-  if (!BANK_SUBJECTS.length) return null;
+  if (!TRAINER_SUBJECTS.length) return null;
 
   // --- ВсОШ ------------------------------------------------------------------
   if (open === VOSH_OPEN) {
@@ -423,7 +427,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
         />
 
         <div style={S.picker}>
-          {BANK_SUBJECTS.map((s) => {
+          {TRAINER_SUBJECTS.map((s) => {
             const done = doneIn(s.ids);
             const missed = wrongIn(s.ids);
             return (

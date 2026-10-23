@@ -93,15 +93,18 @@ export function dayCounts(days, date) {
 // равно должно быть: человеку, который ещё не начинал, оно нужнее всего.
 // Тогда берём первый предмет описи — тот, к чему готовятся всерьёз.
 export function offerFor(days, date, lastOpened, subjects) {
-  const today = days.filter((d) => d.date === date);
+  const known = (subjects || []).map((x) => (typeof x === "string" ? x : x && x.name)).filter(Boolean);
+  // Начатый сегодня предмет — только из тех, что есть в тренажёре: звать туда,
+  // где предмета больше нет, бессмысленно.
+  const today = days.filter((d) => d.date === date && known.includes(d.subject));
   const started = today
     .slice()
     .sort((a, b) => b.solved / b.need - a.solved / a.need)[0];
   if (started) {
     return { subject: started.subject, solved: started.solved, need: started.need, left: Math.max(0, started.need - started.solved) };
   }
-  const known = (subjects || []).map((x) => (typeof x === "string" ? x : x && x.name)).filter(Boolean);
-  const subject = lastOpened && STREAK_GOAL[lastOpened] ? lastOpened : known.find((n) => STREAK_GOAL[n]) || known[0] || "";
+  // Последний открытый предмет — только если он ещё есть в тренажёре.
+  const subject = lastOpened && STREAK_GOAL[lastOpened] && known.includes(lastOpened) ? lastOpened : known.find((n) => STREAK_GOAL[n]) || known[0] || "";
   if (!subject) return null;
   return { subject, solved: 0, need: goalFor(subject), left: goalFor(subject) };
 }
