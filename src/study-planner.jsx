@@ -88,6 +88,7 @@ const LESSON_LEVELS = [
   { value: "prof", short: "проф", label: "проф", color: "var(--blue)" },
   { value: "olymp", short: "спецкурс", label: "олимпиадный спецкурс", color: "var(--red)" },
   { value: "outside", short: "вне лицея", label: "урок вне лицея", color: "var(--purple)" },
+  { value: "extra", short: "внеурочная", label: "внеурочная деятельность", color: "var(--green)" },
 ];
 
 const SUBJECT_COLOR_PALETTE = ["#4A6B6B", "#7A5233", "#5C4A80", "#8C7326", "#2F4E70", "#8B4A4A", "#3F6E52", "#6B4A6B"];
