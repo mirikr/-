@@ -127,7 +127,14 @@ async function answerByKey(page, t) {
   want("пройденная олимпиада открывается на итогах", (await page.locator("[data-vosh-total]").count()) === 1);
   await page.getByRole("button", { name: /^№ 1 / }).first().click();
   const box = page.locator('[data-vosh-task="2324-sch-9-1"]');
-  want("решённое задание открывается с прошлым ответом", /Это ваш прошлый ответ/.test(await box.innerText()));
+  // Решённое задание открывается чистым; прошлый ответ — по кнопке и ничего не засчитывает.
+  want("решённое задание открывается чистым", !(await box.getByRole("status").count()) && /Уже решали: Верно/.test(await box.innerText()), (await box.innerText()).slice(0, 120));
+  await box.getByRole("button", { name: "Мой прошлый ответ" }).click();
+  want("«Мой прошлый ответ» — прошлый ответ с разбором", /Это ваш прошлый ответ/.test(await box.innerText()));
+  await box.getByRole("button", { name: "Скрыть и решать" }).click();
+  // «Показать ответ» — ключ без попытки; «Решить заново» снова чистый лист.
+  await box.locator("[data-vosh-reveal]").click();
+  want("«Показать ответ» — ключ без попытки", /Ответ открыт/.test(await box.innerText()) && /Попытка не засчитана/.test(await box.innerText()));
   await box.getByRole("button", { name: "Решить заново" }).click();
   for (let i = 0; i < 5; i += 1) await box.locator(`[data-yn="${i}-y"]`).click();
   await box.getByRole("button", { name: "Ответить" }).click();

@@ -500,11 +500,16 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
 // --- одно задание --------------------------------------------------------
 
 function TaskCard({ task, prev, onAttempt, onNext, lastLabel }) {
-  // Уже решённое задание открывается с прошлым ответом и разбором. «Решить
-  // заново» — чистый лист и новый отсчёт времени.
-  const [round, setRound] = useState(prev && prev.resp ? 0 : 1);
-  const [resp, setResp] = useState(() => (prev && prev.resp ? prev.resp : emptyResponse(task)));
-  const [result, setResult] = useState(() => (prev && prev.resp ? { ...scoreTask(task, prev.resp), seconds: prev.seconds || 0, old: true } : null));
+  // Задание всегда открывается чистым — даже уже решённое: «пройти заново»
+  // значит решать заново, а не смотреть на прошлые ответы. Прошлый ответ и ключ —
+  // по кнопкам: «Мой прошлый ответ» ничего не засчитывает, «Показать ответ»
+  // открывает ключ, и тогда это задание в этот раз уже не засчитывается.
+  const hadPrev = !!(prev && prev.resp);
+  const prevResult = hadPrev ? { ...scoreTask(task, prev.resp), seconds: prev.seconds || 0, old: true } : null;
+  const [round, setRound] = useState(1);
+  const [resp, setResp] = useState(() => emptyResponse(task));
+  const [result, setResult] = useState(null);
+  const [showPrev, setShowPrev] = useState(false);
   const watch = useStopwatch(task.id + ":" + round);
   const ctx = task.ctx ? task.olymp.contexts[task.ctx] : null;
   const done = !!result;
@@ -514,17 +519,31 @@ function TaskCard({ task, prev, onAttempt, onNext, lastLabel }) {
     if (done || !ready) return;
     const r = scoreTask(task, resp);
     const seconds = Math.round(watch.read());
+    setShowPrev(false);
     setResult({ ...r, seconds });
     onAttempt({ taskId: task.id, answer: responseText(task, resp), ok: r.ok, seconds, score: r.score, max: task.max, resp });
+  }
+
+  // Ключ без попытки: в журнал ничего не пишется, ответить после этого нельзя.
+  function reveal() {
+    if (done) return;
+    setShowPrev(false);
+    setResult({ ...scoreTask(task, resp), seconds: 0, revealed: true });
   }
 
   function again() {
     setResp(emptyResponse(task));
     setResult(null);
+    setShowPrev(false);
     setRound((n) => n + 1);
   }
 
-  const props = { task, resp, setResp: done ? () => {} : setResp, done, result };
+  // Что показано: свой текущий ответ или, по кнопке, прошлый — только для чтения.
+  const view = showPrev && !done ? { resp: prev.resp, result: prevResult } : { resp, result };
+  const shownDone = !!view.result;
+  const props = { task, resp: view.resp, setResp: shownDone ? () => {} : setResp, done: shownDone, result: view.result };
+  const shown = view.result;
+  const verdictWord = (r) => (r.ok ? "Верно" : r.score ? "Частично верно" : "Неверно");
 
   return (
     <div style={S.task} data-vosh-task={task.id} data-kind={task.kind}>
@@ -542,6 +561,15 @@ function TaskCard({ task, prev, onAttempt, onNext, lastLabel }) {
       ))}
       <div style={S.rule}>{ruleText(task)}</div>
 
+      {hadPrev && !done && (
+        <div style={S.old} data-vosh-prev>
+          Уже решали: {verdictWord(prevResult)} · {prevResult.score} из {task.max}
+          <button type="button" onClick={() => setShowPrev(!showPrev)} className="ap-row" style={S.prevBtn} aria-pressed={showPrev}>
+            {showPrev ? "Скрыть и решать" : "Мой прошлый ответ"}
+          </button>
+        </div>
+      )}
+
       {task.kind === "yesno" && <YesNo {...props} />}
       {(task.kind === "multi" || task.kind === "one") && <Options {...props} />}
       {task.kind === "match" && <Match {...props} />}
@@ -550,17 +578,23 @@ function TaskCard({ task, prev, onAttempt, onNext, lastLabel }) {
       {task.kind === "gaps" && <Gaps {...props} />}
       {task.kind === "short" && <Short {...props} onEnter={answer} />}
 
-      {done && (
-        <div style={{ ...S.verdict, ...(result.ok ? S.verdictOk : result.score ? S.verdictPart : S.verdictBad) }} role="status">
+      {shown && (
+        <div
+          style={{ ...S.verdict, ...(shown.revealed ? S.verdictPart : shown.ok ? S.verdictOk : shown.score ? S.verdictPart : S.verdictBad) }}
+          role="status"
+        >
           <div style={S.verdictHead}>
-            {result.ok ? "Верно" : result.score ? "Частично верно" : "Неверно"}
-            <span style={S.verdictScore}>
-              {result.score} из {task.max} {pointWord(task.max)}
-            </span>
-            {result.seconds ? <span style={S.verdictTime}>{timeWord(result.seconds)}</span> : null}
+            {shown.revealed ? "Ответ открыт" : verdictWord(shown)}
+            {!shown.revealed && (
+              <span style={S.verdictScore}>
+                {shown.score} из {task.max} {pointWord(task.max)}
+              </span>
+            )}
+            {shown.seconds ? <span style={S.verdictTime}>{timeWord(shown.seconds)}</span> : null}
           </div>
-          {result.old && <div style={S.old}>Это ваш прошлый ответ.</div>}
-          {!result.ok && (
+          {shown.old && <div style={S.old}>Это ваш прошлый ответ — сейчас ничего не засчитано.</div>}
+          {shown.revealed && <div style={S.old}>Попытка не засчитана: ключ открыт до ответа.</div>}
+          {(!shown.ok || shown.revealed) && (
             <div style={S.key}>
               Ключ: <b>{keyText(task)}</b>
             </div>
@@ -572,8 +606,11 @@ function TaskCard({ task, prev, onAttempt, onNext, lastLabel }) {
       <div style={S.actions}>
         {!done ? (
           <>
-            <button onClick={answer} disabled={!ready} className="ap-btn" style={{ ...S.primary, ...(ready ? null : S.off) }}>
+            <button onClick={answer} disabled={!ready || showPrev} className="ap-btn" style={{ ...S.primary, ...(ready && !showPrev ? null : S.off) }}>
               Ответить
+            </button>
+            <button onClick={reveal} className="ap-row" style={S.keyBtn} data-vosh-reveal>
+              Показать ответ
             </button>
             <button onClick={onNext} className="ap-row" style={S.skip}>Пропустить</button>
           </>
@@ -1072,6 +1109,17 @@ const S = {
   verdictScore: { fontSize: 14, fontFamily: "inherit", fontWeight: 600, color: "var(--ink2)" },
   verdictTime: { marginLeft: "auto", fontSize: 13, fontWeight: 400, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
   old: { fontSize: 12.5, color: "var(--mute)", marginTop: 4 },
+  prevBtn: {
+    marginLeft: 8,
+    padding: "2px 10px",
+    border: "1px solid var(--line)",
+    borderRadius: 999,
+    background: "transparent",
+    color: "var(--ink2)",
+    font: "inherit",
+    fontSize: 12.5,
+    cursor: "pointer",
+  },
   key: { marginTop: 6, fontSize: 14, lineHeight: 1.5 },
   why: { marginTop: 7, fontSize: 13.5, lineHeight: 1.55, color: "var(--ink2)" },
   note: {

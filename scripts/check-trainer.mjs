@@ -66,14 +66,22 @@ await page.waitForTimeout(400);
 
 // Сначала выбор предмета: сразу решать никого не бросает.
 const card = page.locator("section.ap-card").first();
+// Свёрнутые блоки экрана задания (1.11.3): «Набор» — разделы и порядок,
+// «Проверить ключ на ФИПИ» — инструкция и поля для ответа банка.
+const openDetails = async (sel) => {
+  const d = page.locator(sel).first();
+  if ((await d.count()) && !(await d.evaluate((e) => e.open))) await d.locator("summary").first().click();
+  await page.waitForTimeout(150);
+};
+const openCheck = () => openDetails("[data-key-check]");
+const openSet = () => openDetails("[data-trainer-set]");
 const picker = await card.innerText();
 want("сперва показан выбор предмета", /Начать тест/.test(picker) && /Обществознание/.test(picker));
 want("сказано, сколько заданий в наборе", /\d+ задани/.test(picker));
 want("есть «решать все задания»", /Решать все задания подряд/.test(picker));
 want("«все подряд» — про один предмет, а не про все сразу", !/вперемешку|Все предметы/i.test(picker));
-// Пометка об альфа-версии стоит прямоугольником у заголовка раздела, а не
-// абзацем на полэкрана.
-want("у раздела есть пометка ALPHA", /ALPHA/.test(await page.locator("#root").innerText()));
+// С 1.11.3 тренажёр вышел из альфы: пометки ALPHA у заголовка больше нет.
+want("пометки ALPHA у раздела нет", !/ALPHA/.test(await page.locator("#root").innerText()));
 want("сказано, что ключи наши", /решены нами/i.test(picker));
 // Сами пояснения свёрнуты под «?»: на экране их нет, пока не попросят.
 want("пояснения свёрнуты", !/который банк засчитал/i.test(picker) && !/весь предмет целиком/i.test(picker));
@@ -132,11 +140,18 @@ const afterWrong = await card.innerText();
 // пересобирался после ответа, карточка успевала показать уже следующее.
 want("на экране осталось то же задание", afterWrong.includes(shownId), (afterWrong.match(/№\s*\S+/) || [])[0]);
 want("неверный ответ распознан", /Неверно/.test(afterWrong));
+want("свой ответ показан рядом с верным", (await page.locator("[data-answer-compare]").count()) === 1 &&
+  /Твой ответ[\s\S]*этонеответ[\s\S]*верно/.test(await page.locator("[data-answer-compare]").innerText()));
+want("в полоске подхода отмечена ошибка", (await page.locator("[data-session]").count()) === 1 &&
+  /неверно 1/.test((await page.locator("[data-session]").getAttribute("aria-label")) || ""));
 want("показан правильный ответ", afterWrong.includes(task.answer));
 want("показан разбор", afterWrong.includes(task.why.slice(0, 20)));
 want("ключ помечен как несверенный", /не сверен/i.test(afterWrong));
+want("проверка ключа свёрнута под кнопкой", (await page.locator("[data-key-check]").count()) === 1 && !(await page.locator("[data-key-check]").evaluate((e) => e.open)));
+await openCheck();
+const afterOpen = await card.innerText();
 want("сказано, скольких совпадений не хватает", /нужно ещё \d/.test(afterWrong), (afterWrong.match(/нужно ещё \d/) || [])[0]);
-want("сказано, что делать в банке", /найди задание/i.test(afterWrong) && afterWrong.includes(shownId));
+want("сказано, что делать в банке", /найди задание/i.test(afterOpen) && afterOpen.includes(shownId));
 
 // Главное, ради чего всё затевалось: человек переписывает ответ, который засчитал
 // банк, и этот ответ закрепляется за заданием.
@@ -156,12 +171,15 @@ want("в списке видно оба ответа", collected.includes("ФИ�
 // Отменить и вписать заново — поле возвращается.
 await page.getByRole("button", { name: /Отменить и вписать заново/ }).click();
 await page.waitForTimeout(250);
+await openCheck();
 want("после отмены поле вернулось", await page.getByLabel("Ответ, который засчитал банк ФИПИ").count() === 1);
 
 // Отметки о сверке: подтверждение и жалоба меняют плашку.
+await openCheck();
 await page.getByRole("button", { name: /Банк засчитал наш ответ/ }).click();
 await page.waitForTimeout(250);
 want("подтверждение отмечается", /сверен с банком/i.test(await card.innerText()));
+await openCheck();
 await page.getByRole("button", { name: /В банке ответ другой/ }).click();
 await page.waitForTimeout(250);
 const disputedText = await page.locator("#root").innerText();
@@ -302,6 +320,7 @@ want("жалоба на задание сохранилась", brokenSaved === 
   // Кнопка «Банк засчитал наш ответ» — это и есть ответ с ФИПИ: наш же ключ.
   // Раньше она ставила отметку, но ответ в копилку не попадал, и его
   // приходилось вписывать руками второй раз.
+  await openCheck();
   await page.getByRole("button", { name: /Банк засчитал наш ответ/ }).click();
   await page.waitForTimeout(1600);
   const marked = await card.innerText();
@@ -318,6 +337,7 @@ want("жалоба на задание сохранилась", brokenSaved === 
   want("служебный признак кнопки в записи не хранится", savedAnswer && !savedAnswer.byButton);
 
   // Нажали ту же кнопку второй раз — передумали, отметка снимается.
+  await openCheck();
   await page.getByRole("button", { name: /Банк засчитал наш ответ/ }).click();
   await page.waitForTimeout(1600);
   const off = await page.evaluate((taskId) => {
@@ -343,18 +363,23 @@ want("жалоба на задание сохранилась", brokenSaved === 
   want("на карточке предмета видно, какая часть банка перенесена",
     /из \d+ в банке ФИПИ — [\d,]+%/.test(picker),
     (picker.match(/из \d+ в банке[^\n]*/) || [])[0] || "");
-  // Число заданий стоит один раз — в шапке карточки, а не ещё и в строке ниже.
-  // Считаем только карточки: общий итог ниже с одним предметом в тренажёре
-  // законно называет то же число.
-  const cards = picker.split("Всего в тренажёре")[0];
+  // Число заданий стоит на плитке банка один раз. Считаем только плитку:
+  // общий итог в плашке сверху законно называет то же число.
+  const cards = await page.locator("[data-bank-card]").first().innerText();
   want("число заданий не задвоено", (cards.match(/392/g) || []).length === 1,
     (cards.match(/[^\n]*392[^\n]*/g) || []).join(" · "));
+  // Плашка своих показателей (вид 1.11.3): кольцо, дни подряд, неделя.
+  const hero = page.locator("[data-trainer-hero]");
+  want("сверху плашка своих показателей", (await hero.count()) === 1 &&
+    /подряд/.test(await hero.innerText()) && /на задание/.test(await hero.innerText()));
+  const weekLabel = (await hero.locator('[role="img"][aria-label^="Решено за неделю"]').getAttribute("aria-label")) || "";
+  want("на неделе отмечены сегодняшние задания", /\d/.test(weekLabel) && weekLabel.split(", ").some((x) => /[1-9]\d*$/.test(x)), weekLabel);
+  want("серия дней посчитана", /\b[1-9]\d*\n(день|дня|дней) подряд/.test(await hero.innerText()),
+    ((await hero.innerText()).match(/[^\n]*\n[^\n]*подряд/) || [])[0] || "");
   // Заголовок карточки повторял заголовок экрана — его быть не должно.
   want("заголовок не задвоен", (picker.match(/Тренажёр по банку ФИПИ/g) || []).length === 0);
   // Подсказка про кнопки одна на все предметы, а не на каждой карточке, и та свёрнута.
-  want("подсказка про кнопки свёрнута",
-    (picker.match(/«Начать тест» — только то/g) || []).length === 0 &&
-      /Чем отличаются кнопки/.test(picker));
+  want("подсказка про кнопки свёрнута", !/весь предмет целиком/.test(picker) && /Чем отличаются кнопки/.test(picker));
 }
 
 // Неверно решённые задания должны возвращаться отдельной кнопкой: разобрать
@@ -371,6 +396,10 @@ want("жалоба на задание сохранилась", brokenSaved === 
   const picker = await card.innerText();
   want("на карточке есть «Перерешать неверные»", /Перерешать неверные \(\d+\)/.test(picker),
     (picker.match(/Перерешать неверные[^\n]*/) || [])[0] || "кнопки нет");
+  await page.waitForTimeout(800);
+  want("подсказана слабая тема", (await page.locator("[data-weak-theme]").count()) === 1 &&
+    /Слабая тема: .+\d+ из \d+ неверн/s.test(await page.locator("[data-weak-theme]").innerText()),
+    (await page.locator("[data-weak-theme]").count()) ? await page.locator("[data-weak-theme]").innerText() : "строки нет");
   // Неверно отвечали по первому предмету — там кнопка и должна стоять.
   const wrongIds = await page.evaluate(() => {
     const raw = localStorage.getItem("planner:planner-state-v5");
@@ -386,8 +415,17 @@ want("жалоба на задание сохранилась", brokenSaved === 
   const id = (opened.match(/№\s*([0-9A-Za-zА-Яа-я]{5,8})/) || [])[1];
   want("открылось именно неверно решённое задание", wrongIds.includes(id),
     id + " из " + wrongIds.join(", "));
-  want("сказано, что показаны только неверные", /показаны только неверно решённые/.test(opened),
-    (opened.match(/показаны только[^\n]*/) || [])[0] || "");
+  // Перерешивая, задание открывается чистым: прошлый вердикт не виден, поле
+  // пустое; прошлый ответ — только по кнопке.
+  await openSet();
+  want("сказано, что показаны только неверные", /показаны только неверно решённые/.test(await card.innerText()),
+    ((await card.innerText()).match(/показаны только[^\n]*/) || [])[0] || "");
+  const answerBox = page.getByLabel("Ваш ответ");
+  want("перерешивая, задание открывается чистым", (await answerBox.isEnabled()) && (await answerBox.inputValue()) === "" &&
+    (await page.locator("[data-prev-attempt]").count()) === 1 && /Уже решал: неверно/.test(await page.locator("[data-prev-attempt]").innerText()));
+  await page.getByRole("button", { name: "Мой прошлый ответ" }).click();
+  await page.waitForTimeout(200);
+  want("«Мой прошлый ответ» показывает прошлый ответ", /Твой ответ:/.test(await page.locator("[data-prev-attempt]").innerText()));
 
   // Ответили верно — задание уходит из набора неверных.
   const t = (await bankOf(TRAINER_SUBJECTS[0].file)).find((x) => x.id === id);
@@ -424,6 +462,7 @@ want("жалоба на задание сохранилась", brokenSaved === 
   want("назван тот самый раздел", !themeName || line.includes(themeName), themeName + " · " + line);
   await row.click();
   await page.waitForTimeout(1200);
+  await openSet();
   const opened = await card.innerText();
   want("нажатие на раздел ведёт к его неверным заданиям",
     /показаны только неверно решённые/.test(opened) && (!themeName || opened.includes(themeName)),
@@ -446,10 +485,12 @@ want("жалоба на задание сохранилась", brokenSaved === 
     return out;
   };
   const pickOrder = async (name) => {
+    await openSet();
     await page.getByRole("button", { name }).first().click();
     await page.waitForTimeout(500);
   };
 
+  await openSet();
   const rootText = await page.locator("#root").innerText();
   want("есть выбор порядка заданий", /Порядок/.test(rootText) && /Вперемешку/.test(rootText) && /По темам/.test(rootText),
     (rootText.match(/Порядок[^\n]*(\n[^\n]+){0,4}/) || [])[0]);
@@ -477,6 +518,7 @@ want("жалоба на задание сохранилась", brokenSaved === 
   await page.waitForTimeout(1800);
   await page.getByRole("button", { name: /Тренажёр/ }).first().click();
   await page.waitForTimeout(1200);
+  await openSet();
   want("после перезагрузки порядок остался перемешанным",
     /Перемешать заново/.test(await page.locator("#root").innerText()));
   want("и задание то же", (await shownId()) === before, before + " → " + (await shownId()));
@@ -510,6 +552,7 @@ want("жалоба на задание сохранилась", brokenSaved === 
 
 // Задания с рисунком должны рисунок показывать. Листаем, пока такое не попадётся.
 await openSubject(firstSubject);
+await openSet();
 await page.getByRole("button", { name: "По порядку" }).first().click();
 await page.waitForTimeout(500);
 // Рисунок стоит прямо в разметке условия; отдельным списком он лежит только там,
@@ -532,6 +575,23 @@ for (let step = 0; step < 80; step += 1) {
   await page.waitForTimeout(120);
 }
 want("рисунок задания виден на экране", shownPicture > 0, "картинок в карточке: " + shownPicture);
+
+// «Показать ответ»: ключ и разбор без попытки — в журнал ничего не пишется,
+// ответить на это задание после этого нельзя.
+{
+  await openSubject(firstSubject);
+  const logLen = () => page.evaluate(() => (JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value).trainerLog || []).length);
+  const before = await logLen();
+  await page.locator("[data-reveal]").first().click();
+  await page.waitForTimeout(1400);
+  const t = await card.innerText();
+  want("«Показать ответ» открывает ключ без попытки", /Ответ открыт/.test(t) && /Попытка не засчитана/.test(t) && /Ответ:/.test(t), t.slice(0, 120));
+  want("после этого ответить нельзя", (await page.getByLabel("Ваш ответ").count()) === 0 &&
+    (await page.getByRole("button", { name: "Ответить" }).count()) === 0);
+  want("в журнал попытка не записана", (await logLen()) === before);
+  await page.getByRole("button", { name: "Следующее" }).click();
+  await page.waitForTimeout(300);
+}
 
 // Поиск по номеру задания. Номер подписан у каждого задания в тренажёре — по
 // нему задание и ищут; найденное должно открываться сразу на нём, а не «где-то
