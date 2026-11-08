@@ -3459,7 +3459,6 @@ export default function StudyPlanner() {
               ? "Как время уходило на самом деле — и что из этого следует для плана"
               : screenInfo.note
           }
-          badge={screen === "trainer" ? "ALPHA" : null}
           date={screen === "today" ? todayHeadLabel : null}
         >
           {/* Три числа дня — строкой в шапке; на телефоне — полосой под ней. */}
