@@ -3,10 +3,10 @@ import { retryImport } from "./chunk-reload.js";
 import { BANK_SOURCE, BANK_URL } from "./fipi-index.js";
 import { TRAINER_SUBJECTS, inTrainer } from "./trainer-subjects.js";
 import { loadBank, withBase } from "./bank-load.js";
-import { AGREE_NEEDED, TOP_MIN, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, topByPercent, topPeople, trainerStats } from "./bank-answer.js";
+import { AGREE_NEEDED, consensus, isRight, myVote, normalizeAnswer, sectionErrors, streakOf, timeWord, trainerStats } from "./bank-answer.js";
 import { ORDERS, newSeed, orderTasks } from "./trainer-order.js";
 import { CardHead } from "./card-head.jsx";
-import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer, votesTakeName } from "./bank-votes.js";
+import { loadVotes, myUserId, saveVote, votesState, votesTakeBankAnswer } from "./bank-votes.js";
 import { useStopwatch } from "./stopwatch.js";
 import { VOSH_INDEX } from "./vosh-index.js";
 
@@ -74,7 +74,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // Имя для таблицы решающих. Хранится вместе с остальными записями, поэтому
   // переезжает на другое устройство само, и едет с каждым ответом в копилку.
   const myName = (state && state.name) || "";
-  const [nameDraft, setNameDraft] = useState(myName);
   const [shared, setShared] = useState("off");
 
   // Набор грузится, когда предмет открыли, и остаётся в памяти: переключаться
@@ -112,10 +111,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     [mine],
   );
   const subject = open;
-  const card = TRAINER_SUBJECTS.find((s) => s.name === subject);
-  // Сколько заданий по этому предмету всего в банке ФИПИ и какую часть мы уже перенесли.
-  const whole = (card && card.whole) || 0;
-  const percent = whole ? Math.max(0.1, (mine.length / whole) * 100).toFixed(1).replace(".0", "").replace(".", ",") : "";
 
   // Что человек уже одолел: по последней попытке, тренируются ведь до победы.
   const solved = useMemo(() => {
@@ -135,6 +130,15 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     last.forEach((ok, id) => !ok && out.add(id));
     return out;
   }, [log]);
+
+  // Последняя попытка по каждому заданию — для «Мой прошлый ответ».
+  const lastAttempt = useMemo(() => {
+    const out = new Map();
+    (log || []).forEach((a) => out.set(a.taskId, a));
+    return out;
+  }, [log]);
+  // Прошлый ответ открыт по кнопке; на новом задании он снова свёрнут.
+  const [showPrev, setShowPrev] = useState(false);
 
   // Весь предмет в выбранном порядке. Отбор по разделу и режиму идёт уже по
   // нему, поэтому «дальше» ведёт туда, куда показывает порядок, а не туда,
@@ -157,6 +161,8 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
 
   const task = (currentId && mine.find((t) => t.id === currentId)) || queue[0] || null;
   const watch = useStopwatch(task ? task.id : "нет");
+  useEffect(() => setShowPrev(false), [task ? task.id : ""]);
+  const prev = task && !result ? lastAttempt.get(task.id) : null;
 
   // Всё, что показано внизу, считается по выбранному предмету: перемешивать
   // физику с обществознанием бессмысленно — ни серия, ни доля верных так ничего
@@ -236,6 +242,18 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     // Ответ уходит в общую копилку: по таким совпадениям и проверяются ключи.
     saveVote({ taskId: task.id, answer: value, matches: ok, fipi: myMark ? myMark.kind : "", name: myName })
       .then((sent) => sent && loadVotes(true).then(setVotes));
+  }
+
+  // Ключ без попытки: в журнал ничего не пишется, задание остаётся нерешённым.
+  // Ответить на него после этого нельзя — иначе списанный ответ засчитался бы.
+  function reveal() {
+    if (!task || result) return;
+    setShowPrev(false);
+    if (currentId !== task.id) {
+      setCurrentId(task.id);
+      onState({ open, section, taskId: task.id, again: mode === ALL_MODE, mode, order, orderSeed: seed });
+    }
+    setResult({ ok: false, seconds: 0, revealed: true });
   }
 
   // Отметка о том, что сказал банк. byButton — нажали кнопку (её же нажатием
@@ -378,10 +396,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     [log, allIds],
   );
 
-  // Таблица решающих — по той же общей копилке, что и согласие класса.
-  const people = useMemo(() => topPeople(votes, me), [votes, me]);
-  const byPercent = useMemo(() => topByPercent(people), [people]);
-  const myRow = people.find((r) => r.mine) || null;
 
   // Сколько заданий предмета остались неверными — тоже по описи.
   const wrongIn = (ids) => {
@@ -513,7 +527,8 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
         {/* Итог по всем предметам сразу: по отдельным карточкам его не собрать. */}
         {allStats.done ? (
           <div style={S.allStats}>
-            <div style={S.allTitle}>Всего в тренажёре</div>
+            {/* Только свои показатели: таблицу «кто сколько решил» убрали. */}
+            <div style={S.allTitle}>Всего в тренажёре — твои показатели</div>
             <div style={S.stats}>
               <div style={S.stat}><span style={S.statValue}>{allStats.done}</span><span style={S.statName}>из {allCount} решено</span></div>
               <div style={S.stat}><span style={S.statValue}>{allStats.percent}%</span><span style={S.statName}>верных</span></div>
@@ -523,60 +538,6 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                 <span style={S.statName}>на задание</span>
               </div>
             </div>
-          </div>
-        ) : null}
-
-        {/* Таблица решающих. Её видно только тем, кто вошёл в облако: считается
-            она по общей копилке ответов, а без входа копилки нет. */}
-        {people.length > 1 ? (
-          <div style={S.allStats}>
-            <div style={S.allTitle}>Кто сколько решил</div>
-            <div style={S.topNote}>
-              Считается по общей копилке ответов: у каждого своя строка на задание.
-              {votesTakeName()
-                ? " Имя можно поменять — оно поедет со следующим ответом."
-                : " Имена появятся, когда в базу добавят столбец name — пока все под короткими кодами."}
-            </div>
-            {votesTakeName() ? (
-              <div style={S.nameRow}>
-                <input
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  placeholder="Как тебя показывать"
-                  maxLength={40}
-                  style={S.nameInput}
-                  aria-label="Имя в таблице решающих"
-                />
-                <button
-                  onClick={() => onState({ ...(state || {}), name: nameDraft.trim() })}
-                  className="ap-row"
-                  style={S.keyBtn}
-                  disabled={nameDraft.trim() === myName}
-                >
-                  Сохранить имя
-                </button>
-              </div>
-            ) : null}
-            <ol style={S.top}>
-              {people.slice(0, 10).map((r) => (
-                <li key={r.userId} style={{ ...S.topRow, ...(r.mine ? S.topMine : null) }}>
-                  <span style={S.topPlace}>{r.place}</span>
-                  <span style={S.topName}>{r.label}{r.mine ? " — это ты" : ""}</span>
-                  <span style={S.topDone}>{r.done} {taskWord(r.done)}</span>
-                  <span style={S.topPercent}>{r.percent}% верных</span>
-                </li>
-              ))}
-            </ol>
-            {myRow && myRow.place > 10 ? (
-              <div style={S.topNote}>Ты на {myRow.place}-м месте: {myRow.done} {taskWord(myRow.done)}, {myRow.percent}% верных.</div>
-            ) : null}
-            {byPercent.length > 1 ? (
-              <div style={S.topNote}>
-                По доле верных впереди <b>{byPercent[0].label}</b> — {byPercent[0].percent}% на {byPercent[0].done}{" "}
-                {taskWord(byPercent[0].done)}. В этот счёт берём тех, кто решил хотя бы {TOP_MIN}: сто процентов
-                с двух заданий — не результат.
-              </div>
-            ) : null}
           </div>
         ) : null}
 
@@ -615,25 +576,13 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
           <button onClick={leave} className="ap-row" style={S.back}>К выбору предмета</button>
         </div>
 
-        {(
-          <div style={S.moved}>
-            <div style={S.movedTop}>
-              <span>
-                Перенесено из банка ФИПИ: <b>{mine.length}</b> {taskWord(mine.length)} из{" "}
-                <b>{whole || "?"}</b> по предмету «{subject}»
-              </span>
-              {whole ? <span style={S.movedPart}>{percent}%</span> : null}
-            </div>
-            {whole ? (
-              <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(1.5, Math.min(100, (mine.length / whole) * 100)) + "%" }} /></div>
-            ) : null}
-            <div style={S.movedNote}>
-              Задания переносим и решаем вручную, поэтому набор растёт постепенно. Задания второй части
-              с развёрнутым ответом сюда не попадают: их проверяет эксперт, а не строчка с ответом.
-            </div>
-          </div>
-        )}
-
+        {/* Разделы, порядок и «только нерешённые» нужны редко, а занимали пол-экрана
+            над заданием — теперь они свёрнуты, а в заголовке видно, что выбрано. */}
+        <details style={S.setBox} data-trainer-set>
+          <summary style={S.setSummary}>
+            Набор: {section || "все разделы"} · {(ORDERS.find((o) => o.key === order) || ORDERS[0]).name.toLowerCase()} ·{" "}
+            {mode === WRONG_MODE ? "неверно решённые" : mode === ALL_MODE ? "все задания" : "только нерешённые"}
+          </summary>
         <div style={S.chips}>
           <button onClick={() => pickSection("")} className="ap-row" style={{ ...S.chip, ...(section ? null : S.chipOn) }}>
             Все разделы
@@ -686,6 +635,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
               : "решено " + doneIn(mine.map((t) => t.id)) + " из " + mine.length}
           </span>
         </label>
+        </details>
 
         {!task ? (
           <p style={styles.muted}>
@@ -717,6 +667,25 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
               <img key={i} src={withBase('src="' + p.src + '"').slice(5, -1)} alt="" style={S.picture} />
             ))}
 
+            {prev && (
+              <div style={S.prevLine} data-prev-attempt>
+                <span>Уже решал: {prev.ok ? "верно" : "неверно"}</span>
+                <button type="button" onClick={() => setShowPrev(!showPrev)} className="ap-row" style={S.prevBtn} aria-pressed={showPrev}>
+                  {showPrev ? "Скрыть" : "Мой прошлый ответ"}
+                </button>
+                {showPrev && (
+                  <div style={S.prevBody}>
+                    Твой ответ: <b>{prev.answer || "—"}</b> — {prev.ok ? "верно" : "неверно"}
+                    {!prev.ok ? (
+                      <>
+                        {" "}· правильный: <b>{task.answer}</b> {task.units}
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={S.answerRow}>
               <input
                 value={value}
@@ -736,6 +705,11 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
             </div>
 
             <div style={S.underRow}>
+              {!result && (
+                <button onClick={reveal} className="ap-row" style={S.keyBtn} data-reveal>
+                  Показать ответ
+                </button>
+              )}
               {!result && <button onClick={next} className="ap-row" style={S.skip}>Пропустить</button>}
               <button
                 onClick={() => mark("broken", "", true)}
@@ -748,11 +722,12 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
             </div>
 
             {result && (
-              <div style={{ ...S.verdict, ...(result.ok ? S.verdictOk : S.verdictBad) }}>
+              <div style={{ ...S.verdict, ...(result.revealed ? S.verdictOpen : result.ok ? S.verdictOk : S.verdictBad) }}>
                 <div style={S.verdictHead}>
-                  {result.ok ? "Верно" : "Неверно"}
-                  <span style={S.verdictTime}>{timeWord(result.seconds)}</span>
+                  {result.revealed ? "Ответ открыт" : result.ok ? "Верно" : "Неверно"}
+                  {!result.revealed && <span style={S.verdictTime}>{timeWord(result.seconds)}</span>}
                 </div>
+                {result.revealed && <div style={S.revealNote}>Попытка не засчитана: ответ открыт до решения.</div>}
                 {!result.ok && (
                   <div style={S.right}>
                     Ответ: <b>{task.answer}</b> {task.units}
@@ -794,7 +769,10 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                     </button>
                   </div>
                 ) : (
-                  <>
+                  // Как проверить ключ в банке — длинная инструкция; она нужна не на
+                  // каждом задании, поэтому свёрнута под кнопкой.
+                  <details style={S.checkBox} data-key-check>
+                    <summary style={S.checkSummary}>Проверить ключ на ФИПИ</summary>
                     <p style={S.keyNote}>
                       Банк правильный ответ не показывает: он только говорит «верно» или «неверно».
                       Поэтому ответ здесь решён нами — и точнее всего его проверяет тот, кто сходил в банк.
@@ -853,7 +831,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                         В банке ответ другой
                       </button>
                     </div>
-                  </>
+                  </details>
                 )}
 
                 {key.fipiAnswer && (!sentFromBank || normalizeAnswer(key.fipiAnswer.answer) !== normalizeAnswer(sentFromBank)) && (
@@ -1018,22 +996,6 @@ const S = {
     font: "inherit", fontSize: 14.5, cursor: "pointer",
   },
   subjectOn: { background: "var(--btnBg)", color: "var(--btnInk)", borderColor: "var(--btnBg)", fontWeight: 600 },
-  moved: {
-    border: "1px solid var(--line2)", background: "var(--panel2)", borderRadius: 10,
-    padding: "10px 13px", marginBottom: 12,
-  },
-  movedTop: {
-    display: "flex", alignItems: "baseline", gap: 10, justifyContent: "space-between",
-    fontSize: 13.5, color: "var(--ink2)", lineHeight: 1.5,
-  },
-  movedPart: { fontVariantNumeric: "tabular-nums", fontWeight: 600, color: "var(--ink3)", flex: "0 0 auto" },
-  bar: { height: 6, borderRadius: 999, background: "var(--line2)", overflow: "hidden", margin: "8px 0 0" },
-  barFill: { height: "100%", borderRadius: 999, background: "var(--btnBg)" },
-  movedNote: { fontSize: 12, color: "var(--mute)", lineHeight: 1.5, marginTop: 7 },
-  alpha: {
-    border: "1px solid var(--warmLine)", background: "var(--warmBg)", color: "var(--warmInk)",
-    borderRadius: 10, padding: "11px 14px", fontSize: 13.5, lineHeight: 1.55, marginBottom: 14,
-  },
   picture: {
     display: "block", maxWidth: "100%", height: "auto", margin: "0 0 12px",
     background: "#fff", border: "1px solid var(--line2)", borderRadius: 8, padding: 6,
@@ -1080,6 +1042,24 @@ const S = {
   verdict: { marginTop: 12, borderRadius: 10, padding: "11px 13px", border: "1px solid" },
   verdictOk: { borderColor: "var(--green)", background: "var(--panel)" },
   verdictBad: { borderColor: "var(--redLine)", background: "var(--redBg)" },
+  verdictOpen: { borderColor: "var(--line)", background: "var(--panel2)" },
+  revealNote: { fontSize: 12.5, color: "var(--mute)", marginTop: 4 },
+  prevLine: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink3)", margin: "10px 0 2px" },
+  prevBtn: {
+    padding: "2px 10px",
+    border: "1px solid var(--line)",
+    borderRadius: 999,
+    background: "transparent",
+    color: "var(--ink2)",
+    font: "inherit",
+    fontSize: 12.5,
+    cursor: "pointer",
+  },
+  prevBody: { flexBasis: "100%", color: "var(--ink2)" },
+  setBox: { margin: "4px 0 12px", padding: "8px 12px", border: "1px solid var(--line2)", borderRadius: 10 },
+  setSummary: { cursor: "pointer", fontSize: 13.5, color: "var(--ink2)", padding: "2px 0" },
+  checkBox: { marginTop: 10 },
+  checkSummary: { cursor: "pointer", fontSize: 13.5, fontWeight: 600, color: "var(--ink2)", padding: "4px 0" },
   verdictHead: { display: "flex", alignItems: "baseline", gap: 10, fontWeight: 600, fontSize: 15.5, fontFamily: "'PT Serif', Georgia, serif" },
   verdictTime: { marginLeft: "auto", fontSize: 13, fontWeight: 400, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
   right: { marginTop: 6, fontSize: 14.5 },
