@@ -36,6 +36,20 @@ function peopleWord(n) {
   return "человек";
 }
 
+function dayWord(n) {
+  const last = n % 10;
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 14) return "дней";
+  if (last === 1) return "день";
+  if (last >= 2 && last <= 4) return "дня";
+  return "дней";
+}
+
+// День по местному времени: «сегодня» для школьника — это его сутки, а не UTC.
+const dayKey = (d) =>
+  d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const WEEK_DAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
 export default function Trainer({ log, marks, state, onState, onAttempt, onMark, styles }) {
   // Что открыто: имя предмета, «Все предметы» или пусто — тогда показан выбор.
   // Этот выбор хранится вместе с остальными записями, поэтому приложение
@@ -75,6 +89,10 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // переезжает на другое устройство само, и едет с каждым ответом в копилку.
   const myName = (state && state.name) || "";
   const [shared, setShared] = useState("off");
+  // Итоги этого подхода — полоска из отрезков над заданием: верно, неверно,
+  // ответ открыт. Живут, пока не вернулись к выбору: это «как идёт сейчас»,
+  // а не журнал.
+  const [session, setSession] = useState([]);
 
   // Набор грузится, когда предмет открыли, и остаётся в памяти: переключаться
   // между предметами после этого мгновенно.
@@ -230,6 +248,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     const ok = isRight(task, value);
     const seconds = Math.round(watch.read());
     setResult({ ok, seconds });
+    setSession((list) => list.concat(ok ? "ok" : "bad"));
     // Задание закрепляем за собой прямо сейчас. Пока на него не ответили, оно
     // бралось первым из очереди, — а верный ответ убирает его из очереди, и на
     // экране молча оказывалось следующее: ни разбора прочитать, ни ответ с ФИПИ
@@ -254,6 +273,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
       onState({ open, section, taskId: task.id, again: mode === ALL_MODE, mode, order, orderSeed: seed });
     }
     setResult({ ok: false, seconds: 0, revealed: true });
+    setSession((list) => list.concat("open"));
   }
 
   // Отметка о том, что сказал банк. byButton — нажали кнопку (её же нажатием
@@ -325,6 +345,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     const back = !reset && state && state.open === name ? state.taskId || "" : "";
     setSection("");
     setMode(want || "");
+    setSession([]);
     setCurrentId(back);
     setResult(null);
     setValue("");
@@ -333,6 +354,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   }
 
   function leave() {
+    setSession([]);
     setResult(null);
     setValue("");
     setFromBank("");
@@ -351,6 +373,19 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     setFromBank("");
     onState({ open, section: name, taskId: "", again: false, mode: WRONG_MODE, order, orderSeed: seed });
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // «Слабая тема» с экрана выбора: открыть предмет сразу на неверно решённых
+  // заданиях этого раздела.
+  function startWeak(name, sectionName) {
+    setSection(sectionName);
+    setMode(WRONG_MODE);
+    setSession([]);
+    setCurrentId("");
+    setResult(null);
+    setValue("");
+    setFromBank("");
+    onState({ open: name, section: sectionName, taskId: "", again: false, mode: WRONG_MODE, order, orderSeed: seed });
   }
 
   // Сменить порядок заданий. Задание с экрана при этом не меняем: человек,
@@ -405,6 +440,67 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     return n;
   };
 
+  // Для плашки на экране выбора: когда занимался. Сюда идут и олимпиады —
+  // «дни подряд» про то, садился ли за тренажёр, а не про один банк.
+  const perDay = useMemo(() => {
+    const ids = new Set(allIds);
+    VOSH_IDS.forEach((id) => ids.add(id));
+    const out = new Map();
+    (log || []).forEach((a) => {
+      if (!ids.has(a.taskId) || !a.at) return;
+      const d = new Date(a.at);
+      if (Number.isNaN(d.getTime())) return;
+      const k = dayKey(d);
+      out.set(k, (out.get(k) || 0) + 1);
+    });
+    return out;
+  }, [log, allIds]);
+  const todayKey = dayKey(new Date());
+  // Текущая неделя с понедельника: столбик на день, сегодняшний выделен.
+  const week = useMemo(() => {
+    const now = new Date();
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    return WEEK_DAYS.map((name, i) => {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const k = dayKey(d);
+      return { name, key: k, count: perDay.get(k) || 0, today: k === todayKey };
+    });
+  }, [perDay, todayKey]);
+  const weekMax = Math.max(1, ...week.map((d) => d.count));
+  // Сколько дней подряд занимался. Сегодня ещё не садился — серия не рвётся,
+  // пока не кончились сутки: считаем от вчера.
+  const dayStreak = useMemo(() => {
+    const now = new Date();
+    let shift = perDay.has(dayKey(now)) ? 0 : 1;
+    let n = 0;
+    for (;;) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - shift);
+      if (!perDay.has(dayKey(d))) break;
+      n += 1;
+      shift += 1;
+    }
+    return n;
+  }, [perDay]);
+
+  // Слабая тема — по набору первого предмета. Набор грузится, только если
+  // есть неверно решённые: иначе подсказывать нечего, а грузить его ради
+  // пустоты незачем.
+  const firstSubject = TRAINER_SUBJECTS[0];
+  const firstWrong = firstSubject ? wrongIn(firstSubject.ids || []) : 0;
+  const [pickerTasks, setPickerTasks] = useState(null);
+  useEffect(() => {
+    if (open || !firstSubject || !firstWrong) return undefined;
+    let alive = true;
+    loadBank(firstSubject.file).then((list) => alive && setPickerTasks(list));
+    return () => { alive = false; };
+  }, [open, firstSubject, firstWrong]);
+  const weakest = useMemo(() => {
+    if (!pickerTasks || !firstWrong) return null;
+    const rows = sectionErrors(log, pickerTasks).filter((r) => r.wrong > 0);
+    rows.sort((a, b) => b.wrong / b.done - a.wrong / a.done || b.wrong - a.wrong);
+    return rows[0] || null;
+  }, [log, pickerTasks, firstWrong]);
+
   if (!TRAINER_SUBJECTS.length) return null;
 
   // --- ВсОШ ------------------------------------------------------------------
@@ -426,120 +522,173 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // --- выбор предмета ------------------------------------------------------
   if (!open) {
     const voshDone = doneIn(VOSH_IDS);
+    const percent = allStats.done ? allStats.percent : 0;
+    // Кольцо доли верных: длина окружности при r = 32.
+    const ring = 2 * Math.PI * 32;
     return (
       <section className="ap-card" style={styles.card}>
-        <CardHead
-          id="trainer-alpha"
-          small
-          title="Ответы здесь решены нами, а не взяты у ФИПИ"
-          note={
-            "Банк правильный ответ не показывает, он только говорит «верно» или «неверно». Значит, ошибки " +
-            "в ключах не исключение, а дело времени. Если ты проверил задание в банке — впиши под разбором тот " +
-            "ответ, который банк засчитал. Такой ответ сейчас ценнее любого решённого задания: по нему ключи " +
-            "и правятся."
-          }
-        />
+        {/* Свои показатели — тёмной плашкой сверху: с них экран и читается. */}
+        <div style={S.hero} data-trainer-hero>
+          <div style={S.heroTitle}>Всего в тренажёре — твои показатели</div>
+          <div style={S.heroTop}>
+            <div style={S.ringBox}>
+              <svg width="74" height="74" viewBox="0 0 78 78" role="img" aria-label={allStats.done ? percent + "% верных" : "Ещё ничего не решено"}>
+                <circle cx="39" cy="39" r="32" fill="none" stroke="var(--railActive)" strokeWidth="9" />
+                {allStats.done ? (
+                  <circle
+                    cx="39" cy="39" r="32" fill="none" stroke="var(--gold)" strokeWidth="9" strokeLinecap="round"
+                    strokeDasharray={Math.max(1, (percent / 100) * ring) + " " + ring} transform="rotate(-90 39 39)"
+                  />
+                ) : null}
+                <text x="39" y="45" textAnchor="middle" fontSize="18" fontWeight="700" fill="currentColor" fontFamily="var(--sans)">
+                  {allStats.done ? percent + "%" : "—"}
+                </text>
+              </svg>
+              <span style={S.heroName}>верных</span>
+            </div>
+            <div style={S.heroStats}>
+              <div style={S.heroStat}>
+                <span style={S.heroValue}>{dayStreak}</span>
+                <span style={S.heroName}>{dayWord(dayStreak)} подряд</span>
+              </div>
+              <div style={S.heroStat}>
+                <span style={S.heroValue}>{allStats.averageSeconds ? timeWord(allStats.averageSeconds) : "—"}</span>
+                <span style={S.heroName}>на задание</span>
+              </div>
+              <div style={S.heroStat}>
+                {/* «Решено» — как на плитке банка: по последней попытке верно. */}
+                <span style={S.heroValue}>{doneIn(allIds)}</span>
+                <span style={S.heroName}>из {allCount} решено</span>
+              </div>
+              <div style={S.heroStat}>
+                <span style={S.heroValue}>{allSeconds ? timeWord(allSeconds) : "—"}</span>
+                <span style={S.heroName}>за секундомером</span>
+              </div>
+            </div>
+          </div>
+          <div style={S.weekBars} role="img" aria-label={"Решено за неделю: " + week.map((d) => d.name + " " + d.count).join(", ")}>
+            {week.map((d) => (
+              <div key={d.key} style={S.weekCol} title={d.count + " " + taskWord(d.count)}>
+                <div
+                  style={{
+                    ...S.weekBar,
+                    height: d.count ? Math.max(6, Math.round((d.count / weekMax) * 50)) : 3,
+                    background: d.today ? "var(--gold)" : "var(--railInk2)",
+                    opacity: d.today || !d.count ? 1 : 0.55,
+                    ...(d.count ? null : { background: "var(--railActive)" }),
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          <div style={S.weekNames} aria-hidden="true">
+            {week.map((d) => (
+              <span key={d.key} style={{ ...S.weekName, ...(d.today ? S.weekToday : null) }}>{d.name}</span>
+            ))}
+          </div>
+        </div>
 
-        <div style={S.picker}>
+        <div style={S.tiles}>
           {TRAINER_SUBJECTS.map((s) => {
             const done = doneIn(s.ids);
             const missed = wrongIn(s.ids);
             return (
-              <div key={s.name} style={S.pick}>
-                <div style={S.pickTop}>
-                  <span style={S.pickName}>{s.name}</span>
-                  {/* Пока не начинали — сколько заданий в наборе; дальше это же
-                      число стоит в строке «решено столько-то из стольких-то»,
-                      и дважды писать его незачем. */}
-                  {done ? null : <span style={S.pickCount}>{s.count} {taskWord(s.count)}</span>}
+              <div key={s.name} style={S.tile} data-bank-card>
+                <div style={S.tileName}>Банк ФИПИ</div>
+                <div style={S.tileSub}>{s.name}</div>
+                <div style={S.tileLine}>
+                  {/* Число заданий — один раз: до начала «N заданий», потом
+                      «решено столько-то из N». */}
+                  {done
+                    ? done + " из " + s.count + (done === s.count ? " — всё пройдено" : "") + (missed ? " · неверных " + missed : "")
+                    : s.count + " " + taskWord(s.count)}
                 </div>
-                {/* Сколько заданий предмета уже перенесено из банка: у него там
-                    тысячи, и без этой строчки «68 заданий» выглядит как весь банк. */}
+                {/* Сколько перенесено из банка: у него там тысячи, и без этой
+                    строчки набор выглядит как весь банк. */}
                 {s.whole ? (
-                  <div style={S.pickWhole}>
+                  <div style={S.tileWhole}>
                     из {s.whole} в банке ФИПИ —{" "}
                     {Math.max(0.1, (s.count / s.whole) * 100).toFixed(1).replace(".0", "").replace(".", ",")}%
                   </div>
                 ) : null}
-                <div style={S.pickLine}>
-                  {done
-                    ? "Решено " + done + " из " + s.count + (done === s.count ? " — весь набор пройден" : "") +
-                      (missed ? " · неверных " + missed : "")
-                    : missed
-                      ? "Неверных " + missed + " " + taskWord(missed)
-                      : "Ещё не начинали"}
-                </div>
-                {done ? (
-                  <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(2, (done / s.count) * 100) + "%" }} /></div>
-                ) : null}
-                <div style={S.pickButtons}>
-                  <button onClick={() => start(s.name, "", false)} className="ap-btn" style={S.primary}>
-                    {done ? "Продолжить" : "Начать тест"}
-                  </button>
-                  <button onClick={() => start(s.name, ALL_MODE, false)} className="ap-row" style={S.keyBtn}>
-                    Решать все задания подряд
-                  </button>
-                  {missed ? (
-                    <button onClick={() => start(s.name, WRONG_MODE, true)} className="ap-row" style={S.keyBtn}>
-                      Перерешать неверные ({missed})
-                    </button>
-                  ) : null}
-                  {done ? (
-                    <button onClick={() => start(s.name, ALL_MODE, true)} className="ap-row" style={S.keyBtn}>Пройти заново</button>
-                  ) : null}
-                </div>
+                <div style={S.tileBar}><div style={{ ...S.tileFill, width: done ? Math.max(3, (done / s.count) * 100) + "%" : 0 }} /></div>
+                <button onClick={() => start(s.name, "", false)} className="ap-btn" style={S.tileGo}>
+                  {done ? "Продолжить" : "Начать тест"}
+                </button>
               </div>
             );
           })}
-          <div style={S.pick} data-vosh-card>
-            <div style={S.pickTop}>
-              <span style={S.pickName}>ВсОШ · Обществознание</span>
-              {voshDone ? null : <span style={S.pickCount}>{VOSH_IDS.length} {taskWord(VOSH_IDS.length)}</span>}
+          <div style={S.tile} data-vosh-card>
+            <div style={S.tileName}>ВсОШ</div>
+            <div style={S.tileSub}>Обществознание</div>
+            <div style={S.tileLine}>
+              {voshDone ? "верно " + voshDone + " из " + VOSH_IDS.length : VOSH_INDEX.length + " олимпиад · " + VOSH_IDS.length + " " + taskWord(VOSH_IDS.length)}
             </div>
-            <div style={S.pickWhole}>
-              тесты школьного и муниципального этапов, {VOSH_INDEX.length} олимпиад 2023–2026 с официальными ключами
-            </div>
-            <div style={S.pickLine}>
-              {voshDone ? "Решено верно " + voshDone + " из " + VOSH_IDS.length : "Ещё не начинали"}
-            </div>
-            {voshDone ? (
-              <div style={S.bar}><div style={{ ...S.barFill, width: Math.max(2, (voshDone / VOSH_IDS.length) * 100) + "%" }} /></div>
-            ) : null}
-            <div style={S.pickButtons}>
-              <button onClick={() => start(VOSH_OPEN, "", false)} className="ap-btn" style={S.primary}>
-                {voshDone ? "Продолжить" : "Открыть олимпиады"}
-              </button>
-            </div>
+            <div style={S.tileWhole}>школьный и муниципальный этапы 2023–2026, официальные ключи</div>
+            <div style={S.tileBar}><div style={{ ...S.tileFill, width: voshDone ? Math.max(3, (voshDone / VOSH_IDS.length) * 100) + "%" : 0 }} /></div>
+            <button onClick={() => start(VOSH_OPEN, "", false)} className="ap-row" style={S.tileOpen}>
+              {voshDone ? "Продолжить" : "Открыть олимпиады"}
+            </button>
           </div>
         </div>
 
-        <CardHead
-          id="trainer-buttons"
-          small
-          title="Чем отличаются кнопки"
-          note={
-            "«Начать тест» — только то, что ещё не решено, и можно выбрать раздел. " +
-            "«Все задания подряд» — весь предмет целиком, вместе с уже решённым. " +
-            "«Перерешать неверные» — те, где последний ответ был неверным."
-          }
-        />
-
-        {/* Итог по всем предметам сразу: по отдельным карточкам его не собрать. */}
-        {allStats.done ? (
-          <div style={S.allStats}>
-            {/* Только свои показатели: таблицу «кто сколько решил» убрали. */}
-            <div style={S.allTitle}>Всего в тренажёре — твои показатели</div>
-            <div style={S.stats}>
-              <div style={S.stat}><span style={S.statValue}>{allStats.done}</span><span style={S.statName}>из {allCount} решено</span></div>
-              <div style={S.stat}><span style={S.statValue}>{allStats.percent}%</span><span style={S.statName}>верных</span></div>
-              <div style={S.stat}><span style={S.statValue}>{timeWord(allSeconds)}</span><span style={S.statName}>за секундомером</span></div>
-              <div style={S.stat}>
-                <span style={S.statValue}>{allStats.averageSeconds ? timeWord(allStats.averageSeconds) : "—"}</span>
-                <span style={S.statName}>на задание</span>
-              </div>
+        {TRAINER_SUBJECTS.map((s) => {
+          const done = doneIn(s.ids);
+          const missed = wrongIn(s.ids);
+          return (
+            <div key={s.name} style={S.more}>
+              <div style={S.moreTitle}>Ещё по банку ФИПИ</div>
+              {missed ? (
+                <button onClick={() => start(s.name, WRONG_MODE, true)} className="ap-row" style={{ ...S.moreRow, ...S.moreWrong }}>
+                  <span>Перерешать неверные ({missed})</span>
+                  <span aria-hidden="true">›</span>
+                </button>
+              ) : null}
+              <button onClick={() => start(s.name, ALL_MODE, false)} className="ap-row" style={S.moreRow}>
+                <span>Решать все задания подряд</span>
+                <span style={S.moreMeta}>вместе с решёнными ›</span>
+              </button>
+              {done ? (
+                <button onClick={() => start(s.name, ALL_MODE, true)} className="ap-row" style={S.moreRow}>
+                  <span>Пройти заново</span>
+                  <span style={S.moreMeta}>с первого задания ›</span>
+                </button>
+              ) : null}
+              {weakest && s === firstSubject ? (
+                <button onClick={() => startWeak(s.name, weakest.section)} className="ap-row" style={S.moreRow} data-weak-theme>
+                  <span>Слабая тема: {weakest.section}</span>
+                  <span style={S.moreMeta}>
+                    {weakest.wrong} из {weakest.done} {weakest.wrong === 1 ? "неверно" : "неверны"} ›
+                  </span>
+                </button>
+              ) : null}
             </div>
-          </div>
-        ) : null}
+          );
+        })}
+
+        <div style={S.notes}>
+          <CardHead
+            id="trainer-alpha"
+            small
+            title="Ответы здесь решены нами, а не взяты у ФИПИ"
+            note={
+              "Банк правильный ответ не показывает, он только говорит «верно» или «неверно». Значит, ошибки " +
+              "в ключах не исключение, а дело времени. Если ты проверил задание в банке — впиши под разбором тот " +
+              "ответ, который банк засчитал. Такой ответ сейчас ценнее любого решённого задания: по нему ключи " +
+              "и правятся."
+            }
+          />
+          <CardHead
+            id="trainer-buttons"
+            small
+            title="Чем отличаются кнопки"
+            note={
+              "«Начать тест» и «Продолжить» — только то, что ещё не решено, и можно выбрать раздел. " +
+              "«Все задания подряд» — весь предмет целиком, вместе с уже решённым. " +
+              "«Перерешать неверные» — те, где последний ответ был неверным."
+            }
+          />
+        </div>
 
         <p style={S.source}>{BANK_SOURCE}</p>
       </section>
@@ -572,9 +721,25 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
     <>
       <section className="ap-card" style={styles.card}>
         <div style={S.head0}>
-          <div style={styles.cardTitle}>{open}</div>
-          <button onClick={leave} className="ap-row" style={S.back}>К выбору предмета</button>
+          <button onClick={leave} className="ap-row" style={S.back}>‹ К выбору предмета</button>
+          <div style={S.headTitle}>{open}</div>
         </div>
+
+        {/* Как идёт этот подход: отрезок на каждое задание, серый — текущее. */}
+        {session.length > 0 && (
+          <div style={S.segments} role="img" data-session
+            aria-label={"В этом подходе: верно " + session.filter((x) => x === "ok").length +
+              ", неверно " + session.filter((x) => x === "bad").length}>
+            {session.slice(-11).map((x, i) => (
+              <span key={i} style={{ ...S.segment, background: x === "ok" ? "var(--green)" : x === "bad" ? "var(--red)" : "var(--barDim)" }} />
+            ))}
+            {!result && <span style={{ ...S.segment, background: "var(--line)" }} />}
+            {/* Пустые отрезки до десяти: одна полоска без них похожа на подчёркивание. */}
+            {Array.from({ length: Math.max(0, 10 - Math.min(11, session.length) - (result ? 0 : 1)) }, (_, i) => (
+              <span key={"e" + i} style={{ ...S.segment, background: "var(--line2)" }} />
+            ))}
+          </div>
+        )}
 
         {/* Разделы, порядок и «только нерешённые» нужны редко, а занимали пол-экрана
             над заданием — теперь они свёрнуты, а в заголовке видно, что выбрано. */}
@@ -686,60 +851,72 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
               </div>
             )}
 
-            <div style={S.answerRow}>
-              <input
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && answer()}
-                disabled={!!result}
-                placeholder="Ответ"
-                style={S.input}
-                aria-label="Ваш ответ"
-              />
-              {task.units && <span style={S.units}>{task.units}</span>}
-              {!result ? (
-                <button onClick={answer} className="ap-btn" style={S.primary}>Ответить</button>
-              ) : (
-                <button onClick={next} className="ap-btn" style={S.primary}>Следующее</button>
-              )}
-            </div>
-
-            <div style={S.underRow}>
-              {!result && (
-                <button onClick={reveal} className="ap-row" style={S.keyBtn} data-reveal>
-                  Показать ответ
-                </button>
-              )}
-              {!result && <button onClick={next} className="ap-row" style={S.skip}>Пропустить</button>}
-              <button
-                onClick={() => mark("broken", "", true)}
-                className="ap-row"
-                style={{ ...S.report, ...(myBroken ? S.reportOn : null) }}
-                title="Условие показано криво, непонятно или не хватает рисунка"
-              >
-                {myBroken ? "Пожаловались на задание ✓" : "Пожаловаться на задание"}
-              </button>
-            </div>
-
-            {result && (
-              <div style={{ ...S.verdict, ...(result.revealed ? S.verdictOpen : result.ok ? S.verdictOk : S.verdictBad) }}>
-                <div style={S.verdictHead}>
-                  {result.revealed ? "Ответ открыт" : result.ok ? "Верно" : "Неверно"}
-                  {!result.revealed && <span style={S.verdictTime}>{timeWord(result.seconds)}</span>}
+            {!result ? (
+              <>
+                <div style={S.answerRow}>
+                  <input
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && answer()}
+                    placeholder="Ответ"
+                    style={S.input}
+                    aria-label="Ваш ответ"
+                  />
+                  {task.units && <span style={S.units}>{task.units}</span>}
+                  <button onClick={answer} className="ap-btn" style={S.go}>Ответить</button>
                 </div>
-                {result.revealed && <div style={S.revealNote}>Попытка не засчитана: ответ открыт до решения.</div>}
-                {!result.ok && (
-                  <div style={S.right}>
-                    Ответ: <b>{task.answer}</b> {task.units}
-                  </div>
+                <div style={S.underRow}>
+                  <button onClick={reveal} className="ap-row" style={S.textBtn} data-reveal>Показать ответ</button>
+                  <button onClick={next} className="ap-row" style={S.textBtn}>Пропустить</button>
+                  <button
+                    onClick={() => mark("broken", "", true)}
+                    className="ap-row"
+                    style={{ ...S.report, ...(myBroken ? S.reportOn : null) }}
+                    title="Условие показано криво, непонятно или не хватает рисунка"
+                  >
+                    {myBroken ? "Пожаловались на задание ✓" : "Пожаловаться на задание"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              // Свой ответ рядом с верным — сразу видно, где разошлись.
+              <div
+                style={{ ...S.compare, ...(result.revealed ? S.compareOpen : result.ok ? S.compareOk : S.compareBad) }}
+                data-answer-compare
+              >
+                {result.revealed ? (
+                  <span style={S.compareName}>Ответ: <b style={S.compareValue}>{task.answer}</b> {task.units}</span>
+                ) : (
+                  <>
+                    <span style={S.compareName}>Твой ответ</span>
+                    <b style={{ ...S.compareValue, ...(result.ok ? S.valueOk : S.valueBad) }}>{value || "—"}</b>
+                    {result.ok ? (
+                      <span style={{ ...S.compareRight, color: "var(--green)" }}>верно ✓</span>
+                    ) : (
+                      <span style={S.compareRight}>
+                        <span style={{ color: "var(--green)" }}>верно</span>
+                        <b style={{ ...S.compareValue, color: "var(--green)" }}>{task.answer}</b>
+                        {task.units && <span style={S.units}>{task.units}</span>}
+                      </span>
+                    )}
+                  </>
                 )}
-                <div style={S.why}>{task.why}</div>
-                {task.sure && <div style={S.doubt}>Уверенность в ключе неполная — {task.sure}</div>}
               </div>
             )}
 
             {result && (
-              <div style={S.keyBox}>
+              <div style={S.verdict}>
+                <div style={S.verdictHead}>
+                  <span style={{ ...S.verdictWord, color: result.revealed ? "var(--ink)" : result.ok ? "var(--green)" : "var(--red)" }}>
+                    {result.revealed ? "Ответ открыт" : result.ok ? "Верно" : "Неверно"}
+                  </span>
+                  <span style={S.verdictKind}>разбор</span>
+                  {!result.revealed && <span style={S.verdictTime}>{timeWord(result.seconds)}</span>}
+                </div>
+                {result.revealed && <div style={S.revealNote}>Попытка не засчитана: ответ открыт до решения.</div>}
+                <div style={S.why}>{task.why}</div>
+                {task.sure && <div style={S.doubt}>Уверенность в ключе неполная — {task.sure}</div>}
+                <div style={S.keyBox}>
                 <div style={{ ...S.keyState, ...(key.state === "disputed" ? S.keyBad : key.state === "confirmed" || key.state === "agreed" ? S.keyOk : S.keyWarn) }}>
                   {key.state === "confirmed"
                     ? "Сверен с банком" + (key.fipiOk > 1 ? ", подтвердили " + key.fipiOk : "")
@@ -772,7 +949,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                   // Как проверить ключ в банке — длинная инструкция; она нужна не на
                   // каждом задании, поэтому свёрнута под кнопкой.
                   <details style={S.checkBox} data-key-check>
-                    <summary style={S.checkSummary}>Проверить ключ на ФИПИ</summary>
+                    <summary style={S.checkSummary}>Проверить ключ на ФИПИ ›</summary>
                     <p style={S.keyNote}>
                       Банк правильный ответ не показывает: он только говорит «верно» или «неверно».
                       Поэтому ответ здесь решён нами — и точнее всего его проверяет тот, кто сходил в банк.
@@ -845,6 +1022,21 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
                     Общая копилка ещё не знает про ответы с ФИПИ — отметка сохранится на этом устройстве.
                   </p>
                 )}
+                </div>
+              </div>
+            )}
+
+            {result && (
+              <div style={S.after}>
+                <button onClick={next} className="ap-btn" style={S.nextBtn}>Следующее</button>
+                <button
+                  onClick={() => mark("broken", "", true)}
+                  className="ap-row"
+                  style={{ ...S.report, ...(myBroken ? S.reportOn : null) }}
+                  title="Условие показано криво, непонятно или не хватает рисунка"
+                >
+                  {myBroken ? "Пожаловались на задание ✓" : "Пожаловаться на задание"}
+                </button>
               </div>
             )}
           </div>
@@ -1002,13 +1194,16 @@ const S = {
   },
   doubt: { marginTop: 7, fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5 },
 
-  task: { border: "1px solid var(--line2)", borderRadius: 12, padding: "14px 15px", background: "var(--panel2)" },
-  head: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 },
+  task: { border: "1px solid var(--line2)", borderRadius: 16, padding: "16px", background: "var(--panel2)" },
+  head: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 },
   code: {
-    fontFamily: "ui-monospace, monospace", fontSize: 12.5, fontWeight: 600, letterSpacing: "0.03em",
-    border: "1px solid var(--line2)", borderRadius: 6, padding: "2px 7px", color: "var(--ink2)",
+    fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 600, letterSpacing: "0.03em",
+    background: "var(--neutralBg)", borderRadius: 7, padding: "3px 8px", color: "var(--ink2)",
   },
-  headSection: { fontSize: 12.5, color: "var(--ink3)" },
+  headSection: {
+    fontSize: 12, fontWeight: 600, borderRadius: 7, padding: "3px 8px",
+    background: "var(--accentSoft)", color: "var(--accent)",
+  },
   clock: { marginLeft: "auto", fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 600, color: "var(--ink2)" },
   kes: {
     fontSize: 12, color: "var(--mute)", marginBottom: 8, lineHeight: 1.45,
@@ -1018,32 +1213,55 @@ const S = {
   text: { fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 14 },
   body: { marginBottom: 14 },
 
-  answerRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  answerRow: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 4 },
   input: {
-    flex: "1 1 160px", minWidth: 0, border: "1px solid var(--line)", borderRadius: 9, padding: "9px 12px",
-    font: "inherit", fontSize: 15, background: "var(--panel)", color: "var(--ink)",
+    flex: "1 1 160px", minWidth: 0, height: 50, boxSizing: "border-box", border: "1.5px solid var(--line)",
+    borderRadius: 13, padding: "0 14px", font: "inherit", fontSize: 17, background: "var(--panel)", color: "var(--ink)",
   },
+  go: {
+    height: 50, border: "none", background: "var(--btnBg)", color: "var(--btnInk)", borderRadius: 13,
+    padding: "0 22px", font: "inherit", fontSize: 15, fontWeight: 600, cursor: "pointer",
+  },
+  textBtn: {
+    border: "none", background: "none", color: "var(--ink2)", font: "inherit",
+    fontSize: 13.5, cursor: "pointer", padding: "6px 0",
+  },
+  compare: {
+    display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 4,
+    padding: "11px 14px", borderRadius: 12, border: "1.5px solid",
+  },
+  compareOk: { borderColor: "var(--green)", background: "var(--greenSoft)" },
+  compareBad: { borderColor: "var(--redLine)", background: "var(--redBg)" },
+  compareOpen: { borderColor: "var(--line)", background: "var(--panel)" },
+  compareName: { fontSize: 13, color: "var(--ink3)" },
+  compareValue: { fontSize: 18, fontWeight: 700, color: "var(--ink)", wordBreak: "break-word" },
+  valueOk: { color: "var(--green)" },
+  valueBad: { color: "var(--red)", textDecoration: "line-through" },
+  compareRight: { marginLeft: "auto", display: "inline-flex", alignItems: "baseline", gap: 8, fontSize: 13 },
   units: { fontSize: 14, color: "var(--ink3)" },
   primary: {
     border: "1px solid var(--ink)", background: "var(--ink)", color: "var(--bg)", borderRadius: 9,
     padding: "9px 16px", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
   },
-  underRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 9 },
-  skip: {
-    border: "none", background: "none", color: "var(--mute)", font: "inherit",
-    fontSize: 13, cursor: "pointer", padding: 0,
-  },
+  underRow: { display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", marginTop: 6 },
   report: {
     marginLeft: "auto", border: "none", background: "none", color: "var(--mute)", font: "inherit",
     fontSize: 13, cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 3,
   },
   reportOn: { color: "var(--ink2)", textDecoration: "none", fontWeight: 600 },
 
-  verdict: { marginTop: 12, borderRadius: 10, padding: "11px 13px", border: "1px solid" },
-  verdictOk: { borderColor: "var(--green)", background: "var(--panel)" },
-  verdictBad: { borderColor: "var(--redLine)", background: "var(--redBg)" },
-  verdictOpen: { borderColor: "var(--line)", background: "var(--panel2)" },
+  verdict: { marginTop: 12, borderRadius: 16, padding: "14px 16px", border: "1px solid var(--line2)", background: "var(--panel)" },
+  verdictWord: { fontFamily: "var(--serif)", fontSize: 21, fontWeight: 400 },
+  verdictKind: { fontSize: 12, color: "var(--mute)", fontFamily: "var(--sans)", fontWeight: 400 },
   revealNote: { fontSize: 12.5, color: "var(--mute)", marginTop: 4 },
+  after: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 12 },
+  nextBtn: {
+    flex: "1 1 220px", height: 52, border: "none", background: "var(--btnBg)", color: "var(--btnInk)",
+    borderRadius: 14, font: "inherit", fontSize: 16, fontWeight: 600, cursor: "pointer",
+  },
+  segments: { display: "flex", gap: 4, margin: "0 0 12px" },
+  segment: { flex: 1, height: 6, borderRadius: 999 },
+  headTitle: { fontFamily: "var(--serif)", fontSize: 20, flex: "1 1 auto", minWidth: 0 },
   prevLine: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink3)", margin: "10px 0 2px" },
   prevBtn: {
     padding: "2px 10px",
@@ -1059,13 +1277,12 @@ const S = {
   setBox: { margin: "4px 0 12px", padding: "8px 12px", border: "1px solid var(--line2)", borderRadius: 10 },
   setSummary: { cursor: "pointer", fontSize: 13.5, color: "var(--ink2)", padding: "2px 0" },
   checkBox: { marginTop: 10 },
-  checkSummary: { cursor: "pointer", fontSize: 13.5, fontWeight: 600, color: "var(--ink2)", padding: "4px 0" },
-  verdictHead: { display: "flex", alignItems: "baseline", gap: 10, fontWeight: 600, fontSize: 15.5, fontFamily: "'PT Serif', Georgia, serif" },
+  checkSummary: { cursor: "pointer", fontSize: 13.5, fontWeight: 600, color: "var(--accent)", padding: "4px 0" },
+  verdictHead: { display: "flex", alignItems: "baseline", gap: 8 },
   verdictTime: { marginLeft: "auto", fontSize: 13, fontWeight: 400, color: "var(--ink3)", fontVariantNumeric: "tabular-nums" },
-  right: { marginTop: 6, fontSize: 14.5 },
   why: { marginTop: 7, fontSize: 13.5, lineHeight: 1.55, color: "var(--ink2)" },
 
-  keyBox: { marginTop: 12, borderTop: "1px solid var(--line2)", paddingTop: 11 },
+  keyBox: { marginTop: 12, borderTop: "1px solid var(--line2)", paddingTop: 10 },
   keyState: { display: "inline-block", fontSize: 12.5, borderRadius: 999, padding: "3px 10px", border: "1px solid" },
   keyWarn: { borderColor: "var(--warmLine)", background: "var(--warmBg)", color: "var(--warmInk)" },
   keyOk: { borderColor: "var(--green)", color: "var(--ink2)" },
@@ -1099,17 +1316,52 @@ const S = {
     textDecoration: "underline", cursor: "pointer", padding: 0,
   },
   fromClass: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, margin: "9px 0 0" },
-  picker: { display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: 14 },
-  pick: { border: "1px solid var(--line2)", borderRadius: 12, padding: "12px 14px", background: "var(--panel2)" },
-  pickTop: { display: "flex", alignItems: "baseline", gap: 8, justifyContent: "space-between" },
-  pickName: { fontSize: 16, fontWeight: 600, color: "var(--ink)" },
-  pickCount: { fontSize: 12.5, color: "var(--mute)", flex: "0 0 auto" },
-  pickLine: { fontSize: 13, color: "var(--ink3)", margin: "6px 0 0" },
-  pickButtons: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 },
-  pickHint: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, marginTop: 12 },
-  pickWhole: { fontSize: 12, color: "var(--mute)", marginTop: 2 },
-  allStats: { marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" },
-  allTitle: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 16, marginBottom: 8 },
+  hero: {
+    background: "var(--rail)", color: "var(--railInk)", borderRadius: 18, padding: "16px 18px 14px",
+    display: "flex", flexDirection: "column", gap: 14, marginBottom: 12,
+  },
+  heroTitle: { fontSize: 12.5, color: "var(--railInk2)" },
+  heroTop: { display: "flex", alignItems: "center", gap: 14 },
+  ringBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
+  heroStats: { flex: "1 1 0", minWidth: 0, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "10px 12px" },
+  heroStat: { display: "flex", flexDirection: "column", minWidth: 0 },
+  heroValue: { fontFamily: "var(--serif)", fontSize: 21, lineHeight: 1.15, fontVariantNumeric: "tabular-nums" },
+  heroName: { fontSize: 12, color: "var(--railInk2)" },
+  weekBars: { display: "flex", alignItems: "flex-end", gap: 6, height: 52 },
+  weekCol: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: 52 },
+  weekBar: { borderRadius: 4 },
+  weekNames: { display: "flex", gap: 6, marginTop: -8 },
+  weekName: { flex: 1, textAlign: "center", fontSize: 11, color: "var(--railInk2)" },
+  weekToday: { color: "var(--gold)", fontWeight: 600 },
+  tiles: { display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", marginBottom: 14 },
+  tile: {
+    border: "1px solid var(--line2)", borderRadius: 16, padding: 14, background: "var(--panel2)",
+    display: "flex", flexDirection: "column", gap: 4, minWidth: 0,
+  },
+  tileName: { fontSize: 16, fontWeight: 600, color: "var(--ink)" },
+  tileSub: { fontSize: 12.5, color: "var(--ink3)" },
+  tileLine: { fontSize: 13, color: "var(--ink2)", marginTop: 4 },
+  tileWhole: { fontSize: 11.5, color: "var(--mute)", lineHeight: 1.4 },
+  tileBar: { height: 5, borderRadius: 999, background: "var(--line2)", overflow: "hidden", margin: "8px 0 10px" },
+  tileFill: { height: "100%", borderRadius: 999, background: "var(--green)" },
+  tileGo: {
+    marginTop: "auto", height: 44, border: "none", borderRadius: 12, background: "var(--btnBg)", color: "var(--btnInk)",
+    font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
+  },
+  tileOpen: {
+    marginTop: "auto", height: 44, border: "1px solid var(--line)", borderRadius: 12, background: "var(--panel)",
+    color: "var(--ink)", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
+  },
+  more: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 },
+  moreTitle: { fontSize: 13, fontWeight: 600, color: "var(--ink3)", marginBottom: 2 },
+  moreRow: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 48,
+    padding: "8px 14px", border: "1px solid var(--line)", borderRadius: 12, background: "var(--panel)",
+    color: "var(--ink)", font: "inherit", fontSize: 14, textAlign: "left", cursor: "pointer",
+  },
+  moreWrong: { borderColor: "var(--redLine)", background: "var(--redBg)", color: "var(--red)", fontWeight: 600 },
+  moreMeta: { fontSize: 12.5, color: "var(--mute)", flex: "0 0 auto" },
+  notes: { display: "flex", flexDirection: "column", gap: 4 },
   topNote: { fontSize: 12.5, color: "var(--mute)", lineHeight: 1.5, marginTop: 8 },
   nameRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0" },
   nameInput: {
@@ -1126,10 +1378,10 @@ const S = {
   topName: { flex: "1 1 120px" },
   topDone: { color: "var(--mute)", fontVariantNumeric: "tabular-nums" },
   topPercent: { color: "var(--mute)", fontVariantNumeric: "tabular-nums", minWidth: 86, textAlign: "right" },
-  head0: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between", marginBottom: 10 },
+  head0: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 },
   back: {
-    border: "1px solid var(--line2)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 8,
-    padding: "6px 11px", font: "inherit", fontSize: 13, cursor: "pointer",
+    border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink2)", borderRadius: 12,
+    padding: "0 12px", height: 40, font: "inherit", fontSize: 13.5, cursor: "pointer",
   },
   onlyCount: { fontSize: 12.5, color: "var(--mute)", marginLeft: "auto" },
   collected: {
