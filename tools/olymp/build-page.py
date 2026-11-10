@@ -9,11 +9,11 @@ import re, subprocess, sys, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SRC = ROOT / "docs" / "olymp"
-SLUGS = {"00": "plan", "01": "format", "02": "society", "03": "sociology", "04": "economics",
+SLUGS = {"00": "plan", "01": "format", "02": "society", "03": "sociology", "04": "economics", "04b": "econdeep",
          "05": "politics", "06": "law", "07": "constitution", "08": "theory", "09": "culture",
          "10": "logic", "11": "persons", "12": "countries"}
 SHORT = {"plan": "План", "format": "Формат", "society": "Общество", "sociology": "Социология",
-         "economics": "Экономика", "politics": "Политология", "law": "Право",
+         "economics": "Экономика", "econdeep": "Экономика+", "politics": "Политология", "law": "Право",
          "constitution": "Конституция", "theory": "Теория права", "culture": "Культура",
          "logic": "Логика", "persons": "Мыслители", "countries": "Страны"}
 
@@ -25,8 +25,8 @@ def html_of(path):
     return out
 
 sections, tabs = [], []
-for f in sorted(SRC.glob("[0-9][0-9]-*.md")):
-    slug = SLUGS[f.name[:2]]
+for f in sorted(SRC.glob("[0-9][0-9]*-*.md")):
+    slug = SLUGS[f.name.split("-")[0]]
     body = html_of(f)
     # якоря подзаголовков: внутри страницы работает только простой #имя
     n = [0]
