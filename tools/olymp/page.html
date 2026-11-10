@@ -53,6 +53,20 @@ td:first-child{font-weight:500}
 .nav a{text-decoration:none;font-weight:600}
 .find{display:flex;gap:8px;margin:0 0 12px}
 .find input{flex:1;min-width:0;height:40px;box-sizing:border-box;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:inherit;font-size:15px}
+
+/* Ползунок разделов у правого края: тянуть или нажимать на деление. */
+.rail{position:fixed;z-index:8;right:max(4px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;user-select:none;-webkit-user-select:none}
+.rail button{width:30px;height:30px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink2);font:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0}
+.rail button:disabled{opacity:.35;cursor:default}
+.track{position:relative;width:30px;padding:6px 0;border-radius:999px;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:0;touch-action:none;cursor:grab}
+.track:focus-visible,.rail button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tick{width:30px;height:clamp(14px,3.4vh,24px);display:flex;align-items:center;justify-content:center}
+.tick i{display:block;width:8px;height:3px;border-radius:2px;background:var(--line)}
+.tick.on i{width:16px;height:6px;border-radius:3px;background:var(--accent)}
+.tick.aim i{width:16px;background:var(--mute)}
+.tip{position:absolute;right:38px;top:0;transform:translateY(-50%);white-space:nowrap;background:var(--bar);color:var(--barInk);padding:6px 12px;border-radius:10px;font-size:14px;font-weight:600;pointer-events:none}
+main{padding-right:max(46px,env(safe-area-inset-right,0px))}
+@media (min-width:900px){main{padding-right:max(16px,env(safe-area-inset-right,0px))}.rail{right:max(18px,calc(50vw - 460px))}}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -65,6 +79,12 @@ td:first-child{font-weight:500}
 <main>
 <!--CHAPTERS-->
 </main>
+
+<div class="rail" id="rail">
+  <button type="button" id="rail-prev" aria-label="Предыдущий раздел">▲</button>
+  <div class="track" id="rail-track" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Раздел учебника"><div class="tip" id="rail-tip" hidden></div></div>
+  <button type="button" id="rail-next" aria-label="Следующий раздел">▼</button>
+</div>
 
 <script>
 (function () {
@@ -112,6 +132,44 @@ td:first-child{font-weight:500}
     });
   }
 
+  // Ползунок разделов: деление на раздел, тянуть — выбрать, отпустить — перейти.
+  var track = document.getElementById("rail-track"), tip = document.getElementById("rail-tip");
+  var prevBtn = document.getElementById("rail-prev"), nextBtn = document.getElementById("rail-next");
+  var names = chapters.map(function (c) { return c.querySelector("h1").textContent; });
+  var ticks = ids.map(function () { var t = document.createElement("div"); t.className = "tick"; t.innerHTML = "<i></i>"; track.appendChild(t); return t; });
+  var current = 0, aim = -1;
+  function go(i) { if (i >= 0 && i < ids.length && i !== current) location.hash = ids[i]; }
+  function indexAt(y) {
+    var a = ticks[0].getBoundingClientRect().top, b = ticks[ticks.length - 1].getBoundingClientRect().bottom;
+    return Math.max(0, Math.min(ids.length - 1, Math.floor(((y - a) / (b - a)) * ids.length)));
+  }
+  function setAim(i) {
+    aim = i;
+    ticks.forEach(function (t, n) { t.classList.toggle("aim", n === i && n !== current); });
+    if (i < 0) { tip.hidden = true; return; }
+    tip.textContent = names[i];
+    tip.style.top = (ticks[i].offsetTop + ticks[i].offsetHeight / 2) + "px";
+    tip.hidden = false;
+  }
+  function paintRail(i) {
+    current = i;
+    ticks.forEach(function (t, n) { t.classList.toggle("on", n === i); });
+    track.setAttribute("aria-valuemin", 1); track.setAttribute("aria-valuemax", ids.length);
+    track.setAttribute("aria-valuenow", i + 1); track.setAttribute("aria-valuetext", names[i]);
+    prevBtn.disabled = i === 0; nextBtn.disabled = i === ids.length - 1;
+  }
+  track.addEventListener("pointerdown", function (e) { track.setPointerCapture(e.pointerId); setAim(indexAt(e.clientY)); e.preventDefault(); });
+  track.addEventListener("pointermove", function (e) { if (aim >= 0) setAim(indexAt(e.clientY)); });
+  track.addEventListener("pointerup", function () { var i = aim; setAim(-1); go(i); });
+  track.addEventListener("pointercancel", function () { setAim(-1); });
+  track.addEventListener("keydown", function (e) {
+    var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+    if (e.key === "Home") { go(0); e.preventDefault(); } else if (e.key === "End") { go(ids.length - 1); e.preventDefault(); }
+    else if (d) { go(current + d); e.preventDefault(); }
+  });
+  prevBtn.addEventListener("click", function () { go(current - 1); });
+  nextBtn.addEventListener("click", function () { go(current + 1); });
+
   function remember(id) { try { localStorage.setItem("olymp-chapter", id); } catch (e) {} }
   function recall() { try { return localStorage.getItem("olymp-chapter"); } catch (e) { return null; } }
 
@@ -126,6 +184,7 @@ td:first-child{font-weight:500}
       if (on) { t.setAttribute("aria-current", "page"); t.scrollIntoView({ block: "nearest", inline: "center" }); }
       else t.removeAttribute("aria-current");
     });
+    paintRail(ids.indexOf(chapterId));
     remember(chapterId);
     var target = hash && hash !== chapterId ? document.getElementById(hash) : null;
     if (target) target.scrollIntoView();
