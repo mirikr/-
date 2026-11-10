@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { retryImport } from "./chunk-reload.js";
 import { BANK_SOURCE, BANK_URL } from "./fipi-index.js";
 import { TRAINER_SUBJECTS, inTrainer } from "./trainer-subjects.js";
@@ -93,6 +94,20 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // ответ открыт. Живут, пока не вернулись к выбору: это «как идёт сейчас»,
   // а не журнал.
   const [session, setSession] = useState([]);
+  // Учебник к олимпиаде — отдельная страница (public/olymp), открывается поверх
+  // приложения. Лежит в офлайн-кэше, поэтому читается и без сети.
+  const [bookOpen, setBookOpen] = useState(false);
+  useEffect(() => {
+    if (!bookOpen) return undefined;
+    const onKey = (e) => e.key === "Escape" && setBookOpen(false);
+    window.addEventListener("keydown", onKey);
+    const was = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = was;
+    };
+  }, [bookOpen]);
 
   // Набор грузится, когда предмет открыли, и остаётся в памяти: переключаться
   // между предметами после этого мгновенно.
@@ -631,6 +646,27 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
             </button>
           </div>
         </div>
+
+        <button type="button" onClick={() => setBookOpen(true)} className="ap-row" style={S.book} data-olymp-book>
+          <span style={S.bookText}>
+            <span style={S.bookName}>Учебник к олимпиаде</span>
+            <span style={S.bookNote}>план до 19 ноября, формат этапа и 12 разделов теории — право, экономика, политология, социология</span>
+          </span>
+          <span aria-hidden="true" style={S.bookGo}>›</span>
+        </button>
+
+        {/* Окно — в корне страницы: у карточки свой слой отрисовки, и внутри неё
+            «fixed» привязывался бы к карточке, а не к экрану. */}
+        {bookOpen && createPortal(
+          <div style={S.bookLayer} role="dialog" aria-modal="true" aria-label="Учебник к олимпиаде">
+            <div style={S.bookBar}>
+              <button type="button" onClick={() => setBookOpen(false)} className="ap-row" style={S.bookClose}>‹ Закрыть</button>
+              <span style={S.bookTitle}>Учебник к олимпиаде</span>
+            </div>
+            <iframe title="Учебник к олимпиаде" src={import.meta.env.BASE_URL + "olymp/index.html"} style={S.bookFrame} />
+          </div>,
+          document.body,
+        )}
 
         {TRAINER_SUBJECTS.map((s) => {
           const done = doneIn(s.ids);
@@ -1353,6 +1389,29 @@ const S = {
     color: "var(--ink)", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
   },
   more: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 },
+  book: {
+    display: "flex", alignItems: "center", gap: 12, width: "100%", marginBottom: 14, padding: "14px 16px",
+    border: "1px solid var(--line)", borderRadius: 16, background: "var(--accentSoft)", color: "var(--ink)",
+    font: "inherit", textAlign: "left", cursor: "pointer",
+  },
+  bookText: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 },
+  bookName: { fontFamily: "var(--serif)", fontSize: 18 },
+  bookNote: { fontSize: 12.5, color: "var(--ink3)", lineHeight: 1.4 },
+  bookGo: { fontSize: 22, color: "var(--accent)" },
+  bookLayer: {
+    position: "fixed", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", background: "var(--bg)",
+    paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)",
+  },
+  bookBar: {
+    display: "flex", alignItems: "center", gap: 12, padding: "8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px))",
+    borderBottom: "1px solid var(--line)", background: "var(--panel)",
+  },
+  bookClose: {
+    height: 38, padding: "0 14px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel2)",
+    color: "var(--ink)", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
+  },
+  bookTitle: { fontSize: 14, color: "var(--ink3)" },
+  bookFrame: { flex: 1, width: "100%", border: "none", background: "var(--bg)" },
   moreTitle: { fontSize: 13, fontWeight: 600, color: "var(--ink3)", marginBottom: 2 },
   moreRow: {
     display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 48,

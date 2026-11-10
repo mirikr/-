@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Собирает docs/olymp/*.md в одну страницу для чтения (учебник к ВсОШ).
+
+    python3 tools/olymp/build-page.py <куда положить .html>
+    python3 tools/olymp/build-page.py --app      # public/olymp/index.html для приложения
+
+Нужен pandoc. Разделы идут по номеру в имени файла; заголовок раздела — его H1.
+Файл для приложения собирается здесь, а не при сборке сайта: на сервере сборки
+pandoc нет, поэтому готовый public/olymp/index.html лежит в репозитории —
+после правки docs/olymp его нужно пересобрать и закоммитить.
+"""
+import re, subprocess, sys, pathlib
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+SRC = ROOT / "docs" / "olymp"
+SLUGS = {"00": "plan", "01": "format", "02": "society", "03": "sociology", "04": "economics", "04b": "econdeep",
+         "05": "politics", "06": "law", "07": "constitution", "08": "theory", "09": "culture",
+         "10": "logic", "11": "persons", "12": "countries"}
+SHORT = {"plan": "План", "format": "Формат", "society": "Общество", "sociology": "Социология",
+         "economics": "Экономика", "econdeep": "Экономика+", "politics": "Политология", "law": "Право",
+         "constitution": "Конституция", "theory": "Теория права", "culture": "Культура",
+         "logic": "Логика", "persons": "Мыслители", "countries": "Страны"}
+
+def html_of(path):
+    out = subprocess.run(["pandoc", "-f", "gfm", "-t", "html", str(path)], capture_output=True, text=True, check=True).stdout
+    out = re.sub(r"<table>", '<div class="tbl"><table>', out).replace("</table>", "</table></div>")
+    out = re.sub(r"<colgroup>.*?</colgroup>", "", out, flags=re.S)
+    out = re.sub(r' style="[^"]*"', "", out)
+    return out
+
+sections, tabs = [], []
+for f in sorted(SRC.glob("[0-9][0-9]*-*.md")):
+    slug = SLUGS[f.name.split("-")[0]]
+    body = html_of(f)
+    # якоря подзаголовков: внутри страницы работает только простой #имя
+    n = [0]
+    def h2(m):
+        n[0] += 1
+        return '<h2 data-h="%d">' % n[0]
+    body = re.sub(r'<h2 id="[^"]*">', h2, body)
+    body = re.sub(r'<h([13]) id="[^"]*">', r"<h\1>", body)
+    sections.append('<article id="%s" class="chapter" hidden>%s</article>' % (slug, body))
+    tabs.append('<a href="#%s" data-tab="%s">%s</a>' % (slug, slug, SHORT[slug]))
+
+page = (pathlib.Path(__file__).with_name("page.html").read_text(encoding="utf-8")
+        .replace("<!--TABS-->", "\n".join(tabs)).replace("<!--CHAPTERS-->", "\n".join(sections)))
+if sys.argv[1] == "--app":
+    # Целый документ: в приложении страницу не обёртывают, как при публикации.
+    head, body = page.split('<div class="bar">', 1)
+    theme = (
+        "<script>\n"
+        "// Учебник открывается внутри приложения — берём его тему, а не системную.\n"
+        "try { var t = window.parent !== window && parent.document.documentElement.getAttribute(\"data-theme\");\n"
+        "  if (t) document.documentElement.setAttribute(\"data-theme\", t === \"night\" ? \"dark\" : \"light\"); } catch (e) {}\n"
+        "</script>\n"
+    )
+    page = (
+        '<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
+        + theme + head.replace('<meta name="claude:viewport-fit-sides" content="cover">\n', "")
+        + "<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>\n</head>\n<body>\n"
+        + '<div class="bar">' + body + "\n</body>\n</html>\n"
+    )
+    dst = ROOT / "public" / "olymp" / "index.html"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+else:
+    dst = pathlib.Path(sys.argv[1])
+dst.write_text(page, encoding="utf-8")
+print(dst, len(page) // 1024, "КБ,", len(sections), "разделов")

@@ -1241,15 +1241,23 @@ export default function StudyPlanner() {
       }
     }
 
+    // Урок «вне плана» остаётся в списке, но время на него не закладывается:
+    // ни в «хватит ли времени», ни в рекомендацию часов по предметам.
     let remainingMinutes = 0;
     let remainingTopics = 0;
+    let offPlanMinutes = 0;
+    let offPlanTopics = 0;
     ALL_SUBJECTS.forEach((s) => {
       const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
       list.forEach((t) => {
-        if (!t.done) {
-          remainingMinutes += Number(t.duration) || D;
-          remainingTopics += 1;
+        if (t.done) return;
+        if (t.offPlan) {
+          offPlanMinutes += Number(t.duration) || D;
+          offPlanTopics += 1;
+          return;
         }
+        remainingMinutes += Number(t.duration) || D;
+        remainingTopics += 1;
       });
     });
     const neededHours = remainingMinutes / 60;
@@ -1272,6 +1280,8 @@ export default function StudyPlanner() {
       totalCapacityHours: Math.round(totalCapacityHours * 10) / 10,
       neededHours: Math.round(neededHours * 10) / 10,
       remainingTopics,
+      offPlanTopics,
+      offPlanHours: Math.round((offPlanMinutes / 60) * 10) / 10,
       overBudget: weeklyTotal > weeklyBudget,
       // null means there is nothing to measure against yet — no event has been added.
       feasible: mainEvent ? totalCapacityHours >= neededHours : null,
@@ -1311,6 +1321,17 @@ export default function StudyPlanner() {
 
   function setTopicDuration(subjectId, topicId, custom, minutes) {
     updateTopic(subjectId, topicId, custom, (t) => ({ ...t, duration: Math.max(5, Number(minutes) || D) }));
+  }
+
+  // Учитывать ли урок в «Распределении». Поле есть только у исключённых:
+  // у остальных его нет, и старые записи читаются как «в плане».
+  function toggleTopicPlan(subjectId, topicId, custom) {
+    updateTopic(subjectId, topicId, custom, (t) => {
+      const next = { ...t };
+      if (t.offPlan) delete next.offPlan;
+      else next.offPlan = true;
+      return next;
+    });
   }
 
   function setTopicUrl(subjectId, topicId, custom, url) {
@@ -2457,7 +2478,7 @@ export default function StudyPlanner() {
     let total = 0;
     ALL_SUBJECTS.forEach((s) => {
       const list = [...subjectData(data, s.id).topics, ...subjectData(data, s.id).custom];
-      const hours = list.filter((t) => !t.done).reduce((sum, t) => sum + (Number(t.duration) || D) / 60, 0);
+      const hours = list.filter((t) => !t.done && !t.offPlan).reduce((sum, t) => sum + (Number(t.duration) || D) / 60, 0);
       remaining[s.id] = hours;
       total += hours;
     });
@@ -4371,6 +4392,7 @@ export default function StudyPlanner() {
                               onSetUrl={(url) => setTopicUrl(s.id, t.id, t.custom, url)}
                               onToggleDone={() => toggleTopic(s.id, t.id, t.custom)}
                               onDurationChange={(v) => setTopicDuration(s.id, t.id, t.custom, v)}
+                              onTogglePlan={() => toggleTopicPlan(s.id, t.id, t.custom)}
                               onAddNote={(text, mins) => addNote(s.id, t.id, t.custom, text, mins)}
                               onUpdateNote={(noteId, patch) => updateNote(s.id, t.id, t.custom, noteId, patch)}
                               onRemoveNote={(noteId) => removeNote(s.id, t.id, t.custom, noteId)}
@@ -5640,6 +5662,7 @@ function TopicItem({
   onSetUrl,
   onToggleDone,
   onDurationChange,
+  onTogglePlan,
   onAddNote,
   onUpdateNote,
   onRemoveNote,
@@ -5705,7 +5728,23 @@ function TopicItem({
             ⏱ {minutesLabel(timed.minutes)}
           </button>
         )}
-        <span className="ap-topic-mins" style={styles.topicMins}>{topic.duration || D} мин</span>
+        {topic.offPlan && !topic.done && (
+          <button
+            type="button"
+            onClick={onTogglePlan}
+            style={styles.offPlanMark}
+            title="Время на этот урок не закладывается в «Распределение». Нажмите, чтобы снова учитывать"
+            data-off-plan={topic.id}
+          >
+            вне плана
+          </button>
+        )}
+        <span
+          className="ap-topic-mins"
+          style={{ ...styles.topicMins, ...(topic.offPlan && !topic.done ? styles.topicMinsOff : null) }}
+        >
+          {topic.duration || D} мин
+        </span>
         <MoreMenu
           quiet
           label={"Урок «" + name + "»"}
@@ -5713,6 +5752,7 @@ function TopicItem({
           items={[
             { label: notesOpen ? "Скрыть заметки" : notes.length ? "Заметки" : "+ Заметка со временем", onSelect: onToggleNotes },
             { label: linkOpen ? "Скрыть настройки" : topic.url ? "Изменить ссылку и длительность" : "Добавить ссылку, изменить длительность", onSelect: onToggleLink },
+            { label: topic.offPlan ? "Учитывать в распределении" : "Не учитывать в распределении", onSelect: onTogglePlan },
             { label: "Удалить урок", danger: true, onSelect: onRemoveTopic },
           ]}
         />
@@ -7003,6 +7043,19 @@ const styles = {
   topicName: { flex: 1, minWidth: 0, fontSize: 15, lineHeight: 1.4, overflowWrap: "anywhere" },
   noteBadge: { flexShrink: 0, minHeight: 26, padding: "0 10px", border: "none", borderRadius: 13, background: "var(--neutralBg)", color: "var(--ink2)", fontSize: 12, cursor: "pointer" },
   topicMins: { flexShrink: 0, width: 58, textAlign: "right", fontSize: 13, color: "var(--ink3)" },
+  topicMinsOff: { color: "var(--mute)", textDecoration: "line-through" },
+  offPlanMark: {
+    flexShrink: 0,
+    padding: "2px 8px",
+    border: "1px dashed var(--line)",
+    borderRadius: 999,
+    background: "transparent",
+    color: "var(--ink3)",
+    font: "inherit",
+    fontSize: 12,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
   // «Тетради», вариант A: три колонки в одной рамке.
   notesShell: { display: "grid", gridTemplateColumns: "252px minmax(0, 1fr)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", overflow: "hidden", minHeight: 640 },
   notesSide: { padding: "18px 10px", background: "var(--neutralBg)", borderRight: "1px solid var(--line)", minWidth: 0 },

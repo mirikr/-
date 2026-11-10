@@ -1,0 +1,205 @@
+<title>Обществознание ВсОШ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Раскладка: липкая полоса разделов сверху, под ней одна колонка текста шириной около 68 знаков. */
+:root{
+  --bg:#F1ECE1;--panel:#FBF8F1;--ink:#22201B;--ink2:#4A453B;--mute:#7A7363;--line:#DDD5C4;--line2:#E8E1D2;
+  --accent:#8A6A1F;--accentSoft:#EDE2C6;--red:#A4452C;--bar:#24221D;--barInk:#EFE8D8;--barMute:#A9A290;
+  --serif:'PT Serif',Georgia,'Times New Roman',serif;--sans:'Golos Text',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171612;--panel:#211F1A;--ink:#EDE7D8;--ink2:#D6CFBD;--mute:#9A927F;--line:#35322A;--line2:#2C2A23;
+  --accent:#D9B45A;--accentSoft:#332C1E;--red:#DC8466;--bar:#100F0C;--barInk:#EDE7D8;--barMute:#9C9483;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171612;--panel:#211F1A;--ink:#EDE7D8;--ink2:#D6CFBD;--mute:#9A927F;--line:#35322A;--line2:#2C2A23;
+  --accent:#D9B45A;--accentSoft:#332C1E;--red:#DC8466;--bar:#100F0C;--barInk:#EDE7D8;--barMute:#9C9483;color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bar)}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--bar);color:var(--barInk)}
+.bar-in{max-width:980px;margin:0 auto;padding-block:10px 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand b{font-family:var(--serif);font-weight:400;font-size:19px}
+.brand span{font-size:12.5px;color:var(--barMute)}
+.tabs{display:flex;gap:4px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{flex:0 0 auto;padding:6px 12px;border-radius:999px;color:var(--barMute);text-decoration:none;font-size:14px;white-space:nowrap}
+.tabs a:hover{color:var(--barInk)}
+.tabs a[aria-current="page"]{background:var(--barInk);color:var(--bar);font-weight:600}
+.tabs a:focus-visible,.toc a:focus-visible,.nav a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chapter{scroll-margin-top:160px}
+main{max-width:760px;margin:0 auto;padding-block:22px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));min-width:0}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(28px,6vw,38px);line-height:1.15;margin:6px 0 14px;text-wrap:balance}
+h2{font-family:var(--serif);font-weight:400;font-size:24px;line-height:1.25;margin:34px 0 10px;padding-top:14px;border-top:1px solid var(--line);text-wrap:balance;scroll-margin-top:110px}
+h3{font-size:16.5px;font-weight:600;margin:22px 0 6px}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:3px 0}
+strong{font-weight:600}
+a{color:var(--accent)}
+.toc{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:12px 16px;margin:0 0 8px;font-size:14px}
+.toc summary{cursor:pointer;font-weight:600;color:var(--ink2)}
+.toc ol{margin:8px 0 2px;columns:2;column-gap:24px;padding-left:20px}
+.toc a{text-decoration:none}
+@media (max-width:560px){.toc ol{columns:1}}
+.tbl{overflow-x:auto;margin:6px 0 16px;border:1px solid var(--line2);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:8px 12px;border-bottom:1px solid var(--line2);min-width:110px}
+th{font-size:12.5px;font-weight:600;color:var(--mute);letter-spacing:.02em;background:var(--accentSoft)}
+tr:last-child td{border-bottom:none}
+td:first-child{font-weight:500}
+.tbl.keycol th:first-child,.tbl.keycol td:first-child{min-width:0;width:1%}
+.tbl.keycol td:first-child{white-space:normal}
+#countries td{min-width:96px;font-size:13.5px}
+.nav{display:flex;justify-content:space-between;gap:12px;margin-top:36px;padding-top:16px;border-top:1px solid var(--line);font-size:14.5px}
+.nav a{text-decoration:none;font-weight:600}
+.find{display:flex;gap:8px;margin:0 0 12px}
+.find input{flex:1;min-width:0;height:40px;box-sizing:border-box;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:inherit;font-size:15px}
+
+/* Ползунок разделов у правого края: тянуть или нажимать на деление. */
+.rail{position:fixed;z-index:8;right:max(4px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;user-select:none;-webkit-user-select:none}
+.rail button{width:30px;height:30px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink2);font:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0}
+.rail button:disabled{opacity:.35;cursor:default}
+.track{position:relative;width:30px;padding:6px 0;border-radius:999px;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:0;touch-action:none;cursor:grab}
+.track:focus-visible,.rail button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tick{width:30px;height:clamp(14px,3.4vh,24px);display:flex;align-items:center;justify-content:center}
+.tick i{display:block;width:8px;height:3px;border-radius:2px;background:var(--line)}
+.tick.on i{width:16px;height:6px;border-radius:3px;background:var(--accent)}
+.tick.aim i{width:16px;background:var(--mute)}
+.tip{position:absolute;right:38px;top:0;transform:translateY(-50%);white-space:nowrap;background:var(--bar);color:var(--barInk);padding:6px 12px;border-radius:10px;font-size:14px;font-weight:600;pointer-events:none}
+main{padding-right:max(46px,env(safe-area-inset-right,0px))}
+@media (min-width:900px){main{padding-right:max(16px,env(safe-area-inset-right,0px))}.rail{right:max(18px,calc(50vw - 460px))}}
+</style>
+
+<div class="bar"><div class="bar-in">
+  <div class="brand"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></div>
+  <nav class="tabs" aria-label="Разделы учебника">
+<!--TABS-->
+  </nav>
+</div></div>
+
+<main>
+<!--CHAPTERS-->
+</main>
+
+<div class="rail" id="rail">
+  <button type="button" id="rail-prev" aria-label="Предыдущий раздел">▲</button>
+  <div class="track" id="rail-track" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Раздел учебника"><div class="tip" id="rail-tip" hidden></div></div>
+  <button type="button" id="rail-next" aria-label="Следующий раздел">▼</button>
+</div>
+
+<script>
+(function () {
+  var chapters = [].slice.call(document.querySelectorAll(".chapter"));
+  var tabs = [].slice.call(document.querySelectorAll(".tabs a"));
+  var ids = chapters.map(function (c) { return c.id; });
+
+  // В каждом разделе: содержание по подзаголовкам и переходы «назад — дальше».
+  chapters.forEach(function (ch, i) {
+    var hs = [].slice.call(ch.querySelectorAll("h2"));
+    if (hs.length > 2) {
+      var box = document.createElement("details");
+      box.className = "toc";
+      var list = hs.map(function (h, n) {
+        h.id = ch.id + "-" + (n + 1);
+        return '<li><a href="#' + h.id + '">' + h.textContent + "</a></li>";
+      }).join("");
+      box.innerHTML = "<summary>Содержание раздела</summary><ol>" + list + "</ol>";
+      var h1 = ch.querySelector("h1");
+      h1.parentNode.insertBefore(box, h1.nextSibling);
+    }
+    var nav = document.createElement("div");
+    nav.className = "nav";
+    var prev = chapters[i - 1], next = chapters[i + 1];
+    nav.innerHTML =
+      (prev ? '<a href="#' + prev.id + '">‹ ' + prev.querySelector("h1").textContent + "</a>" : "<span></span>") +
+      (next ? '<a href="#' + next.id + '">' + next.querySelector("h1").textContent + " ›</a>" : "<span></span>");
+    ch.appendChild(nav);
+  });
+
+  // Таблицы обозначений: в первой колонке короткие буквы — ей не нужна треть ширины.
+  [].forEach.call(document.querySelectorAll(".tbl"), function (box) {
+    var cells = box.querySelectorAll("tbody td:first-child");
+    var short = cells.length && [].every.call(cells, function (td) { return td.textContent.trim().length <= 24; });
+    if (short) box.classList.add("keycol");
+  });
+
+  // Поиск по таблице стран: полтораста строк глазами не просмотреть.
+  var countries = document.getElementById("countries");
+  if (countries) {
+    var all = countries.querySelectorAll(".tbl");
+    var table = all[all.length - 1];
+    var wrap = document.createElement("div");
+    wrap.className = "find";
+    wrap.innerHTML = '<input id="country-find" type="search" placeholder="Найти страну или форму правления" aria-label="Поиск по таблице стран">';
+    table.parentNode.insertBefore(wrap, table);
+    wrap.firstChild.addEventListener("input", function (e) {
+      var q = e.target.value.trim().toLowerCase();
+      [].forEach.call(table.querySelectorAll("tbody tr"), function (tr) {
+        tr.hidden = q && tr.textContent.toLowerCase().indexOf(q) < 0;
+      });
+    });
+  }
+
+  // Ползунок разделов: деление на раздел, тянуть — выбрать, отпустить — перейти.
+  var track = document.getElementById("rail-track"), tip = document.getElementById("rail-tip");
+  var prevBtn = document.getElementById("rail-prev"), nextBtn = document.getElementById("rail-next");
+  var names = chapters.map(function (c) { return c.querySelector("h1").textContent; });
+  var ticks = ids.map(function () { var t = document.createElement("div"); t.className = "tick"; t.innerHTML = "<i></i>"; track.appendChild(t); return t; });
+  var current = 0, aim = -1;
+  function go(i) { if (i >= 0 && i < ids.length && i !== current) location.hash = ids[i]; }
+  function indexAt(y) {
+    var a = ticks[0].getBoundingClientRect().top, b = ticks[ticks.length - 1].getBoundingClientRect().bottom;
+    return Math.max(0, Math.min(ids.length - 1, Math.floor(((y - a) / (b - a)) * ids.length)));
+  }
+  function setAim(i) {
+    aim = i;
+    ticks.forEach(function (t, n) { t.classList.toggle("aim", n === i && n !== current); });
+    if (i < 0) { tip.hidden = true; return; }
+    tip.textContent = names[i];
+    tip.style.top = (ticks[i].offsetTop + ticks[i].offsetHeight / 2) + "px";
+    tip.hidden = false;
+  }
+  function paintRail(i) {
+    current = i;
+    ticks.forEach(function (t, n) { t.classList.toggle("on", n === i); });
+    track.setAttribute("aria-valuemin", 1); track.setAttribute("aria-valuemax", ids.length);
+    track.setAttribute("aria-valuenow", i + 1); track.setAttribute("aria-valuetext", names[i]);
+    prevBtn.disabled = i === 0; nextBtn.disabled = i === ids.length - 1;
+  }
+  track.addEventListener("pointerdown", function (e) { track.setPointerCapture(e.pointerId); setAim(indexAt(e.clientY)); e.preventDefault(); });
+  track.addEventListener("pointermove", function (e) { if (aim >= 0) setAim(indexAt(e.clientY)); });
+  track.addEventListener("pointerup", function () { var i = aim; setAim(-1); go(i); });
+  track.addEventListener("pointercancel", function () { setAim(-1); });
+  track.addEventListener("keydown", function (e) {
+    var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+    if (e.key === "Home") { go(0); e.preventDefault(); } else if (e.key === "End") { go(ids.length - 1); e.preventDefault(); }
+    else if (d) { go(current + d); e.preventDefault(); }
+  });
+  prevBtn.addEventListener("click", function () { go(current - 1); });
+  nextBtn.addEventListener("click", function () { go(current + 1); });
+
+  function remember(id) { try { localStorage.setItem("olymp-chapter", id); } catch (e) {} }
+  function recall() { try { return localStorage.getItem("olymp-chapter"); } catch (e) { return null; } }
+
+  function show() {
+    var hash = (location.hash || "").slice(1);
+    var chapterId = hash.split("-")[0];
+    if (ids.indexOf(chapterId) < 0) { chapterId = recall(); hash = ""; }
+    if (ids.indexOf(chapterId) < 0) chapterId = ids[0];
+    chapters.forEach(function (c) { c.hidden = c.id !== chapterId; });
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === chapterId;
+      if (on) { t.setAttribute("aria-current", "page"); t.scrollIntoView({ block: "nearest", inline: "center" }); }
+      else t.removeAttribute("aria-current");
+    });
+    paintRail(ids.indexOf(chapterId));
+    remember(chapterId);
+    var target = hash && hash !== chapterId ? document.getElementById(hash) : null;
+    if (target) target.scrollIntoView();
+    else window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>

@@ -177,7 +177,11 @@ export default function BudgetScreen({ subjects, budget, onDaily, onAlloc, capac
     today.setHours(0, 0, 0, 0);
     const days = Math.max(1, Math.round((new Date(mainEvent.date + "T00:00:00") - today) / 86400000) + 1);
     const perWeek = round1((capacity.neededHours / days) * 7);
-    const when = `${days} ${plural(days, "день", "дня", "дней")}, ${capacity.remainingTopics} ${plural(capacity.remainingTopics, "урок", "урока", "уроков")}`;
+    // Уроки «вне плана» в расчёт не входят — пусть будет видно, что их не забыли, а отложили.
+    const off = capacity.offPlanTopics
+      ? ` (ещё ${capacity.offPlanTopics} ${plural(capacity.offPlanTopics, "урок", "урока", "уроков")} на ${hours(capacity.offPlanHours)} — вне плана)`
+      : "";
+    const when = `${days} ${plural(days, "день", "дня", "дней")}, ${capacity.remainingTopics} ${plural(capacity.remainingTopics, "урок", "урока", "уроков")}${off}`;
     checks.push(
       capacity.feasible
         ? {

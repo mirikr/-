@@ -376,6 +376,24 @@ want("жалоба на задание сохранилась", brokenSaved === 
   want("на неделе отмечены сегодняшние задания", /\d/.test(weekLabel) && weekLabel.split(", ").some((x) => /[1-9]\d*$/.test(x)), weekLabel);
   want("серия дней посчитана", /\b[1-9]\d*\n(день|дня|дней) подряд/.test(await hero.innerText()),
     ((await hero.innerText()).match(/[^\n]*\n[^\n]*подряд/) || [])[0] || "");
+  // Учебник к олимпиаде (1.11.4): плитка открывает его поверх приложения,
+  // внутри — разделы, кнопка «Закрыть» возвращает к выбору.
+  {
+    const tile = page.locator("[data-olymp-book]");
+    want("на выборе есть учебник к олимпиаде", (await tile.count()) === 1);
+    await tile.click();
+    await page.waitForTimeout(1500);
+    const frame = page.frameLocator('iframe[title="Учебник к олимпиаде"]');
+    const h1 = await frame.locator("article:not([hidden]) h1").first().innerText().catch(() => "");
+    want("учебник открывается на плане подготовки", /План подготовки/.test(h1), h1 || "пусто");
+    await frame.locator('.tabs a[data-tab="law"]').click();
+    await page.waitForTimeout(400);
+    const lawH1 = await frame.locator("article:not([hidden]) h1").first().innerText().catch(() => "");
+    want("в учебнике переключаются разделы", /Право/.test(lawH1), lawH1);
+    await page.getByRole("button", { name: "‹ Закрыть" }).click();
+    await page.waitForTimeout(300);
+    want("учебник закрывается", (await page.locator('iframe[title="Учебник к олимпиаде"]').count()) === 0);
+  }
   // Заголовок карточки повторял заголовок экрана — его быть не должно.
   want("заголовок не задвоен", (picker.match(/Тренажёр по банку ФИПИ/g) || []).length === 0);
   // Подсказка про кнопки одна на все предметы, а не на каждой карточке, и та свёрнута.
