@@ -139,6 +139,58 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 3г. Урок «вне плана» (1.11.4): остаётся в списке, но время на него не
+// закладывается в «Распределение». Включается и снимается из меню урока,
+// у исключённого урока в строке метка, нажатие на неё возвращает урок в план.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(5000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const soon = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+  await page.addInitScript((st) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "study");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, {
+    customSubjects: [{ id: "c1", name: "Право", color: "#8C7326" }],
+    data: { c1: { topics: [], custom: [
+      { id: "p1", name: "Конституция", duration: 60, done: false },
+      { id: "p2", name: "Семейное право", duration: 90, done: false },
+    ] } },
+    events: [{ id: "e1", name: "Муниципальный этап", date: soon, priority: 3 }],
+  });
+  await page.goto(URL0);
+  await page.waitForTimeout(1600);
+  const stored = () => page.evaluate(() => {
+    const v = JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value);
+    return v.data.c1.custom.find((t) => t.id === "p2").offPlan === true;
+  });
+  await page.getByRole("button", { name: "Урок «Семейное право»" }).click();
+  await page.getByRole("menuitem", { name: "Не учитывать в распределении" }).click();
+  await page.waitForTimeout(1400);
+  want("урок исключается из распределения через меню", await stored());
+  want("у исключённого урока в строке метка «вне плана»", (await page.locator('[data-off-plan="p2"]').count()) === 1);
+  await page.evaluate(() => localStorage.setItem("planner-screen", "budget"));
+  await page.reload();
+  await page.waitForTimeout(1500);
+  const budgetText = await page.locator("main").innerText();
+  want("в «Распределении» исключённый урок не считается", /из 1 ч(?![\d,])/.test(budgetText) && /вне плана/.test(budgetText),
+    (budgetText.match(/[^\n]*вне плана[^\n]*/) || budgetText.match(/успеть[^\n]*/) || [""])[0]);
+  await page.evaluate(() => localStorage.setItem("planner-screen", "study"));
+  await page.reload();
+  await page.waitForTimeout(1500);
+  await page.locator('[data-off-plan="p2"]').click();
+  await page.waitForTimeout(1400);
+  want("нажатие на метку возвращает урок в план", !(await stored()) && (await page.locator('[data-off-plan="p2"]').count()) === 0);
+  want("урок вне плана: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 3в. «Распределение» (1.5.1): часы дня — не только кнопками: число вписывается,
 // столбик тянется мышью, на телефоне — ползунок. Метка «ваш бюджет» не
 // вылезает за карточку, подписи на графике КПВ не наслаиваются.
