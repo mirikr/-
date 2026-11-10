@@ -56,13 +56,32 @@ td:first-child{font-weight:500}
 .find{display:flex;gap:8px;margin:0 0 12px}
 .find input{flex:1;min-width:0;height:40px;box-sizing:border-box;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:inherit;font-size:15px}
 
-/* Ползунок разделов у правого края: тянуть или нажимать на деление. */
+/* Поиск по учебнику: кнопка в шапке, результаты выпадают под ней. */
+.brand{justify-content:space-between;flex-wrap:nowrap;align-items:center}
+.brand-name{display:flex;align-items:baseline;gap:10px;flex:1;min-width:0}
+.brand-name b,.brand-name span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+@media (max-width:560px){.brand-name span{display:none}}
+.find-btn{flex:0 0 auto;height:34px;padding:0 14px;border:1px solid var(--barMute);border-radius:999px;background:transparent;color:var(--barInk);font:inherit;font-size:14px;cursor:pointer}
+.find-btn:focus-visible,.search input:focus-visible,.hit-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.search{padding:0 0 12px}
+.search input{width:100%;box-sizing:border-box;height:42px;padding:0 14px;border:1px solid var(--barMute);border-radius:12px;background:var(--panel);color:var(--ink);font:inherit;font-size:16px}
+.hits{margin-top:8px;max-height:min(62vh,520px);overflow-y:auto;border-radius:12px;background:var(--panel);color:var(--ink)}
+.hits-note{padding:10px 14px;font-size:13.5px;color:var(--mute)}
+.hit-row{display:flex;flex-direction:column;gap:2px;width:100%;padding:10px 14px;border:none;border-bottom:1px solid var(--line2);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.hit-row:hover{background:var(--accentSoft)}
+.hit-where{font-size:12px;color:var(--mute)}
+.hit-text{font-size:14.5px;line-height:1.45}
+.hit-text mark,.flash mark{background:var(--accentSoft);color:inherit;border-radius:3px;padding:0 1px}
+.flash{background:var(--accentSoft);border-radius:6px;transition:background 1.2s}
+@media (prefers-reduced-motion:reduce){.flash{transition:none}}
+
+/* Ползунок глав у правого края: деление — глава открытого раздела. */
 .rail{position:fixed;z-index:8;right:max(4px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;user-select:none;-webkit-user-select:none}
 .rail button{width:30px;height:30px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink2);font:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0}
 .rail button:disabled{opacity:.35;cursor:default}
 .track{position:relative;width:30px;padding:6px 0;border-radius:999px;background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:0;touch-action:none;cursor:grab}
 .track:focus-visible,.rail button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.tick{width:30px;height:clamp(14px,3.4vh,24px);display:flex;align-items:center;justify-content:center}
+.tick{width:30px;height:20px;display:flex;align-items:center;justify-content:center}
 .tick i{display:block;width:8px;height:3px;border-radius:2px;background:var(--line)}
 .tick.on i{width:16px;height:6px;border-radius:3px;background:var(--accent)}
 .tick.aim i{width:16px;background:var(--mute)}
@@ -72,7 +91,11 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
 </style>
 
 <div class="bar"><div class="bar-in">
-  <div class="brand"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></div>
+  <div class="brand"><span class="brand-name"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></span><button type="button" class="find-btn" id="find-open" aria-expanded="false" aria-controls="search">Поиск</button></div>
+  <div class="search" id="search" hidden>
+    <input id="find-q" type="search" placeholder="Слово или фраза: эластичность, импичмент, Вебер…" aria-label="Поиск по учебнику" autocomplete="off">
+    <div class="hits" id="hits" role="listbox" aria-label="Найдено"></div>
+  </div>
   <nav class="tabs" aria-label="Разделы учебника">
 <!--TABS-->
   </nav>
@@ -83,9 +106,9 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
 </main>
 
 <div class="rail" id="rail">
-  <button type="button" id="rail-prev" aria-label="Предыдущий раздел">▲</button>
-  <div class="track" id="rail-track" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Раздел учебника"><div class="tip" id="rail-tip" hidden></div></div>
-  <button type="button" id="rail-next" aria-label="Следующий раздел">▼</button>
+  <button type="button" id="rail-prev" aria-label="Предыдущая глава">▲</button>
+  <div class="track" id="rail-track" role="slider" tabindex="0" aria-orientation="vertical" aria-label="Глава раздела"><div class="tip" id="rail-tip" hidden></div></div>
+  <button type="button" id="rail-next" aria-label="Следующая глава">▼</button>
 </div>
 
 <script>
@@ -97,6 +120,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
   // В каждом разделе: содержание по подзаголовкам и переходы «назад — дальше».
   chapters.forEach(function (ch, i) {
     var hs = [].slice.call(ch.querySelectorAll("h2"));
+    hs.forEach(function (h, n) { h.id = ch.id + "-" + (n + 1); });
     if (hs.length > 2) {
       var box = document.createElement("details");
       box.className = "toc";
@@ -141,43 +165,152 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
     });
   }
 
-  // Ползунок разделов: деление на раздел, тянуть — выбрать, отпустить — перейти.
+  // Ползунок глав: деления — главы (подзаголовки) открытого раздела. Тянуть или
+  // нажать — перейти к главе; стрелки листают по одной, с краёв — в соседний раздел.
+  var rail = document.getElementById("rail");
   var track = document.getElementById("rail-track"), tip = document.getElementById("rail-tip");
   var prevBtn = document.getElementById("rail-prev"), nextBtn = document.getElementById("rail-next");
-  var names = chapters.map(function (c) { return c.querySelector("h1").textContent; });
-  var ticks = ids.map(function () { var t = document.createElement("div"); t.className = "tick"; t.innerHTML = "<i></i>"; track.appendChild(t); return t; });
-  var current = 0, aim = -1;
-  function go(i) { if (i >= 0 && i < ids.length && i !== current) location.hash = ids[i]; }
+  var section = 0, heads = [], ticks = [], cur = -1, aim = -1;
+  function buildRail(ch) {
+    ticks.forEach(function (t) { t.remove(); });
+    heads = [].slice.call(ch.querySelectorAll("h2"));
+    var h = Math.max(10, Math.min(24, Math.floor((window.innerHeight * 0.55) / Math.max(1, heads.length))));
+    ticks = heads.map(function () {
+      var t = document.createElement("div");
+      t.className = "tick"; t.style.height = h + "px"; t.innerHTML = "<i></i>";
+      track.appendChild(t); return t;
+    });
+    rail.hidden = heads.length === 0;
+    track.setAttribute("aria-valuemin", 1); track.setAttribute("aria-valuemax", Math.max(1, heads.length));
+  }
+  function paintRail(i) {
+    cur = i;
+    ticks.forEach(function (t, n) { t.classList.toggle("on", n === i); });
+    track.setAttribute("aria-valuenow", Math.max(1, i + 1));
+    track.setAttribute("aria-valuetext", i >= 0 && heads[i] ? heads[i].textContent : "начало раздела");
+    prevBtn.disabled = section === 0 && i < 0;
+    nextBtn.disabled = section === ids.length - 1 && i >= heads.length - 1;
+  }
+  function goHead(i) {
+    if (i < 0 && cur < 0) { if (section > 0) location.hash = ids[section - 1]; return; }
+    if (i < 0) { window.scrollTo(0, 0); paintRail(-1); return; }
+    if (i >= heads.length) { if (section < ids.length - 1) location.hash = ids[section + 1]; return; }
+    heads[i].scrollIntoView();
+    paintRail(i);
+  }
   function indexAt(y) {
     var a = ticks[0].getBoundingClientRect().top, b = ticks[ticks.length - 1].getBoundingClientRect().bottom;
-    return Math.max(0, Math.min(ids.length - 1, Math.floor(((y - a) / (b - a)) * ids.length)));
+    return Math.max(0, Math.min(heads.length - 1, Math.floor(((y - a) / (b - a)) * heads.length)));
   }
   function setAim(i) {
     aim = i;
-    ticks.forEach(function (t, n) { t.classList.toggle("aim", n === i && n !== current); });
+    ticks.forEach(function (t, n) { t.classList.toggle("aim", n === i && n !== cur); });
     if (i < 0) { tip.hidden = true; return; }
-    tip.textContent = names[i];
+    tip.textContent = heads[i].textContent;
     tip.style.top = (ticks[i].offsetTop + ticks[i].offsetHeight / 2) + "px";
     tip.hidden = false;
   }
-  function paintRail(i) {
-    current = i;
-    ticks.forEach(function (t, n) { t.classList.toggle("on", n === i); });
-    track.setAttribute("aria-valuemin", 1); track.setAttribute("aria-valuemax", ids.length);
-    track.setAttribute("aria-valuenow", i + 1); track.setAttribute("aria-valuetext", names[i]);
-    prevBtn.disabled = i === 0; nextBtn.disabled = i === ids.length - 1;
+  // Какая глава сейчас на экране — последняя, чей заголовок уже ушёл под шапку.
+  function headOnScreen() {
+    var line = document.querySelector(".bar").getBoundingClientRect().bottom + 40;
+    var i = -1;
+    heads.forEach(function (h, n) { if (h.getBoundingClientRect().top <= line) i = n; });
+    return i;
   }
-  track.addEventListener("pointerdown", function (e) { track.setPointerCapture(e.pointerId); setAim(indexAt(e.clientY)); e.preventDefault(); });
+  var ticking = false;
+  window.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { ticking = false; var i = headOnScreen(); if (i !== cur) paintRail(i); });
+  }, { passive: true });
+  track.addEventListener("pointerdown", function (e) { if (!ticks.length) return; track.setPointerCapture(e.pointerId); setAim(indexAt(e.clientY)); e.preventDefault(); });
   track.addEventListener("pointermove", function (e) { if (aim >= 0) setAim(indexAt(e.clientY)); });
-  track.addEventListener("pointerup", function () { var i = aim; setAim(-1); go(i); });
+  track.addEventListener("pointerup", function () { var i = aim; setAim(-1); if (i >= 0) goHead(i); });
   track.addEventListener("pointercancel", function () { setAim(-1); });
   track.addEventListener("keydown", function (e) {
     var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
-    if (e.key === "Home") { go(0); e.preventDefault(); } else if (e.key === "End") { go(ids.length - 1); e.preventDefault(); }
-    else if (d) { go(current + d); e.preventDefault(); }
+    if (e.key === "Home") { goHead(0); e.preventDefault(); } else if (e.key === "End") { goHead(heads.length - 1); e.preventDefault(); }
+    else if (d) { goHead(cur + d); e.preventDefault(); }
   });
-  prevBtn.addEventListener("click", function () { go(current - 1); });
-  nextBtn.addEventListener("click", function () { go(current + 1); });
+  prevBtn.addEventListener("click", function () { goHead(cur - 1); });
+  nextBtn.addEventListener("click", function () { goHead(cur + 1); });
+
+  // Поиск по всему учебнику: по абзацам, пунктам списков, ячейкам таблиц и
+  // заголовкам. «ё» и «е» считаются одной буквой, слова запроса — в любом порядке.
+  var searchBox = document.getElementById("search"), findOpen = document.getElementById("find-open");
+  var findQ = document.getElementById("find-q"), hitsBox = document.getElementById("hits");
+  var index = null, pending = null;
+  function norm(t) { return t.toLowerCase().replace(/ё/g, "е"); }
+  function esc(t) { return t.replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function buildIndex() {
+    index = [];
+    chapters.forEach(function (ch) {
+      var head = null;
+      [].forEach.call(ch.querySelectorAll("h2, h3, p, li, td, th"), function (el) {
+        if (el.tagName === "H2") head = el;
+        if (el.closest(".nav") || el.closest(".toc") || el.closest(".find")) return;
+        if (el.tagName === "LI" && el.querySelector("p, li")) return;
+        var text = el.textContent.replace(/\s+/g, " ").trim();
+        if (text.length < 2) return;
+        index.push({ ch: ch, head: head, el: el, text: text, n: norm(text) });
+      });
+    });
+  }
+  function snippet(text, words) {
+    var n = norm(text), at = n.indexOf(words[0]);
+    var from = Math.max(0, at - 60), to = Math.min(text.length, at + 140);
+    var part = (from > 0 ? "…" : "") + text.slice(from, to) + (to < text.length ? "…" : "");
+    var out = esc(part);
+    words.forEach(function (w) {
+      if (!w) return;
+      var re = new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/е/g, "[её]") + ")", "gi");
+      out = out.replace(re, "<mark>$1</mark>");
+    });
+    return out;
+  }
+  var found = [];
+  function runSearch() {
+    var q = norm(findQ.value.trim());
+    if (q.length < 2) { found = []; hitsBox.innerHTML = '<div class="hits-note">Введите хотя бы две буквы.</div>'; return; }
+    if (!index) buildIndex();
+    var words = q.split(/\s+/);
+    found = index.filter(function (it) { return words.every(function (w) { return it.n.indexOf(w) >= 0; }); });
+    if (!found.length) { hitsBox.innerHTML = '<div class="hits-note">Ничего не нашлось. Попробуйте начало слова: «эласт», «конституц».</div>'; return; }
+    var shown = found.slice(0, 60);
+    hitsBox.innerHTML = (found.length > 60 ? '<div class="hits-note">Найдено ' + found.length + ", показаны первые 60 — уточните запрос.</div>" : "") +
+      shown.map(function (it, i) {
+        var where = it.ch.querySelector("h1").textContent + (it.head ? " › " + it.head.textContent : "");
+        return '<button type="button" class="hit-row" role="option" data-i="' + i + '"><span class="hit-where">' + esc(where) + '</span><span class="hit-text">' + snippet(it.text, words) + "</span></button>";
+      }).join("");
+  }
+  var searchTimer = null;
+  findQ.addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 120); });
+  findQ.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && found[0]) { e.preventDefault(); openHit(found[0]); }
+    if (e.key === "Escape") toggleSearch(false);
+  });
+  hitsBox.addEventListener("click", function (e) {
+    var row = e.target.closest(".hit-row");
+    if (row) openHit(found[Number(row.getAttribute("data-i"))]);
+  });
+  function toggleSearch(open) {
+    searchBox.hidden = !open;
+    findOpen.setAttribute("aria-expanded", open ? "true" : "false");
+    findOpen.textContent = open ? "Закрыть поиск" : "Поиск";
+    if (open) { findQ.focus(); if (findQ.value) runSearch(); }
+  }
+  findOpen.addEventListener("click", function () { toggleSearch(searchBox.hidden); });
+  function flash(el) {
+    el.classList.add("flash");
+    setTimeout(function () { el.classList.remove("flash"); }, 1800);
+  }
+  function openHit(it) {
+    if (!it) return;
+    toggleSearch(false);
+    if (it.ch.hidden) { pending = it.el; location.hash = it.ch.id; return; }
+    it.el.scrollIntoView({ block: "center" });
+    flash(it.el);
+  }
 
   function remember(id) { try { localStorage.setItem("olymp-chapter", id); } catch (e) {} }
   function recall() { try { return localStorage.getItem("olymp-chapter"); } catch (e) { return null; } }
@@ -193,11 +326,14 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
       if (on) { t.setAttribute("aria-current", "page"); t.scrollIntoView({ block: "nearest", inline: "center" }); }
       else t.removeAttribute("aria-current");
     });
-    paintRail(ids.indexOf(chapterId));
+    section = ids.indexOf(chapterId);
+    buildRail(chapters[section]);
     remember(chapterId);
     var target = hash && hash !== chapterId ? document.getElementById(hash) : null;
-    if (target) target.scrollIntoView();
+    if (pending) { var el = pending; pending = null; el.scrollIntoView({ block: "center" }); flash(el); }
+    else if (target) target.scrollIntoView();
     else window.scrollTo(0, 0);
+    paintRail(headOnScreen());
   }
   window.addEventListener("hashchange", show);
   show();

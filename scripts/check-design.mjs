@@ -139,9 +139,9 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
-// 3г. Урок «вне плана» (1.11.4): остаётся в списке, но время на него не
-// закладывается в «Распределение». Включается и снимается из меню урока,
-// у исключённого урока в строке метка, нажатие на неё возвращает урок в план.
+// 3г. Уроки «вне плана» (1.11.4, переключатели — 1.11.5): у каждого урока
+// переключатель «учитывать в распределении», у предмета — общий. Урок вне
+// плана остаётся в списке, но время на него не закладывается в «Распределение».
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
@@ -166,28 +166,33 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   });
   await page.goto(URL0);
   await page.waitForTimeout(1600);
-  const stored = () => page.evaluate(() => {
+  const offIds = () => page.evaluate(() => {
     const v = JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value);
-    return v.data.c1.custom.find((t) => t.id === "p2").offPlan === true;
+    return v.data.c1.custom.filter((t) => t.offPlan === true).map((t) => t.id).join(",");
   });
-  await page.getByRole("button", { name: "Урок «Семейное право»" }).click();
-  await page.getByRole("menuitem", { name: "Не учитывать в распределении" }).click();
+  const lesson = page.locator('[data-topic-plan="p2"]');
+  const subject = page.locator('[data-subject-plan="c1"]');
+  want("у урока есть переключатель распределения", (await lesson.count()) === 1 && (await lesson.getAttribute("aria-checked")) === "true");
+  await lesson.click();
   await page.waitForTimeout(1400);
-  want("урок исключается из распределения через меню", await stored());
-  want("у исключённого урока в строке метка «вне плана»", (await page.locator('[data-off-plan="p2"]').count()) === 1);
+  want("переключатель урока выключает его из распределения", (await offIds()) === "p2" && (await lesson.getAttribute("aria-checked")) === "false");
+  want("переключатель предмета показывает «частично»", (await subject.getAttribute("aria-checked")) === "mixed" && /частично/.test(await subject.innerText()));
   await page.evaluate(() => localStorage.setItem("planner-screen", "budget"));
   await page.reload();
   await page.waitForTimeout(1500);
   const budgetText = await page.locator("main").innerText();
-  want("в «Распределении» исключённый урок не считается", /из 1 ч(?![\d,])/.test(budgetText) && /вне плана/.test(budgetText),
+  want("в «Распределении» урок вне плана не считается", /из 1 ч(?![\d,])/.test(budgetText) && /вне плана/.test(budgetText),
     (budgetText.match(/[^\n]*вне плана[^\n]*/) || budgetText.match(/успеть[^\n]*/) || [""])[0]);
   await page.evaluate(() => localStorage.setItem("planner-screen", "study"));
   await page.reload();
   await page.waitForTimeout(1500);
-  await page.locator('[data-off-plan="p2"]').click();
+  await subject.click();
   await page.waitForTimeout(1400);
-  want("нажатие на метку возвращает урок в план", !(await stored()) && (await page.locator('[data-off-plan="p2"]').count()) === 0);
-  want("урок вне плана: ошибок нет", errors.length === 0, errors[0] || "");
+  want("переключатель предмета выключает все уроки", (await offIds()) === "p1,p2" && (await subject.getAttribute("aria-checked")) === "false");
+  await subject.click();
+  await page.waitForTimeout(1400);
+  want("и включает все обратно", (await offIds()) === "" && (await subject.getAttribute("aria-checked")) === "true");
+  want("уроки вне плана: ошибок нет", errors.length === 0, errors[0] || "");
   await ctx.close();
 }
 
