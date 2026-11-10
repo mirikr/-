@@ -390,6 +390,23 @@ want("жалоба на задание сохранилась", brokenSaved === 
     await page.waitForTimeout(400);
     const lawH1 = await frame.locator("article:not([hidden]) h1").first().innerText().catch(() => "");
     want("в учебнике переключаются разделы", /Право/.test(lawH1), lawH1);
+    // Поиск по учебнику находит текст в другом разделе и открывает его.
+    await frame.locator("#find-open").click();
+    await frame.locator("#find-q").fill("импичмент");
+    await page.waitForTimeout(500);
+    const hits = await frame.locator(".hit-row").count();
+    want("поиск по учебнику находит", hits > 0, "найдено " + hits);
+    await frame.locator(".hit-row").first().click();
+    await page.waitForTimeout(500);
+    const afterHit = await frame.locator("article:not([hidden])").first().getAttribute("id");
+    want("найденное открывается в своём разделе", !!afterHit && afterHit !== "law", afterHit || "");
+    // Ползунок сбоку — по главам открытого раздела.
+    const ticks = await frame.locator("#rail-track .tick").count();
+    const heads = await frame.locator("article:not([hidden]) h2").count();
+    want("ползунок сбоку — по главам раздела", ticks === heads && heads > 1, ticks + " делений, " + heads + " глав");
+    await page.locator("[data-book-menu]").click();
+    want("есть меню учебников", (await page.getByRole("menuitemradio").count()) >= 1);
+    await page.locator("[data-book-menu]").click();
     await page.getByRole("button", { name: "‹ Закрыть" }).click();
     await page.waitForTimeout(300);
     want("учебник закрывается", (await page.locator('iframe[title="Учебник к олимпиаде"]').count()) === 0);

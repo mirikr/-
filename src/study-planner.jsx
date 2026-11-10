@@ -1334,6 +1334,21 @@ export default function StudyPlanner() {
     });
   }
 
+  // Весь предмет разом: off — убрать из распределения все уроки, иначе вернуть все.
+  function setSubjectPlan(subjectId, off) {
+    const mark = (t) => {
+      const next = { ...t };
+      if (off) next.offPlan = true;
+      else delete next.offPlan;
+      return next;
+    };
+    setData((prev) => {
+      const subject = prev[subjectId];
+      if (!subject) return prev;
+      return { ...prev, [subjectId]: { ...subject, topics: subject.topics.map(mark), custom: subject.custom.map(mark) } };
+    });
+  }
+
   function setTopicUrl(subjectId, topicId, custom, url) {
     const trimmed = (url || "").trim();
     updateTopic(subjectId, topicId, custom, (t) => ({ ...t, url: trimmed || null }));
@@ -1352,13 +1367,19 @@ export default function StudyPlanner() {
     if (!name.trim()) return;
     setData((prev) => {
       const id = subjectId + "-c-" + Date.now();
+      // Предмет целиком выключен из распределения — новый урок тоже вне плана,
+      // иначе один добавленный урок молча вернул бы предмет в расчёт.
+      const existing = [...prev[subjectId].topics, ...prev[subjectId].custom];
+      const subjectOff = existing.length > 0 && existing.every((t) => t.offPlan);
+      const lesson = { id, name: name.trim(), url: url && url.trim() ? url.trim() : null, done: false, duration: D, notes: [] };
+      if (subjectOff) lesson.offPlan = true;
       return {
         ...prev,
         [subjectId]: {
           ...prev[subjectId],
           custom: [
             ...prev[subjectId].custom,
-            { id, name: name.trim(), url: url && url.trim() ? url.trim() : null, done: false, duration: D, notes: [] },
+            lesson,
           ],
         },
       };
@@ -4320,6 +4341,21 @@ export default function StudyPlanner() {
                           </button>
                         ))}
                       </div>
+                      {tab === "lessons" && allTopics.length > 0 && (() => {
+                        const offCount = allTopics.filter((t) => t.offPlan).length;
+                        const state = offCount === 0 ? "on" : offCount === allTopics.length ? "off" : "mixed";
+                        return (
+                          <PlanSwitch
+                            on={state !== "off"}
+                            mixed={state === "mixed"}
+                            onToggle={() => setSubjectPlan(s.id, state !== "off")}
+                            label={"Учитывать предмет «" + s.name + "» в распределении"}
+                            text={state === "mixed" ? "В распределении: частично" : "В распределении"}
+                            data-subject-plan={s.id}
+                            style={st.done > 0 ? null : { marginLeft: "auto" }}
+                          />
+                        );
+                      })()}
                       {tab === "lessons" && st.done > 0 && (
                         <label style={styles.studyHide}>
                           <input
@@ -5649,6 +5685,41 @@ function EventsEditor({ upcoming, past, mainEventId, pickedMainId, onPickMain, o
 // «ссылка», «заметки» и крестик — строка разъезжалась на две, а удалить урок
 // можно было промахнувшись мимо заметок. Ссылка, длительность и удаление теперь
 // в «⋯», заметки раскрываются под строкой.
+// Переключатель «учитывать в распределении»: у урока — маленький, без подписи;
+// у предмета — с подписью. mixed — у предмета выключена только часть уроков.
+function PlanSwitch({ on, mixed, onToggle, label, text, title, small, style, ...rest }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={mixed ? "mixed" : on}
+      aria-label={label}
+      title={title || label}
+      onClick={onToggle}
+      style={{ ...styles.planSwitch, ...(style || null) }}
+      {...rest}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          ...styles.planTrack,
+          ...(small ? styles.planTrackSmall : null),
+          background: on ? (mixed ? "var(--gold)" : "var(--green)") : "var(--line)",
+        }}
+      >
+        <span
+          style={{
+            ...styles.planKnob,
+            ...(small ? styles.planKnobSmall : null),
+            transform: on ? (small ? "translateX(12px)" : "translateX(14px)") : "none",
+          }}
+        />
+      </span>
+      {text ? <span style={styles.planText}>{text}</span> : null}
+    </button>
+  );
+}
+
 function TopicItem({
   subjectId,
   topic,
@@ -5728,16 +5799,15 @@ function TopicItem({
             ⏱ {minutesLabel(timed.minutes)}
           </button>
         )}
-        {topic.offPlan && !topic.done && (
-          <button
-            type="button"
-            onClick={onTogglePlan}
-            style={styles.offPlanMark}
-            title="Время на этот урок не закладывается в «Распределение». Нажмите, чтобы снова учитывать"
-            data-off-plan={topic.id}
-          >
-            вне плана
-          </button>
+        {!topic.done && (
+          <PlanSwitch
+            on={!topic.offPlan}
+            onToggle={onTogglePlan}
+            label={"Учитывать урок «" + name + "» в распределении"}
+            title={topic.offPlan ? "Урок вне плана: время на него не закладывается в «Распределение»" : "Урок учитывается в «Распределении»"}
+            data-topic-plan={topic.id}
+            small
+          />
         )}
         <span
           className="ap-topic-mins"
@@ -5752,7 +5822,6 @@ function TopicItem({
           items={[
             { label: notesOpen ? "Скрыть заметки" : notes.length ? "Заметки" : "+ Заметка со временем", onSelect: onToggleNotes },
             { label: linkOpen ? "Скрыть настройки" : topic.url ? "Изменить ссылку и длительность" : "Добавить ссылку, изменить длительность", onSelect: onToggleLink },
-            { label: topic.offPlan ? "Учитывать в распределении" : "Не учитывать в распределении", onSelect: onTogglePlan },
             { label: "Удалить урок", danger: true, onSelect: onRemoveTopic },
           ]}
         />
@@ -7044,18 +7113,42 @@ const styles = {
   noteBadge: { flexShrink: 0, minHeight: 26, padding: "0 10px", border: "none", borderRadius: 13, background: "var(--neutralBg)", color: "var(--ink2)", fontSize: 12, cursor: "pointer" },
   topicMins: { flexShrink: 0, width: 58, textAlign: "right", fontSize: 13, color: "var(--ink3)" },
   topicMinsOff: { color: "var(--mute)", textDecoration: "line-through" },
-  offPlanMark: {
+  planSwitch: {
     flexShrink: 0,
-    padding: "2px 8px",
-    border: "1px dashed var(--line)",
-    borderRadius: 999,
-    background: "transparent",
-    color: "var(--ink3)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 36,
+    padding: "0 2px",
+    border: "none",
+    background: "none",
+    color: "var(--ink2)",
     font: "inherit",
-    fontSize: 12,
-    whiteSpace: "nowrap",
+    fontSize: 13.5,
     cursor: "pointer",
   },
+  planTrack: {
+    position: "relative",
+    display: "inline-block",
+    width: 34,
+    height: 20,
+    borderRadius: 999,
+    transition: "background .15s",
+  },
+  planTrackSmall: { width: 28, height: 16 },
+  planKnob: {
+    position: "absolute",
+    top: 2,
+    left: 2,
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    background: "var(--panel2)",
+    boxShadow: "0 1px 2px rgba(0,0,0,.25)",
+    transition: "transform .15s",
+  },
+  planKnobSmall: { width: 12, height: 12 },
+  planText: { whiteSpace: "nowrap" },
   // «Тетради», вариант A: три колонки в одной рамке.
   notesShell: { display: "grid", gridTemplateColumns: "252px minmax(0, 1fr)", background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", overflow: "hidden", minHeight: 640 },
   notesSide: { padding: "18px 10px", background: "var(--neutralBg)", borderRight: "1px solid var(--line)", minWidth: 0 },
