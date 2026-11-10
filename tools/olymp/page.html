@@ -48,6 +48,8 @@ th,td{text-align:left;vertical-align:top;padding:8px 12px;border-bottom:1px soli
 th{font-size:12.5px;font-weight:600;color:var(--mute);letter-spacing:.02em;background:var(--accentSoft)}
 tr:last-child td{border-bottom:none}
 td:first-child{font-weight:500}
+.tbl.keycol th:first-child,.tbl.keycol td:first-child{min-width:0;width:1%}
+.tbl.keycol td:first-child{white-space:normal}
 #countries td{min-width:96px;font-size:13.5px}
 .nav{display:flex;justify-content:space-between;gap:12px;margin-top:36px;padding-top:16px;border-top:1px solid var(--line);font-size:14.5px}
 .nav a{text-decoration:none;font-weight:600}
@@ -113,6 +115,13 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
       (prev ? '<a href="#' + prev.id + '">‹ ' + prev.querySelector("h1").textContent + "</a>" : "<span></span>") +
       (next ? '<a href="#' + next.id + '">' + next.querySelector("h1").textContent + " ›</a>" : "<span></span>");
     ch.appendChild(nav);
+  });
+
+  // Таблицы обозначений: в первой колонке короткие буквы — ей не нужна треть ширины.
+  [].forEach.call(document.querySelectorAll(".tbl"), function (box) {
+    var cells = box.querySelectorAll("tbody td:first-child");
+    var short = cells.length && [].every.call(cells, function (td) { return td.textContent.trim().length <= 24; });
+    if (short) box.classList.add("keycol");
   });
 
   // Поиск по таблице стран: полтораста строк глазами не просмотреть.
