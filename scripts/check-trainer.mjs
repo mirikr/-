@@ -404,6 +404,28 @@ want("жалоба на задание сохранилась", brokenSaved === 
     const ticks = await frame.locator("#rail-track .tick").count();
     const heads = await frame.locator("article:not([hidden]) h2").count();
     want("ползунок сбоку — по главам раздела", ticks === heads && heads > 1, ticks + " делений, " + heads + " глав");
+    // Тест на запоминание (1.11.6): кнопка в конце главы, пять видов заданий.
+    await frame.locator('.tabs a[data-tab="sociology"]').click();
+    await page.waitForTimeout(400);
+    const quizzes = await frame.locator("article:not([hidden]) .quiz-go").count();
+    want("в главах учебника есть тесты", quizzes >= 5, "тестов в разделе: " + quizzes);
+    await frame.locator("article:not([hidden]) .quiz-go button").first().click();
+    await page.waitForTimeout(300);
+    want("тест открывается с карточек", (await frame.locator(".q-card").count()) === 1);
+    await frame.locator('[data-mode="choice"]').click();
+    await frame.locator('.q-opt[data-ok="1"]').click();
+    want("верный выбор отмечается", (await frame.locator(".q-opt.ok").count()) === 1);
+    await frame.locator('[data-mode="match"]').click();
+    await page.waitForTimeout(200);
+    await frame.locator('.q-tile[data-side="t"][data-k="0"]').click();
+    await frame.locator('.q-tile[data-side="d"][data-k="0"]').click();
+    await page.waitForTimeout(500);
+    want("в сопоставлении верная пара уходит", (await frame.locator(".q-tile.gone").count()) === 2);
+    await frame.locator('[data-mode="write"]').click();
+    await frame.locator("#q-answer").fill("заведомо не то");
+    await frame.locator('[data-act="check"]').click();
+    want("во «Вписать» показан правильный термин", /Правильно:/.test(await frame.locator(".q-note").innerText()));
+    await frame.locator("#q-close").click();
     await page.locator("[data-book-menu]").click();
     want("есть меню учебников", (await page.getByRole("menuitemradio").count()) >= 1);
     await page.locator("[data-book-menu]").click();
