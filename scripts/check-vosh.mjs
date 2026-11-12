@@ -198,6 +198,24 @@ async function answerByKey(page, t) {
   await ctx.close();
 }
 
+// 1б. Пробный первый тур (1.11.6): обратный отсчёт, итог из 100 — только по
+// ответам этой попытки.
+{
+  const { ctx, page, errors } = await fresh({ width: 1280, height: 900 });
+  await page.locator("[data-vosh-card]").getByRole("button", { name: "Открыть олимпиады" }).click();
+  await page.locator("[data-vosh-mock]").waitFor();
+  await page.locator("[data-mock-start]").click();
+  await page.waitForTimeout(1200);
+  const bar = page.locator("[data-mock-bar]");
+  want("пробный тур: идёт обратный отсчёт", (await bar.count()) === 1 && /осталось\s*(39|40):/.test(await bar.innerText()), (await bar.count()) ? await bar.innerText() : "плашки нет");
+  await bar.getByRole("button", { name: "Завершить тур" }).click();
+  await page.waitForTimeout(500);
+  const res = page.locator("[data-mock-result]");
+  want("пробный тур: итог пересчитан в 100", (await res.count()) === 1 && /0 из 100/.test(await res.innerText()), (await res.count()) ? (await res.innerText()).slice(0, 80) : "итога нет");
+  want("пробный тур: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 2. Телефон: самые широкие виды — пропуски, группы, соответствие.
 {
   const { ctx, page, errors } = await fresh({ width: 390, height: 844 });

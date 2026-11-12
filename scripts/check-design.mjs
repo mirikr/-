@@ -196,6 +196,46 @@ for (const theme of ["light", "night"]) for (const vp of [{ width: 1280, height:
   await ctx.close();
 }
 
+// 3д. Раздел «Учебники» (1.11.6): время в учебнике считается секундомером,
+// при выходе предлагается записать занятие — оно попадает в дневник.
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(8000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript((st) => {
+    if (sessionStorage.getItem("seeded")) return;
+    sessionStorage.setItem("seeded", "1");
+    localStorage.setItem("planner-intro-version", "0.6.0-schedule");
+    localStorage.setItem("planner-design-intro", "1.0.0");
+    localStorage.setItem("planner-screen", "books");
+    localStorage.setItem("planner:planner-state-v5", JSON.stringify({ value: JSON.stringify(st), updatedAt: Date.now() - 1000 }));
+  }, { customSubjects: [{ id: "c1", name: "Право", color: "#8C7326" }, { id: "c2", name: "Экономика", color: "#2F6B4F" }], data: { c1: { topics: [], custom: [] }, c2: { topics: [], custom: [] } } });
+  await page.goto(URL0);
+  await page.waitForTimeout(1600);
+  want("раздел «Учебники» открывается", (await page.locator("[data-books]").count()) === 1 && (await page.locator("[data-book]").count()) >= 1);
+  await page.getByRole("button", { name: "Читать" }).first().click();
+  await page.waitForTimeout(1200);
+  const frame = page.frameLocator('iframe[title="Учебник к олимпиаде"]');
+  await frame.locator('.tabs a[data-tab="economics"]').click();
+  // Меньше минуты — не занятие; ждём, пока секундомер перейдёт за минуту.
+  await page.waitForFunction(() => /^[1-9]\d*:/.test((document.querySelector("[data-book-clock]") || {}).textContent || ""), null, { timeout: 80000 });
+  await page.getByRole("button", { name: "‹ Закрыть" }).click();
+  const sheet = page.locator("[data-book-finish]");
+  want("при выходе предлагается записать занятие", (await sheet.count()) === 1);
+  want("предмет подобран по открытому разделу", (await sheet.getByLabel("Предмет").inputValue()) === "c2");
+  await sheet.getByRole("button", { name: "Записать", exact: true }).click();
+  await page.waitForTimeout(1500);
+  const saved = await page.evaluate(() => {
+    const v = JSON.parse(JSON.parse(localStorage.getItem("planner:planner-state-v5")).value);
+    return (v.journal || []).filter((e) => e.subjectId === "c2" && /Учебник/.test(e.note || "")).map((e) => e.hours);
+  });
+  want("занятие из учебника записано в дневник", saved.length === 1 && saved[0] > 0, JSON.stringify(saved));
+  want("учебники: ошибок нет", errors.length === 0, errors[0] || "");
+  await ctx.close();
+}
+
 // 3в. «Распределение» (1.5.1): часы дня — не только кнопками: число вписывается,
 // столбик тянется мышью, на телефоне — ползунок. Метка «ваш бюджет» не
 // вылезает за карточку, подписи на графике КПВ не наслаиваются.

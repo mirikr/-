@@ -43,6 +43,8 @@ import { buildDay, dayCountLabel } from "./school-timeline.js";
 // Набор заданий весит мегабайты — он грузится отдельным куском, когда открывают
 // тренажёр, а не вместе со всем приложением.
 const Trainer = lazy(retryImport(() => import("./trainer.jsx")));
+import { planToday } from "./books.js";
+const BooksScreen = lazy(retryImport(() => import("./books-screen.jsx")));
 import { BANK_SUBJECTS } from "./fipi-index.js";
 import { TRAINER_SUBJECTS, inTrainer } from "./trainer-subjects.js";
 import { VOSH_SUBJECTS } from "./vosh-index.js";
@@ -3005,6 +3007,7 @@ export default function StudyPlanner() {
       // другое: сколько решено сегодня и сколько нужно, чтобы день зачёлся.
       hint: trainerToday,
     },
+    { key: "books", label: "Учебники", hint: "" },
     { key: "school", label: "Лицей КЭО", short: "Лицей", hint: "" },
     { key: "journal", label: "Дневник", hint: weeklyJournalHours ? weeklyJournalHours + " ч" : "" },
     { key: "notes", label: "Тетради", hint: "" },
@@ -3022,6 +3025,7 @@ export default function StudyPlanner() {
     budget: ["Распределение времени (КПВ)", "Слева — что вы задаёте, справа — что из этого получается"],
     study: ["Самостоятельная подготовка", "Уроки, заметки и тетради по своим предметам"],
     trainer: ["Тренажёр", "Банк ФИПИ и тесты ВсОШ по обществознанию"],
+    books: ["Учебники", "Учебники, планы подготовки, тесты на запоминание и тренировки"],
     school: ["Лицей КЭО", "Предметы лицея и расписание недели с ролями уроков"],
     journal: ["Дневник", "Оценки, задания, события и занятия — по дням"],
     notes: ["Тетради", "Блоки и ветки: конспект с форматированием и вложениями"],
@@ -3158,6 +3162,29 @@ export default function StudyPlanner() {
     const last = journal.find((e) => ids.has(e.subjectId));
     return last ? last.subjectId : ALL_SUBJECTS[0] ? ALL_SUBJECTS[0].id : "";
   })();
+
+  const bookPlanToday = screen === "today" ? planToday() : null;
+  // Учебник просят открыть снаружи раздела — с «Сегодня» или из тренажёра.
+  const [bookRequest, setBookRequest] = useState(null);
+  const clearBookRequest = useCallback(() => setBookRequest(null), []);
+  function openBook(hash) {
+    setBookRequest({ id: "", hash: hash || "", at: Date.now() });
+    goScreen("books");
+  }
+  // Время в учебнике, записанное при выходе, — обычное занятие в дневнике.
+  function recordBook(entry) {
+    const id = Date.now();
+    setJournal((prev) => [{ id, date: todayStr(), timer: true, ...entry }, ...prev]);
+    const subject = ALL_SUBJECTS.find((x) => x.id === entry.subjectId);
+    showUndo(`Записано: ${subject ? subject.name : "занятие"} · ${minutesLabel(Math.round(entry.hours * 60))}`, () =>
+      setJournal((prev) => prev.filter((e) => e.id !== id))
+    );
+  }
+  // Пробный тур живёт в разделе ВсОШ тренажёра: открываем его на списке олимпиад.
+  function openMockTour() {
+    setTrainerState((prev) => ({ ...(prev || {}), open: "vosh", vosh: { ...((prev && prev.vosh) || {}), olymp: "", taskId: "" } }));
+    goScreen("trainer");
+  }
 
   // «+ Записать»: прошедшее занятие одной записью.
   function saveLogged(entry) {
@@ -3592,6 +3619,23 @@ export default function StudyPlanner() {
 
         {screen === "today" && (
           <>
+            {/* План подготовки к олимпиаде — личный, как и встроенные предметы:
+                другим аккаунтам чужой план на «Сегодня» ни к чему. */}
+            {builtinsVisible && bookPlanToday && (
+              <section className="ap-card" style={styles.card} data-today-plan>
+                <div style={styles.todayEventHead}>
+                  Сегодня по плану · {bookPlanToday.closed} из {bookPlanToday.items.length}
+                </div>
+                <ul style={{ margin: "6px 0 10px", paddingLeft: 18, fontSize: 14, lineHeight: 1.5 }}>
+                  {bookPlanToday.items.map((it, i) => (
+                    <li key={i}>{it.text}</li>
+                  ))}
+                </ul>
+                <button onClick={() => openBook("home")} className="ap-row" style={styles.goLink}>
+                  Открыть план в учебнике →
+                </button>
+              </section>
+            )}
             {todayEvents.length > 0 && (
               <section
                 className="ap-card"
@@ -4555,6 +4599,20 @@ export default function StudyPlanner() {
               onState={(next) => setTrainerState((prev) => ({ ...next, vosh: next && "vosh" in next ? next.vosh : prev && prev.vosh }))}
               onAttempt={addAttempt}
               onMark={addMark}
+              onOpenBook={() => openBook("")}
+              styles={styles}
+            />
+          </Suspense>
+        )}
+
+        {screen === "books" && (
+          <Suspense fallback={<section style={styles.plainBlock}><p style={styles.muted}>Учебники загружаются…</p></section>}>
+            <BooksScreen
+              subjects={ALL_SUBJECTS}
+              request={bookRequest}
+              onRequestDone={clearBookRequest}
+              onRecord={recordBook}
+              onMockTour={openMockTour}
               styles={styles}
             />
           </Suspense>

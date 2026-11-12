@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { OLYMPIADS } from "./vosh/vosh-society.js";
 import { KIND_NAMES, scoreTask, hasResponse, responseText, keyText, lastAttempts } from "./vosh-check.js";
 import { timeWord } from "./bank-answer.js";
@@ -90,6 +90,9 @@ function emptyResponse(task) {
   return {};
 }
 
+// Пробный тур — по муниципальным этапам; минут столько, сколько дают на первый тур.
+const MOCK_MINUTES = 40;
+const MOCK_LIST = OLYMPIADS.filter((o) => o.stage === "municipal");
 const olympName = (o) => o.stageName + " · " + o.grade + " класс";
 const olympSub = (o) => o.year + (o.region ? " · " + o.region : "");
 const testPoints = (o) => o.tasks.reduce((n, t) => n + t.max, 0);
@@ -144,6 +147,43 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
   };
 
   const last = useMemo(() => lastAttempts(log, IDS), [log]);
+
+  // Пробный первый тур: олимпиада целиком с обратным отсчётом. На муниципальном
+  // этапе на первый тур дают 40 минут. Отметка о туре — настройка устройства:
+  // начатый на телефоне тур не должен «дотикивать» на ноутбуке.
+  const [mock, setMock] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("vosh-mock") || "null");
+    } catch (e) {
+      return null;
+    }
+  });
+  const [now, setNow] = useState(Date.now());
+  const saveMock = (next) => {
+    setMock(next);
+    try {
+      if (next) localStorage.setItem("vosh-mock", JSON.stringify(next));
+      else localStorage.removeItem("vosh-mock");
+    } catch (e) {
+      /* приватный режим — тур доживёт до перезагрузки */
+    }
+  };
+  const mockRunning = !!(mock && !mock.end);
+  useEffect(() => {
+    if (!mockRunning) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [mockRunning]);
+  const mockLeft = mock ? Math.max(0, Math.round((mock.until - now) / 1000)) : 0;
+  // Ответы именно этой попытки: прежние решения в зачёт тура не идут.
+  const mockLast = useMemo(() => {
+    const out = new Map();
+    if (!mock) return out;
+    (log || []).forEach((a) => {
+      if (IDS.has(a.taskId) && a.at && Date.parse(a.at) >= mock.start && (!mock.end || Date.parse(a.at) <= mock.end + 2000)) out.set(a.taskId, a);
+    });
+    return out;
+  }, [log, mock]);
   const seconds = useMemo(
     () => (log || []).filter((a) => IDS.has(a.taskId)).reduce((n, a) => n + (Number(a.seconds) || 0), 0),
     [log],
@@ -191,6 +231,25 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
     setTaskId(first);
     save({ olymp: id, taskId: first });
   }
+
+  function startMock(id) {
+    const start = Date.now();
+    saveMock({ olymp: id, start, until: start + MOCK_MINUTES * 60000 });
+    setNow(start);
+    restart(id);
+  }
+  function endMock() {
+    if (!mock || mock.end) return;
+    saveMock({ ...mock, end: Date.now() });
+    setTaskId(DONE);
+    save({ olymp: mock.olymp, taskId: DONE });
+  }
+  // Время вышло — тур заканчивается сам, на итогах.
+  useEffect(() => {
+    if (mockRunning && mockLeft <= 0) endMock();
+    // endMock читает актуальный mock; пересоздавать эффект на каждый рендер незачем
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mockRunning, mockLeft]);
 
   function openMix() {
     const s = (Date.now() % 2147483647) || 1;
@@ -240,6 +299,15 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
     save({ fresh: on });
   }
 
+  const [mockPick, setMockPick] = useState(() => (MOCK_LIST.find((o) => o.grade === 10) || MOCK_LIST[0]).id);
+  const mockHere = mock && mock.olymp === olymp;
+  const mockBar = mockHere && mockRunning ? (
+    <div style={S.mockBar} data-mock-bar role="timer">
+      <span>Пробный тур · осталось <b style={{ fontVariantNumeric: "tabular-nums" }}>{Math.floor(mockLeft / 60)}:{String(mockLeft % 60).padStart(2, "0")}</b></span>
+      <button onClick={endMock} className="ap-row" style={S.back}>Завершить тур</button>
+    </div>
+  ) : null;
+
   // --- список олимпиад ---------------------------------------------------
   if (!olymp) {
     const solvedAll = ALL.filter(solvedOk).length;
@@ -278,6 +346,22 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
               {g ? g + " класс" : "Все классы"}
             </button>
           ))}
+        </div>
+
+        <div style={S.mix} data-vosh-mock>
+          <div style={S.mixTitle}>Пробный первый тур · {MOCK_MINUTES} минут</div>
+          <div style={S.pickLine}>
+            Одна олимпиада целиком с обратным отсчётом, как первый тур муниципального этапа. В зачёт идут только ответы
+            этой попытки; итог пересчитывается в 100 баллов.
+          </div>
+          <div style={S.mockRow}>
+            <select value={mockPick} onChange={(e) => setMockPick(e.target.value)} style={S.mockSelect} aria-label="Олимпиада для пробного тура">
+              {MOCK_LIST.map((o) => (
+                <option key={o.id} value={o.id}>{o.year} · {olympName(o)}</option>
+              ))}
+            </select>
+            <button onClick={() => startMock(mockPick)} className="ap-btn" style={S.primary} data-mock-start>Начать на время</button>
+          </div>
         </div>
 
         <div style={S.mix} data-vosh-mix>
@@ -398,6 +482,20 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
           <button onClick={toList} className="ap-row" style={S.back}>К списку олимпиад</button>
         </div>
         <div style={S.pickSub}>{olympSub(o)}</div>
+        {mockHere && mock.end ? (() => {
+          const gotMock = o.tasks.reduce((n, t) => n + (mockLast.has(t.id) ? Number(mockLast.get(t.id).score) || 0 : 0), 0);
+          const spent = Math.round((Math.min(mock.end, mock.until) - mock.start) / 1000);
+          return (
+            <div style={S.mockResult} data-mock-result>
+              <div style={S.mockScore}>{Math.round((gotMock / points) * 100)} из 100</div>
+              <div style={S.pickLine}>
+                Пробный тур: {gotMock} из {points} {pointWord(points)} · отвечено {o.tasks.filter((t) => mockLast.has(t.id)).length} из {o.tasks.length} ·
+                время {Math.floor(spent / 60)}:{String(spent % 60).padStart(2, "0")}{mock.end >= mock.until ? " — время вышло" : ""}
+              </div>
+              <button onClick={() => saveMock(null)} className="ap-row" style={S.keyBtn}>Убрать итог тура</button>
+            </div>
+          );
+        })() : null}
         <div style={S.total} data-vosh-total>
           Набрано <b>{got}</b> из {points} {pointWord(points)}
         </div>
@@ -455,6 +553,7 @@ export default function VoshTrainer({ log, state, onState, onAttempt, onLeave, s
         </div>
         <button onClick={toList} className="ap-row" style={S.back}>К списку олимпиад</button>
       </div>
+      {mockBar}
 
       {olymp === MIX ? (
         <div style={S.navNote}>
@@ -977,6 +1076,17 @@ const S = {
   skip: { border: "none", background: "none", color: "var(--mute)", font: "inherit", fontSize: 13, cursor: "pointer", padding: 0 },
   source: { marginTop: 6, fontSize: 11.5, color: "var(--mute)", lineHeight: 1.5 },
 
+  mockRow: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 10 },
+  mockSelect: {
+    flex: "1 1 180px", minWidth: 0, maxWidth: "100%", width: "100%", height: 40, padding: "0 10px", border: "1px solid var(--line)", borderRadius: 9,
+    background: "var(--panel2)", color: "var(--ink)", font: "inherit", fontSize: 14,
+  },
+  mockBar: {
+    position: "sticky", top: 8, zIndex: 3, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+    flexWrap: "wrap", margin: "0 0 12px", padding: "8px 12px", borderRadius: 12, background: "var(--rail)", color: "var(--railInk)", fontSize: 14,
+  },
+  mockResult: { margin: "12px 0", padding: "12px 14px", borderRadius: 12, border: "1px solid var(--line)", background: "var(--accentSoft)", display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" },
+  mockScore: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 30 },
   total: { fontFamily: "'PT Serif', Georgia, serif", fontSize: 24, margin: "12px 0 6px" },
   sumList: { listStyle: "none", margin: "14px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 2 },
   sumRow: {

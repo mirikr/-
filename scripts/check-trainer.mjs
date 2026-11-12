@@ -385,7 +385,17 @@ want("жалоба на задание сохранилась", brokenSaved === 
     await page.waitForTimeout(1500);
     const frame = page.frameLocator('iframe[title="Учебник к олимпиаде"]');
     const h1 = await frame.locator("article:not([hidden]) h1").first().innerText().catch(() => "");
-    want("учебник открывается на плане подготовки", /План подготовки/.test(h1), h1 || "пусто");
+    // С 1.11.6 учебник живёт в разделе «Учебники»: плитка ведёт туда и сразу
+    // открывает его на вкладке «Старт».
+    want("плитка открывает учебник в разделе «Учебники»", (await page.locator("[data-books]").count()) === 1 && /Старт/.test(h1), h1 || "пусто");
+    want("на «Старте» есть план, тренировки и карта знаний",
+      (await frame.locator("#plan-card").count()) + (await frame.locator(".h-tool").count()) + (await frame.locator(".map").count()) >= 7);
+    want("в учебнике идёт секундомер", (await page.locator("[data-book-clock]").count()) === 1);
+    await frame.locator('.h-tool[data-tool="econ"]').click();
+    await frame.locator('[data-do="ec"]').nth(1).click();
+    await frame.locator('[data-do="ec-show"]').click();
+    want("экономическая задача показывает решение по шагам", (await frame.locator(".q-steps li").count()) >= 2);
+    await frame.locator("#tool-close").click();
     await frame.locator('.tabs a[data-tab="law"]').click();
     await page.waitForTimeout(400);
     const lawH1 = await frame.locator("article:not([hidden]) h1").first().innerText().catch(() => "");
@@ -404,12 +414,36 @@ want("жалоба на задание сохранилась", brokenSaved === 
     const ticks = await frame.locator("#rail-track .tick").count();
     const heads = await frame.locator("article:not([hidden]) h2").count();
     want("ползунок сбоку — по главам раздела", ticks === heads && heads > 1, ticks + " делений, " + heads + " глав");
+    // Тест на запоминание (1.11.6): кнопка в конце главы, пять видов заданий.
+    await frame.locator('.tabs a[data-tab="sociology"]').click();
+    await page.waitForTimeout(400);
+    const quizzes = await frame.locator("article:not([hidden]) .quiz-go").count();
+    want("в главах учебника есть тесты", quizzes >= 5, "тестов в разделе: " + quizzes);
+    await frame.locator("article:not([hidden]) .quiz-go button").first().click();
+    await page.waitForTimeout(300);
+    want("тест открывается с карточек", (await frame.locator(".q-card").count()) === 1);
+    await frame.locator('[data-mode="choice"]').click();
+    await frame.locator('.q-opt[data-ok="1"]').click();
+    want("верный выбор отмечается", (await frame.locator(".q-opt.ok").count()) === 1);
+    await frame.locator('[data-mode="match"]').click();
+    await page.waitForTimeout(200);
+    await frame.locator('.q-tile[data-side="t"][data-k="0"]').click();
+    await frame.locator('.q-tile[data-side="d"][data-k="0"]').click();
+    await page.waitForTimeout(500);
+    want("в сопоставлении верная пара уходит", (await frame.locator(".q-tile.gone").count()) === 2);
+    await frame.locator('[data-mode="write"]').click();
+    await frame.locator("#q-answer").fill("заведомо не то");
+    await frame.locator('[data-act="check"]').click();
+    want("во «Вписать» показан правильный термин", /Правильно:/.test(await frame.locator("#quiz .q-note").innerText()));
+    await frame.locator("#q-close").click();
     await page.locator("[data-book-menu]").click();
     want("есть меню учебников", (await page.getByRole("menuitemradio").count()) >= 1);
     await page.locator("[data-book-menu]").click();
     await page.getByRole("button", { name: "‹ Закрыть" }).click();
     await page.waitForTimeout(300);
     want("учебник закрывается", (await page.locator('iframe[title="Учебник к олимпиаде"]').count()) === 0);
+    await page.getByRole("button", { name: /Тренажёр/ }).first().click();
+    await page.waitForTimeout(800);
   }
   // Заголовок карточки повторял заголовок экрана — его быть не должно.
   want("заголовок не задвоен", (picker.match(/Тренажёр по банку ФИПИ/g) || []).length === 0);

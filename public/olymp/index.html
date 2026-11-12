@@ -15,14 +15,15 @@ try { var t = window.parent !== window && parent.document.documentElement.getAtt
 :root{
   --bg:#F1ECE1;--panel:#FBF8F1;--ink:#22201B;--ink2:#4A453B;--mute:#7A7363;--line:#DDD5C4;--line2:#E8E1D2;
   --accent:#8A6A1F;--accentSoft:#EDE2C6;--red:#A4452C;--bar:#24221D;--barInk:#EFE8D8;--barMute:#A9A290;
+  --green:#2F6B4F;--greenSoft:#D9E6DC;--redBg:#F4DED5;
   --serif:'PT Serif',Georgia,'Times New Roman',serif;--sans:'Golos Text',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#171612;--panel:#211F1A;--ink:#EDE7D8;--ink2:#D6CFBD;--mute:#9A927F;--line:#35322A;--line2:#2C2A23;
-  --accent:#D9B45A;--accentSoft:#332C1E;--red:#DC8466;--bar:#100F0C;--barInk:#EDE7D8;--barMute:#9C9483;color-scheme:dark}}
+  --accent:#D9B45A;--accentSoft:#332C1E;--red:#DC8466;--bar:#100F0C;--barInk:#EDE7D8;--barMute:#9C9483;--green:#74B08E;--greenSoft:#22332A;--redBg:#3A241E;color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#171612;--panel:#211F1A;--ink:#EDE7D8;--ink2:#D6CFBD;--mute:#9A927F;--line:#35322A;--line2:#2C2A23;
-  --accent:#D9B45A;--accentSoft:#332C1E;--red:#DC8466;--bar:#100F0C;--barInk:#EDE7D8;--barMute:#9C9483;color-scheme:dark}
+  --accent:#D9B45A;--accentSoft:#332C1E;--red:#DC8466;--bar:#100F0C;--barInk:#EDE7D8;--barMute:#9C9483;--green:#74B08E;--greenSoft:#22332A;--redBg:#3A241E;color-scheme:dark}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bar)}
 .bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--bar);color:var(--barInk)}
@@ -32,6 +33,12 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .brand span{font-size:12.5px;color:var(--barMute)}
 .tabs{display:flex;gap:4px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
+.tabs-wrap{display:flex;align-items:center;gap:6px}
+.tabs-wrap .tabs{flex:1;min-width:0;scroll-behavior:smooth}
+.tabs-arrow{flex:0 0 auto;width:30px;height:30px;margin-bottom:2px;border-radius:50%;border:1px solid var(--barMute);background:none;color:var(--barInk);font:inherit;font-size:20px;line-height:1;padding:0 0 3px;cursor:pointer}
+.tabs-arrow:disabled{opacity:.25;cursor:default}
+.tabs-arrow:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.tabs-wrap .tabs{scroll-behavior:auto}}
 .tabs a{flex:0 0 auto;padding:6px 12px;border-radius:999px;color:var(--barMute);text-decoration:none;font-size:14px;white-space:nowrap}
 .tabs a:hover{color:var(--barInk)}
 .tabs a[aria-current="page"]{background:var(--barInk);color:var(--bar);font-weight:600}
@@ -84,6 +91,116 @@ td:first-child{font-weight:500}
 .flash{background:var(--accentSoft);border-radius:6px;transition:background 1.2s}
 @media (prefers-reduced-motion:reduce){.flash{transition:none}}
 
+/* Тесты на запоминание: кнопка в конце главы, сам тест — окном поверх страницы. */
+.quiz-go{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 4px;padding:12px 14px;border:1px dashed var(--line);border-radius:14px;background:var(--panel)}
+.quiz-go b{font-weight:600}
+.quiz-go span{font-size:13px;color:var(--mute)}
+.quiz-go button,.q-btn{height:40px;padding:0 16px;border:none;border-radius:11px;background:var(--bar);color:var(--barInk);font:inherit;font-size:14.5px;font-weight:600;cursor:pointer}
+.quiz-go button{margin-left:auto}
+.quiz-go .done{color:var(--green);font-weight:600}
+.q-btn.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+.q-btn:focus-visible,.quiz-go button:focus-visible,.q-opt:focus-visible,.q-tile:focus-visible,.q-modes button:focus-visible,.q-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.quiz{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.q-head{display:flex;align-items:center;gap:10px;padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px));background:var(--bar);color:var(--barInk)}
+.q-head b{flex:1;min-width:0;font-family:var(--serif);font-weight:400;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-head button{height:34px;padding:0 12px;border:1px solid var(--barMute);border-radius:999px;background:none;color:var(--barInk);font:inherit;font-size:13.5px;cursor:pointer}
+.q-modes{display:flex;gap:4px;overflow-x:auto;padding:8px max(14px,env(safe-area-inset-right,0px)) 8px max(14px,env(safe-area-inset-left,0px));background:var(--bar);scrollbar-width:none}
+.q-modes button{flex:0 0 auto;padding:6px 12px;border:none;border-radius:999px;background:none;color:var(--barMute);font:inherit;font-size:14px;cursor:pointer;white-space:nowrap}
+.q-modes button[aria-pressed="true"]{background:var(--barInk);color:var(--bar);font-weight:600}
+.q-body{flex:1;overflow-y:auto;padding:18px max(16px,env(safe-area-inset-right,0px)) 28px max(16px,env(safe-area-inset-left,0px))}
+.q-in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.q-prog{font-size:13px;color:var(--mute);display:flex;justify-content:space-between;gap:10px}
+.q-bar{height:5px;border-radius:999px;background:var(--line2);overflow:hidden}
+.q-bar i{display:block;height:100%;background:var(--green);border-radius:999px}
+.q-ask{font-size:17px;line-height:1.5;padding:18px;border:1px solid var(--line2);border-radius:16px;background:var(--panel)}
+.q-ask small{display:block;font-size:12.5px;color:var(--mute);margin-bottom:6px}
+.q-card{min-height:190px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px;padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--panel);font:inherit;color:var(--ink);cursor:pointer;width:100%}
+.q-card .t{font-family:var(--serif);font-size:24px;line-height:1.25}
+.q-card .d{font-size:16px;line-height:1.5}
+.q-card small{font-size:12.5px;color:var(--mute)}
+.q-row{display:flex;gap:8px;flex-wrap:wrap}
+.q-row>*{flex:1 1 140px}
+.q-opts{display:flex;flex-direction:column;gap:8px}
+.q-opt{padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:inherit;font-size:15.5px;text-align:left;cursor:pointer}
+.q-opt.ok,.q-tile.ok{border-color:var(--green);background:var(--greenSoft)}
+.q-opt.bad,.q-tile.bad{border-color:var(--red);background:var(--redBg)}
+.q-note{font-size:14.5px;line-height:1.5;padding:12px 14px;border-radius:12px;background:var(--accentSoft)}
+.q-match{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:8px}
+.q-col{display:flex;flex-direction:column;gap:8px}
+.q-tile{padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:inherit;font-size:13.5px;line-height:1.4;text-align:left;cursor:pointer;min-height:44px}
+.q-tile.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accentSoft)}
+.q-tile.gone{visibility:hidden}
+.q-input{height:48px;padding:0 14px;border:1.5px solid var(--line);border-radius:13px;background:var(--panel);color:var(--ink);font:inherit;font-size:17px;width:100%;box-sizing:border-box}
+.q-end{text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;padding:20px 0}
+.q-end .n{font-family:var(--serif);font-size:44px;line-height:1}
+.q-miss{text-align:left;width:100%;font-size:14.5px}
+.q-miss li{margin:6px 0}
+
+/* «Старт»: план на сегодня, повторение, тренировки, карта знаний, отметки. */
+.h-days{font-size:14px;color:var(--mute);margin:-6px 0 14px}
+.h-card{border:1px solid var(--line2);border-radius:16px;background:var(--panel);padding:14px 16px;margin:0 0 12px}
+.h-card.dark{background:var(--bar);color:var(--barInk);border-color:var(--bar)}
+.h-card.dark .h-sub{color:var(--barMute)}
+.h-card.dark .h-go{border-color:var(--barMute);color:var(--barInk)}
+.h-title{font-family:var(--serif);font-size:20px;line-height:1.25;display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.h-sub{font-size:13px;color:var(--mute)}
+.h-plan{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.h-plan li{display:flex;gap:10px;align-items:flex-start;margin:0}
+.h-plan input{width:20px;height:20px;margin:2px 0 0;flex:0 0 auto;accent-color:var(--green)}
+.h-plan label{flex:1;min-width:0;font-size:15px;line-height:1.45}
+.h-plan .off label{text-decoration:line-through;opacity:.6}
+.h-go{flex:0 0 auto;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.h-tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px}
+.h-tool{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);font:inherit;text-align:left;cursor:pointer;text-decoration:none}
+.h-tool b{font-size:15px;font-weight:600}
+.h-tool span{font-size:12.5px;color:var(--mute);line-height:1.35}
+.h-tool:focus-visible,.h-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hero{border-radius:20px;background:var(--bar);color:var(--barInk);padding:18px 18px 16px;margin:0 0 12px;display:flex;gap:16px;align-items:center}
+.hero-n{font-family:var(--serif);font-size:56px;line-height:1;color:var(--accent);flex:0 0 auto;min-width:56px;text-align:center}
+.hero-t{flex:1;min-width:0}
+.hero-t b{display:block;font-family:var(--serif);font-weight:400;font-size:20px;line-height:1.2}
+.hero-t span{display:block;font-size:13px;color:var(--barMute);margin-top:3px}
+.hero-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.14);margin-top:10px;overflow:hidden}
+.hero-bar i{display:block;height:100%;border-radius:3px;background:var(--green)}
+.map{position:relative;margin-top:14px}
+.map svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.rd-st{position:absolute;left:0;right:0;transform:translateY(-50%);display:flex;align-items:center;gap:10px;padding:0 calc(16% - 23px)}
+.rd-st.r{flex-direction:row-reverse}
+.rd-node{position:relative;flex:0 0 auto;width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--panel);border:3px solid var(--line);color:var(--mute);font-weight:700;font-size:16px;text-decoration:none;box-shadow:0 0 0 4px var(--panel)}
+.rd-st.part .rd-node{border-color:var(--accent);color:var(--accent)}
+.rd-st.done .rd-node{background:var(--green);border-color:var(--green);color:var(--bar)}
+.rd-st.now .rd-node{background:var(--accent);border-color:var(--accent);color:var(--bar);box-shadow:0 0 0 4px var(--panel),0 0 0 8px var(--accentSoft)}
+.rd-here{position:absolute;top:-22px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--bar);background:var(--accent);padding:1px 7px;border-radius:999px}
+.rd-lab{min-width:0;max-width:64%;background:var(--bg);border:1px solid var(--line2);border-radius:12px;padding:7px 10px 8px}
+.rd-st.r .rd-lab{text-align:right}
+.rd-lab>a{display:block;color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;line-height:1.2}
+.rd-lab small{display:block;font-size:12px;color:var(--mute);margin:1px 0 5px}
+.rd-dots{display:flex;gap:4px;flex-wrap:wrap}
+.rd-st.r .rd-dots{justify-content:flex-end}
+.rd-dots a{width:13px;height:13px;border-radius:50%;background:var(--line);display:block}
+.rd-dots a.seen{background:var(--barMute)}
+.rd-dots a.mid{background:var(--accent)}
+.rd-dots a.good{background:var(--green)}
+.rd-st.fin{justify-content:center;padding:0}
+.rd-fin{background:var(--bar);color:var(--barInk);border-radius:14px;padding:9px 16px;text-align:center;font-family:var(--serif);font-size:18px;line-height:1.2;box-shadow:0 0 0 4px var(--panel)}
+.rd-fin small{display:block;font-family:var(--sans);font-size:12px;color:var(--barMute)}
+.rd-node:focus-visible,.rd-lab a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:10px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.mk-learn{box-shadow:inset 3px 0 0 var(--accent);padding-left:10px;background:var(--accentSoft);border-radius:4px}
+.mk-ask{box-shadow:inset 3px 0 0 var(--red);padding-left:10px;background:var(--redBg);border-radius:4px}
+body.marking .chapter p,body.marking .chapter li{cursor:pointer}
+.mk-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.mk-list li{margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line2);font-size:14px;line-height:1.45}
+.mk-list small{display:block;color:var(--mute);font-size:12px;margin-bottom:2px}
+.mk-list .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.mk-list input{flex:1 1 160px;min-width:0;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.q-area{width:100%;box-sizing:border-box;min-height:110px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:inherit;font-size:15px;line-height:1.5;resize:vertical}
+.q-text p{font-size:15px;line-height:1.6;margin:0 0 10px}
+.q-timer{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;background:var(--bar);color:var(--barInk);font-size:14px}
+.q-big{font-family:var(--serif);font-size:22px;line-height:1.4;padding:20px;border:1px solid var(--line2);border-radius:16px;background:var(--panel);min-height:120px}
+.q-steps{margin:0;padding-left:20px;font-size:14.5px;line-height:1.55}
+
 /* Ползунок глав у правого края: деление — глава открытого раздела. */
 .rail{position:fixed;z-index:8;right:max(4px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;user-select:none;-webkit-user-select:none}
 .rail button{width:30px;height:30px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink2);font:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0}
@@ -103,12 +220,15 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
 </head>
 <body>
 <div class="bar"><div class="bar-in">
-  <div class="brand"><span class="brand-name"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></span><button type="button" class="find-btn" id="find-open" aria-expanded="false" aria-controls="search">Поиск</button></div>
+  <div class="brand"><span class="brand-name"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></span><span style="display:flex;gap:6px;flex:0 0 auto"><button type="button" class="find-btn" id="mark-mode" aria-pressed="false" title="Отмечать абзацы: «выучить» и «не понял»">Отметить</button><button type="button" class="find-btn" id="find-open" aria-expanded="false" aria-controls="search">Поиск</button></span></div>
   <div class="search" id="search" hidden>
     <input id="find-q" type="search" placeholder="Слово или фраза: эластичность, импичмент, Вебер…" aria-label="Поиск по учебнику" autocomplete="off">
     <div class="hits" id="hits" role="listbox" aria-label="Найдено"></div>
   </div>
+  <div class="tabs-wrap">
+  <button type="button" class="tabs-arrow" id="tabs-prev" aria-label="Листать разделы назад">‹</button>
   <nav class="tabs" aria-label="Разделы учебника">
+<a href="#home" data-tab="home">Старт</a>
 <a href="#plan" data-tab="plan">План</a>
 <a href="#format" data-tab="format">Формат</a>
 <a href="#society" data-tab="society">Общество</a>
@@ -123,10 +243,14 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
 <a href="#logic" data-tab="logic">Логика</a>
 <a href="#persons" data-tab="persons">Мыслители</a>
 <a href="#countries" data-tab="countries">Страны</a>
+<a href="#cheat" data-tab="cheat">Шпаргалка</a>
   </nav>
+  <button type="button" class="tabs-arrow" id="tabs-next" aria-label="Листать разделы вперёд">›</button>
+  </div>
 </div></div>
 
 <main>
+<article id="home" class="chapter" hidden><h1>Старт</h1><div id="home-body"></div></article>
 <article id="plan" class="chapter" hidden><h1>План подготовки к
 муниципальному этапу</h1>
 <p>Муниципальный этап ВсОШ по обществознанию — <strong>четверг, 19
@@ -9240,7 +9364,299 @@ e — <strong>обесценение рубля</strong>.</li>
 </tbody>
 </table></div>
 </article>
+<article id="cheat" class="chapter" hidden><h1>Шпаргалка на утро</h1>
+<p>Одна страница перед олимпиадой: только то, что нужно помнить точно.
+Ничего нового — всё это есть в разделах.</p>
+<h2 data-h="1">Формат</h2>
+<ul>
+<li>Первый тур — <strong>40 минут</strong>, 12–15 заданий: меньше 3
+минут на каждое. Второй — <strong>60 минут</strong>, одно развёрнутое
+задание. Каждый тур — до 100 баллов.</li>
+<li>Проверяют <strong>только чистовик</strong>. Ручка синяя или
+фиолетовая.</li>
+<li>Один элемент ответа — один балл: <strong>нумеруй</strong> аргументы
+и примеры.</li>
+<li>В суждениях ищи «всегда», «только», «любой», подмену понятия.</li>
+</ul>
+<h2 data-h="2">Экономика: формулы</h2>
+<div class="tbl"><table>
+<thead>
+<tr class="header">
+<th>Что</th>
+<th>Формула</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Выручка, прибыль</td>
+<td>TR = P × Q; прибыль = TR − TC</td>
+</tr>
+<tr class="even">
+<td>Экономическая прибыль</td>
+<td>выручка − явные − неявные издержки</td>
+</tr>
+<tr class="odd">
+<td>Безубыточность</td>
+<td>Q = FC : (P − AVC)</td>
+</tr>
+<tr class="even">
+<td>Равновесие</td>
+<td>Qd = Qs</td>
+</tr>
+<tr class="odd">
+<td>Эластичность</td>
+<td>% ΔQ : % ΔP; больше 1 — эластичный</td>
+</tr>
+<tr class="even">
+<td>ВВП</td>
+<td>C + I + G + Xn</td>
+</tr>
+<tr class="odd">
+<td>Реальный ВВП</td>
+<td>номинальный : индекс цен</td>
+</tr>
+<tr class="even">
+<td>Инфляция</td>
+<td>(I₁ − I₀) : I₀ × 100 %</td>
+</tr>
+<tr class="odd">
+<td>Уравнение обмена</td>
+<td>MV = PQ</td>
+</tr>
+<tr class="even">
+<td>Мультипликатор</td>
+<td>1 : норма резервов</td>
+</tr>
+<tr class="odd">
+<td>Проценты</td>
+<td>простые P(1 + rn); сложные P(1 + r)ⁿ</td>
+</tr>
+<tr class="even">
+<td>Безработица</td>
+<td>безработные : (занятые + безработные)</td>
+</tr>
+<tr class="odd">
+<td>Бюджет</td>
+<td>сальдо = доходы − расходы</td>
+</tr>
+<tr class="even">
+<td>Изменение в %</td>
+<td>(новое − старое) : старое × 100 %</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>Цена меняет <strong>величину</strong> спроса; остальное сдвигает
+кривую.</li>
+<li>Процентный пункт ≠ процент. Студент-очник и пенсионер — не
+безработные.</li>
+<li>НДФЛ: 13 % до 2,4 млн, дальше 15, 18, 20, 22 % — только с
+превышения.</li>
+<li>Фьючерс — обязательство, опцион — право. Вклады застрахованы до 1,4
+млн ₽.</li>
+</ul>
+<h2 data-h="3">Конституция: числа</h2>
+<div class="tbl"><table>
+<thead>
+<tr class="header">
+<th>Что</th>
+<th>Число</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Президент</td>
+<td>с 35 лет, 25 лет проживания, срок 6 лет, не более 2 сроков</td>
+</tr>
+<tr class="even">
+<td>Государственная Дума</td>
+<td>450 депутатов, с 21 года, 5 лет</td>
+</tr>
+<tr class="odd">
+<td>Сенатор</td>
+<td>с 30 лет; до 30 назначает Президент, до 7 пожизненно</td>
+</tr>
+<tr class="even">
+<td>Конституционный Суд</td>
+<td>11 судей; судья — с 25 лет, стаж 5 лет</td>
+</tr>
+<tr class="odd">
+<td>Задержание без суда</td>
+<td>48 часов</td>
+</tr>
+<tr class="even">
+<td>Вето</td>
+<td>преодолевается 2/3 обеих палат</td>
+</tr>
+<tr class="odd">
+<td>ФКЗ</td>
+<td>3/4 Совета Федерации, 2/3 Думы</td>
+</tr>
+<tr class="even">
+<td>Поправка к главам 3–8</td>
+<td>плюс 2/3 субъектов; главы 1, 2, 9 — только новая Конституция</td>
+</tr>
+</tbody>
+</table></div>
+<h2 data-h="4">Кто что делает</h2>
+<div class="tbl"><table>
+<thead>
+<tr class="header">
+<th>Совет Федерации</th>
+<th>Государственная Дума</th>
+<th>Президент</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>отрешает Президента</td>
+<td>выдвигает обвинение</td>
+<td>помилование</td>
+</tr>
+<tr class="even">
+<td>назначает судей КС и ВС</td>
+<td>утверждает Председателя Правительства</td>
+<td>назначает Председателя Правительства после утверждения Думой</td>
+</tr>
+<tr class="odd">
+<td>назначает выборы Президента</td>
+<td>назначает главу Центробанка</td>
+<td>Генерального прокурора — после консультаций с Советом Федерации</td>
+</tr>
+<tr class="even">
+<td>утверждает военное и чрезвычайное положение</td>
+<td>амнистия</td>
+<td>вводит военное и чрезвычайное положение</td>
+</tr>
+<tr class="odd">
+<td>границы между субъектами</td>
+<td>Уполномоченный по правам человека</td>
+<td>распускает Думу, назначает референдум</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>Исключительное ведение: уголовное, гражданское, процессуальное
+право, оборона, внешняя политика, эмиссия. Совместное: административное,
+трудовое, семейное, жилищное, земельное; «общие принципы»,
+«координация».</li>
+<li>Не ограничиваются при чрезвычайном положении: жизнь, достоинство,
+частная жизнь и тайна, свобода совести, жилище, судебные гарантии
+(статьи 46–54).</li>
+</ul>
+<h2 data-h="5">Право: возрасты</h2>
+<div class="tbl"><table>
+<thead>
+<tr class="header">
+<th>Возраст</th>
+<th>Что наступает</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>6</td>
+<td>мелкие бытовые сделки</td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>учёт мнения ребёнка</td>
+</tr>
+<tr class="odd">
+<td>14</td>
+<td>распоряжение заработком и стипендией, вклады, авторские права;
+уголовная ответственность за ряд преступлений; работа с согласия
+родителя; сам отвечает за вред; паспорт; молодёжь</td>
+</tr>
+<tr class="even">
+<td>15</td>
+<td>лёгкий труд; отчисление из школы как взыскание</td>
+</tr>
+<tr class="odd">
+<td>16</td>
+<td>трудовой договор; административная и общая уголовная
+ответственность; эмансипация; брак по разрешению</td>
+</tr>
+<tr class="even">
+<td>18</td>
+<td>полная дееспособность, избирательное право, призыв</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>Обмен качественного товара — 14 дней; возврат технически сложного —
+15 дней; гарантия не установлена — 2 года.</li>
+<li>Письменная форма сделок граждан — свыше 10 000 ₽. Исковая давность —
+3 года. Наследство — 6 месяцев.</li>
+<li>Взыскания работнику: замечание, выговор, увольнение. Штрафа
+нет.</li>
+</ul>
+<h2 data-h="6">Состав правонарушения</h2>
+<div class="tbl"><table>
+<thead>
+<tr class="header">
+<th>Элемент</th>
+<th>Вопрос</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Объект</td>
+<td>на что посягнули — отношения, не вещь</td>
+</tr>
+<tr class="even">
+<td>Объективная сторона</td>
+<td>что сделано: деяние, последствия, связь; способ, место, время</td>
+</tr>
+<tr class="odd">
+<td>Субъект</td>
+<td>кто: возраст, вменяемость</td>
+</tr>
+<tr class="even">
+<td>Субъективная сторона</td>
+<td>вина, мотив, цель</td>
+</tr>
+</tbody>
+</table></div>
+<p>Вина: <strong>прямой умысел</strong> — желал;
+<strong>косвенный</strong> — допускал, безразличен;
+<strong>легкомыслие</strong> — рассчитывал избежать;
+<strong>небрежность</strong> — не предвидел, хотя должен был.</p>
+<h2 data-h="7">Политология и социология</h2>
+<ul>
+<li>Формы правления: президентская (США), парламентская (Германия,
+Италия), смешанная (Россия, Франция); монархии — абсолютная,
+дуалистическая, парламентская.</li>
+<li>Режимы: демократия, авторитаризм, тоталитаризм. Легальность ≠
+легитимность.</li>
+<li>Господство по Веберу: традиционное, харизматическое,
+рационально-легальное.</li>
+<li>Избирательные системы: мажоритарная, пропорциональная, смешанная.
+Дума — смешанная, барьер 5 %.</li>
+<li>Артикуляция — выразить интересы; агрегирование — свести в
+программу.</li>
+<li>Мертон: конформизм, инновация, ритуализм, ретритизм, мятеж.</li>
+<li>Мобильность: вертикальная и горизонтальная; лифты — армия, церковь,
+школа, брак.</li>
+<li>Безработица: фрикционная, структурная, циклическая, сезонная.</li>
+</ul>
+<h2 data-h="8">Второй тур: схема ответа</h2>
+<ol type="1">
+<li>Позиция автора — своими словами: «автор считает, что…, потому
+что…».</li>
+<li>Аргументы — по номерам; каждый = тезис + объяснение.</li>
+<li>Примеры — конкретные: страна, год, закон, явление.</li>
+<li>Определение — род + видовые отличия.</li>
+<li>Проект: проблема → цель → целевая группа → меры → ресурсы →
+результат → риски.</li>
+</ol>
+</article>
 </main>
+
+<div class="quiz" id="quiz" hidden role="dialog" aria-modal="true" aria-label="Тест на запоминание">
+  <div class="q-head"><b id="q-title"></b><button type="button" id="q-close">Закрыть</button></div>
+  <div class="q-modes" id="q-modes" role="group" aria-label="Вид задания"></div>
+  <div class="q-body"><div class="q-in" id="q-in"></div></div>
+</div>
 
 <div class="rail" id="rail">
   <button type="button" id="rail-prev" aria-label="Предыдущая глава">▲</button>
@@ -9249,6 +9665,7 @@ e — <strong>обесценение рубля</strong>.</li>
 </div>
 
 <script>
+var OB = {};
 (function () {
   var chapters = [].slice.call(document.querySelectorAll(".chapter"));
   var tabs = [].slice.call(document.querySelectorAll(".tabs a"));
@@ -9322,6 +9739,7 @@ e — <strong>обесценение рубля</strong>.</li>
   }
   function paintRail(i) {
     cur = i;
+    if (OB.onHead) OB.onHead();
     ticks.forEach(function (t, n) { t.classList.toggle("on", n === i); });
     track.setAttribute("aria-valuenow", Math.max(1, i + 1));
     track.setAttribute("aria-valuetext", i >= 0 && heads[i] ? heads[i].textContent : "начало раздела");
@@ -9385,7 +9803,7 @@ e — <strong>обесценение рубля</strong>.</li>
       var head = null;
       [].forEach.call(ch.querySelectorAll("h2, h3, p, li, td, th"), function (el) {
         if (el.tagName === "H2") head = el;
-        if (el.closest(".nav") || el.closest(".toc") || el.closest(".find")) return;
+        if (ch.id === "home" || el.closest(".nav") || el.closest(".toc") || el.closest(".find") || el.closest(".quiz-go")) return;
         if (el.tagName === "LI" && el.querySelector("p, li")) return;
         var text = el.textContent.replace(/\s+/g, " ").trim();
         if (text.length < 2) return;
@@ -9449,6 +9867,261 @@ e — <strong>обесценение рубля</strong>.</li>
     flash(it.el);
   }
 
+  // ---- Тесты на запоминание ------------------------------------------------
+  // Пары «термин — определение» берутся из самого текста главы: выделенный
+  // термин с тире после него и строки таблиц. Руками вопросы не пишутся —
+  // поправили текст, поменялся и тест.
+  function cut(t, max) {
+    t = t.replace(/\s+/g, " ").trim().replace(/^[—–-]\s*/, "");
+    if (t.length > max) { var dot = t.search(/[.;](\s|$)/); if (dot > 20 && dot < max) t = t.slice(0, dot); }
+    if (t.length > max) t = t.slice(0, max - 1).replace(/[\s,;:]+\S*$/, "") + "…";
+    return t.replace(/[\s.;,:]+$/, "");
+  }
+  function pairsOf(nodes) {
+    var out = [], seen = {};
+    function add(term, def) {
+      term = term.replace(/\s+/g, " ").trim().replace(/[:.]$/, "");
+      def = cut(def, 190);
+      var k = norm(term);
+      if (term.length < 2 || term.length > 64 || def.length < 6 || seen[k]) return;
+      if (norm(def).indexOf(k) >= 0 && k.length > 5) def = def.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "…");
+      seen[k] = 1; out.push({ t: term, d: def });
+    }
+    nodes.forEach(function (root) {
+      if (root.nodeType !== 1) return;
+      var blocks = root.matches("p, li") ? [root] : [].slice.call(root.querySelectorAll("p, li"));
+      blocks.forEach(function (el) {
+        if (el.tagName === "LI" && el.querySelector("p, li")) return;
+        var kids = [].slice.call(el.childNodes);
+        kids.forEach(function (n, i) {
+          if (n.nodeType !== 1 || n.tagName !== "STRONG") return;
+          // «по **закону** — …»: выделенное слово после предлога — не термин.
+          var before = i > 0 ? kids[i - 1].textContent : "";
+          if (/(^|[\s(«])(по|в|во|на|к|с|со|от|для|при|из|о|об|у|за|и|или)\s+$/i.test(before)) return;
+          var rest = "";
+          for (var j = i + 1; j < kids.length; j++) {
+            var k = kids[j];
+            if (k.nodeType === 1 && k.tagName === "STRONG" && rest.length > 12 && /[.;]\s*$/.test(rest)) break;
+            rest += k.textContent;
+          }
+          var m = rest.match(/^\s*(\([^)]{0,80}\))?\s*[—–]\s+([\s\S]+)/);
+          if (m) add(n.textContent, m[2]);
+        });
+      });
+      [].forEach.call(root.matches("table") ? [root] : root.querySelectorAll("table"), function (table) {
+        // Таблицы-сравнения (два параллельных столбца, разбор суждений) в пары
+        // не годятся: строка в них — не «термин и его определение».
+        var heads = [].map.call(table.querySelectorAll("thead th"), function (th) { return th.textContent.trim(); });
+        if (!heads[0] || /^(Исключительное ведение|Ведение Совета|Верховный Суд|Сдвигает|Суждение|Схема|Признак|Глава|Что считаем|День)/.test(heads[0])) return;
+        if (/Что в деле|Осознавал/.test(heads.join(" "))) return;
+        [].forEach.call(table.querySelectorAll("tbody tr"), function (tr) {
+          var c = [].map.call(tr.children, function (td) { return td.textContent.trim(); });
+          if (c.length < 2 || !c[0] || !c[1]) return;
+          var term = heads[0] === "Статья" ? "Статья " + c[0] : c[0];
+          var def = c.length === 2 ? c[1] : c.slice(1).map(function (v, n) { return v ? (n ? heads[n + 1].toLowerCase() + ": " : "") + v : ""; }).filter(Boolean).join("; ");
+          add(term, def);
+        });
+      });
+    });
+    return out;
+  }
+  function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var x = a[i]; a[i] = a[j]; a[j] = x; } return a; }
+  function scores() { try { return JSON.parse(localStorage.getItem("olymp-quiz") || "{}"); } catch (e) { return {}; } }
+  function saveScore(id, mode, pct) {
+    var all = scores(); all[id] = all[id] || {};
+    all[id][mode] = Math.max(all[id][mode] || 0, pct);
+    try { localStorage.setItem("olymp-quiz", JSON.stringify(all)); } catch (e) {}
+    paintScores();
+  }
+  var quizSets = {};
+  function paintScores() {
+    var all = scores();
+    [].forEach.call(document.querySelectorAll(".quiz-go"), function (box) {
+      var sc = all[box.getAttribute("data-quiz")], mark = box.querySelector(".done");
+      var best = sc ? Math.max.apply(null, Object.keys(sc).map(function (k) { return sc[k]; })) : 0;
+      mark.textContent = best ? "лучший результат " + best + "%" : "";
+    });
+  }
+  function quizButton(id, title, pairs, label) {
+    quizSets[id] = { title: title, pairs: pairs };
+    var box = document.createElement("div");
+    box.className = "quiz-go"; box.setAttribute("data-quiz", id);
+    box.innerHTML = "<div><b>" + esc(label) + "</b><br><span>" + pairs.length + " " + (pairs.length % 10 === 1 && pairs.length % 100 !== 11 ? "термин" : pairs.length % 10 >= 2 && pairs.length % 10 <= 4 && (pairs.length % 100 < 12 || pairs.length % 100 > 14) ? "термина" : "терминов") +
+      ' · карточки, сопоставление, выбор, верно — неверно, вписать <span class="done"></span></span></div><button type="button">Проверить себя</button>';
+    box.querySelector("button").addEventListener("click", function () { openQuiz(id); });
+    return box;
+  }
+  chapters.forEach(function (ch) {
+    if (ch.id === "plan" || ch.id === "home" || ch.id === "cheat") return;
+    var hs = [].slice.call(ch.querySelectorAll("h2")), all = [], seenAll = {};
+    hs.forEach(function (h) {
+      var nodes = [], n = h.nextElementSibling;
+      while (n && n.tagName !== "H2" && !n.classList.contains("nav")) { nodes.push(n); n = n.nextElementSibling; }
+      var pairs = pairsOf(nodes);
+      pairs.forEach(function (p) { var k = norm(p.t); if (!seenAll[k]) { seenAll[k] = 1; all.push(p); } });
+      if (pairs.length >= 3 && nodes.length) {
+        var last = nodes[nodes.length - 1];
+        last.parentNode.insertBefore(quizButton(h.id, h.textContent, pairs, "Тест по главе"), last.nextSibling);
+      }
+    });
+    if (all.length >= 6) {
+      var nav = ch.querySelector(".nav");
+      nav.parentNode.insertBefore(quizButton(ch.id + "-all", ch.querySelector("h1").textContent + ": весь раздел", all, "Тест по всему разделу"), nav);
+    }
+  });
+  paintScores();
+
+  var quiz = document.getElementById("quiz"), qIn = document.getElementById("q-in"), qModes = document.getElementById("q-modes");
+  var MODES = [["cards", "Карточки"], ["match", "Сопоставление"], ["choice", "Выбор"], ["tf", "Верно — неверно"], ["write", "Вписать"]];
+  var Q = null;
+  function openQuiz(id) {
+    Q = { id: id, set: quizSets[id], mode: "cards" };
+    document.getElementById("q-title").textContent = Q.set.title;
+    quiz.hidden = false; document.body.style.overflow = "hidden";
+    startMode("cards");
+  }
+  function closeQuiz() { quiz.hidden = true; document.body.style.overflow = ""; Q = null; }
+  document.getElementById("q-close").addEventListener("click", closeQuiz);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && Q) closeQuiz(); });
+  function startMode(mode) {
+    Q.mode = mode;
+    qModes.innerHTML = MODES.map(function (m) { return '<button type="button" data-mode="' + m[0] + '" aria-pressed="' + (m[0] === mode) + '">' + m[1] + "</button>"; }).join("");
+    qModes.querySelector('[aria-pressed="true"]').scrollIntoView({ block: "nearest", inline: "center" });
+    var pool = shuffle(Q.set.pairs);
+    Q.items = mode === "cards" || mode === "match" ? pool : pool.slice(0, 20);
+    Q.i = 0; Q.right = 0; Q.miss = []; Q.total = Q.items.length;
+    if (mode === "match") { Q.round = 0; Q.errors = 0; }
+    render();
+  }
+  qModes.addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) startMode(b.getAttribute("data-mode")); });
+  function progress() {
+    var done = Q.mode === "match" ? Math.min(Q.total, Q.round * 5) : Q.i;
+    return '<div class="q-prog"><span>' + Math.min(done + (Q.mode === "match" ? 0 : 1), Q.total) + " из " + Q.total + "</span><span>" + (Q.mode === "match" ? "ошибок: " + Q.errors : Q.mode === "cards" ? "" : "верно: " + Q.right) + '</span></div><div class="q-bar"><i style="width:' + Math.round((done / Q.total) * 100) + '%"></i></div>';
+  }
+  function others(item, n, key) {
+    var pool = shuffle(Q.set.pairs.filter(function (p) { return p !== item && norm(p[key]) !== norm(item[key]); }));
+    return pool.slice(0, n);
+  }
+  function finish() {
+    var pct = Q.mode === "match" ? Math.max(0, Math.round((Q.total / (Q.total + Q.errors)) * 100)) : Math.round((Q.right / Q.total) * 100);
+    if (Q.mode !== "cards" && !quizSets[Q.id].temp) saveScore(Q.id, Q.mode, pct);
+    if (OB.onQuizEnd) OB.onQuizEnd(Q.id);
+    qIn.innerHTML = '<div class="q-end"><div class="n">' + (Q.mode === "cards" ? "Готово" : pct + "%") + "</div><div>" +
+      (Q.mode === "cards" ? "Все карточки пройдены." : Q.mode === "match" ? "Все пары собраны, ошибок: " + Q.errors + "." : "Верно " + Q.right + " из " + Q.total + ".") + "</div>" +
+      (Q.miss.length ? '<ul class="q-miss">' + Q.miss.map(function (p) { return "<li><b>" + esc(p.t) + "</b> — " + esc(p.d) + "</li>"; }).join("") + "</ul>" : "") +
+      '<div class="q-row" style="width:100%"><button type="button" class="q-btn" data-act="again">Ещё раз</button>' +
+      (Q.miss.length ? '<button type="button" class="q-btn ghost" data-act="miss">Только ошибки</button>' : "") +
+      '<button type="button" class="q-btn ghost" data-act="close">К учебнику</button></div></div>';
+  }
+  function render() {
+    if (Q.mode === "match") return renderMatch();
+    if (Q.i >= Q.items.length) return finish();
+    var it = Q.items[Q.i], html = progress();
+    if (Q.mode === "cards") {
+      html += '<button type="button" class="q-card" data-act="flip"><span class="t">' + esc(it.t) + '</span><small>нажми, чтобы увидеть определение</small></button>' +
+        '<div class="q-row"><button type="button" class="q-btn ghost" data-act="later">Ещё повторить</button><button type="button" class="q-btn" data-act="know">Знаю</button></div>';
+    } else if (Q.mode === "choice") {
+      var opts = shuffle([it].concat(others(it, 3, "t")));
+      html += '<div class="q-ask"><small>Что это?</small>' + esc(it.d) + '</div><div class="q-opts">' +
+        opts.map(function (o) { return '<button type="button" class="q-opt" data-act="pick" data-ok="' + (o === it ? 1 : 0) + '">' + esc(o.t) + "</button>"; }).join("") + "</div>";
+    } else if (Q.mode === "tf") {
+      var fake = Math.random() < 0.5 ? others(it, 1, "d")[0] : null;
+      Q.truth = !fake;
+      html += '<div class="q-ask"><small>Верно ли?</small><b>' + esc(it.t) + "</b> — " + esc((fake || it).d) + '</div><div class="q-row"><button type="button" class="q-btn ghost" data-act="tf" data-v="1">Верно</button><button type="button" class="q-btn ghost" data-act="tf" data-v="0">Неверно</button></div>';
+    } else {
+      html += '<div class="q-ask"><small>Впиши термин</small>' + esc(it.d) + '</div><input class="q-input" id="q-answer" autocomplete="off" autocapitalize="off" aria-label="Термин"><div class="q-row"><button type="button" class="q-btn ghost" data-act="show">Не помню</button><button type="button" class="q-btn" data-act="check">Проверить</button></div>';
+    }
+    qIn.innerHTML = html;
+    var inp = document.getElementById("q-answer");
+    if (inp) { inp.focus(); inp.addEventListener("keydown", function (e) { if (e.key === "Enter") act("check"); }); }
+  }
+  function answered(ok, it, note) {
+    if (ok) Q.right++; else Q.miss.push(it);
+    if (OB.onAnswer) OB.onAnswer(it, ok);
+    var box = document.createElement("div");
+    box.innerHTML = (note ? '<div class="q-note">' + note + "</div>" : "") + '<button type="button" class="q-btn" data-act="next" style="width:100%;margin-top:10px">Дальше</button>';
+    qIn.appendChild(box);
+    [].forEach.call(qIn.querySelectorAll('[data-act="pick"],[data-act="tf"],[data-act="check"],[data-act="show"]'), function (b) { b.disabled = true; });
+    box.querySelector("button").focus();
+  }
+  function close(a, b) {
+    if (a === b) return true;
+    if (b.length < 6 || Math.abs(a.length - b.length) > 2) return false;
+    var prev = [], i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      var row = [i];
+      for (j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = row;
+    }
+    return prev[b.length] <= 2;
+  }
+  function plain(t) { return norm(t).replace(/\([^)]*\)/g, "").replace(/[^a-zа-я0-9 ]/g, " ").replace(/\s+/g, " ").trim(); }
+  function act(name, el) {
+    var it = Q.items[Q.i];
+    if (name === "flip") { el.innerHTML = '<span class="d">' + esc(it.d) + "</span><small>" + esc(it.t) + "</small>"; el.setAttribute("data-act", "unflip"); }
+    else if (name === "unflip") { el.innerHTML = '<span class="t">' + esc(it.t) + "</span><small>нажми, чтобы увидеть определение</small>"; el.setAttribute("data-act", "flip"); }
+    else if (name === "know") { Q.i++; render(); }
+    else if (name === "later") { Q.items.push(it); Q.i++; Q.total = Q.items.length; render(); }
+    else if (name === "pick") {
+      var ok = el.getAttribute("data-ok") === "1";
+      el.classList.add(ok ? "ok" : "bad");
+      if (!ok) qIn.querySelector('[data-ok="1"]').classList.add("ok");
+      answered(ok, it);
+    } else if (name === "tf") {
+      var right = (el.getAttribute("data-v") === "1") === Q.truth;
+      el.classList.add(right ? "ok" : "bad");
+      answered(right, it, (right ? "Да. " : "Нет. ") + "<b>" + esc(it.t) + "</b> — " + esc(it.d));
+    } else if (name === "check" || name === "show") {
+      var typed = name === "check" ? plain(document.getElementById("q-answer").value) : "";
+      if (name === "check" && !typed) return;
+      var good = !!typed && close(typed, plain(it.t));
+      answered(good, it, (good ? "Верно: " : "Правильно: ") + "<b>" + esc(it.t) + "</b>");
+    } else if (name === "next") { Q.i++; render(); }
+    else if (name === "again") startMode(Q.mode);
+    else if (name === "miss") { var m = Q.miss; Q.items = shuffle(m); Q.i = 0; Q.right = 0; Q.miss = []; Q.total = Q.items.length; Q.round = 0; Q.errors = 0; render(); }
+    else if (name === "close") closeQuiz();
+    else if (name === "tile") tile(el);
+  }
+  qIn.addEventListener("click", function (e) { var b = e.target.closest("[data-act]"); if (b && !b.disabled) act(b.getAttribute("data-act"), b); });
+  // Сопоставление: по пять пар за раз, слева термины, справа определения.
+  function renderMatch() {
+    var part = Q.items.slice(Q.round * 5, Q.round * 5 + 5), used = {};
+    part = part.filter(function (p) { var k = norm(p.d); if (used[k]) return false; used[k] = 1; return true; });
+    if (!part.length) return finish();
+    Q.left = part.length; Q.sel = null;
+    var defs = shuffle(part);
+    qIn.innerHTML = progress() + '<div class="q-match"><div class="q-col">' +
+      part.map(function (p, i) { return '<button type="button" class="q-tile" data-act="tile" data-side="t" data-k="' + i + '">' + esc(p.t) + "</button>"; }).join("") + '</div><div class="q-col">' +
+      defs.map(function (p) { return '<button type="button" class="q-tile" data-act="tile" data-side="d" data-k="' + part.indexOf(p) + '">' + esc(p.d) + "</button>"; }).join("") + "</div></div>";
+    Q.part = part;
+  }
+  function tile(el) {
+    if (el.classList.contains("gone")) return;
+    var prev = Q.sel;
+    if (!prev || prev.getAttribute("data-side") === el.getAttribute("data-side")) {
+      if (prev) prev.classList.remove("sel");
+      Q.sel = prev === el ? null : el;
+      if (Q.sel) el.classList.add("sel");
+      return;
+    }
+    prev.classList.remove("sel"); Q.sel = null;
+    if (prev.getAttribute("data-k") === el.getAttribute("data-k")) {
+      [prev, el].forEach(function (x) { x.classList.add("ok"); x.disabled = true; });
+      setTimeout(function () { [prev, el].forEach(function (x) { x.classList.add("gone"); }); }, 350);
+      Q.left--;
+      if (!Q.left) setTimeout(function () { if (Q) { Q.round++; render(); } }, 500);
+    } else {
+      Q.errors++;
+      var item = Q.part[Number((prev.getAttribute("data-side") === "t" ? prev : el).getAttribute("data-k"))];
+      if (Q.miss.indexOf(item) < 0) Q.miss.push(item);
+      if (OB.onAnswer) OB.onAnswer(item, false);
+      [prev, el].forEach(function (x) { x.classList.add("bad"); });
+      setTimeout(function () { [prev, el].forEach(function (x) { x.classList.remove("bad"); }); }, 500);
+      var pr = qIn.querySelector(".q-prog span:last-child"); if (pr) pr.textContent = "ошибок: " + Q.errors;
+    }
+  }
+
   function remember(id) { try { localStorage.setItem("olymp-chapter", id); } catch (e) {} }
   function recall() { try { return localStorage.getItem("olymp-chapter"); } catch (e) { return null; } }
 
@@ -9471,11 +10144,456 @@ e — <strong>обесценение рубля</strong>.</li>
     else if (target) target.scrollIntoView();
     else window.scrollTo(0, 0);
     paintRail(headOnScreen());
+    if (OB.onShow) OB.onShow(chapterId);
   }
+  // Что нужно инструментам подготовки (extras.js): общие функции и состояние.
+  OB.chapters = chapters; OB.ids = ids; OB.norm = norm; OB.esc = esc; OB.shuffle = shuffle; OB.flash = flash;
+  OB.scores = scores; OB.quizSets = quizSets; OB.openQuiz = openQuiz;
+  OB.where = function () { return { section: ids[section], head: cur >= 0 && heads[cur] ? heads[cur].id : "" }; };
+  // Стрелки по краям ленты разделов.
+  var strip = document.querySelector(".tabs"), tPrev = document.getElementById("tabs-prev"), tNext = document.getElementById("tabs-next");
+  function arrows() { tPrev.disabled = strip.scrollLeft <= 2; tNext.disabled = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 2; }
+  tPrev.addEventListener("click", function () { strip.scrollBy({ left: -strip.clientWidth * 0.7 }); });
+  tNext.addEventListener("click", function () { strip.scrollBy({ left: strip.clientWidth * 0.7 }); });
+  strip.addEventListener("scroll", arrows); window.addEventListener("resize", arrows);
   window.addEventListener("hashchange", show);
   show();
+  arrows(); setTimeout(arrows, 400);
 })();
 </script>
+<script>window.OLYMP_DATA = {"plan": {"book": "society-mun-2026", "event": "Муниципальный этап ВсОШ, обществознание", "eventDate": "2026-11-19", "days": [{"date": "2026-11-10", "hours": 1.5, "items": [{"text": "Прочитать «Формат и типы заданий»", "go": "format"}, {"text": "Тренажёр: муниципальный этап Москвы 2025/26, 10 класс — как диагностика"}]}, {"date": "2026-11-11", "hours": 2, "items": [{"text": "Право: теория права, правонарушения и ответственность", "go": "law-1"}, {"text": "Теория права: состав правонарушения и разбор дела", "go": "theory-1"}, {"text": "Конституция: основы строя, права и обязанности", "go": "constitution-2"}, {"text": "Тренировка: разбор судебного дела", "tool": "cases"}]}, {"date": "2026-11-12", "hours": 2, "items": [{"text": "Конституция: Президент, Федеральное Собрание, Правительство, суды", "go": "constitution-5"}, {"text": "Право: гражданское право — дееспособность, сделки, потребители", "go": "law-2"}, {"text": "Тест по разделу «Конституция»", "quiz": "constitution-all"}]}, {"date": "2026-11-13", "hours": 2, "items": [{"text": "Экономика: спрос и предложение, издержки, рынки", "go": "economics-3"}, {"text": "Экономика+: излишки, налоги, эластичность, монополия", "go": "econdeep-5"}, {"text": "Тренировка: экономические задачи с новыми числами", "tool": "econ"}]}, {"date": "2026-11-14", "hours": 4, "items": [{"text": "Экономика: ВВП, инфляция, деньги, бюджет, финансовая грамотность", "go": "economics-6"}, {"text": "Экономика+: кругооборот, валютный курс, совокупный спрос", "go": "econdeep-13"}, {"text": "Политология: власть, государство, режимы", "go": "politics"}, {"text": "Тренировка: экономические задачи", "tool": "econ"}]}, {"date": "2026-11-15", "hours": 4, "items": [{"text": "Политология: выборы, партии, идеологии", "go": "politics-4"}, {"text": "Социология", "go": "sociology"}, {"text": "Пробный первый тур на 40 минут (раздел «Тренажёр» → ВсОШ)"}, {"text": "Пробный второй тур на 60 минут", "tool": "tour2"}]}, {"date": "2026-11-16", "hours": 2, "items": [{"text": "Человек и общество", "go": "society"}, {"text": "Духовная культура", "go": "culture"}, {"text": "Право: цифровые права, права ученика", "go": "law-7"}]}, {"date": "2026-11-17", "hours": 2, "items": [{"text": "Логика и работа с данными", "go": "logic"}, {"text": "Право: трудовое, семейное, уголовное", "go": "law-3"}, {"text": "Пробный первый тур на 40 минут — другой вариант"}, {"text": "Блиц «Верно — неверно»", "tool": "blitz"}]}, {"date": "2026-11-18", "hours": 1.5, "items": [{"text": "Шпаргалка: формулы, числа, полномочия", "go": "cheat"}, {"text": "Повторить термины, в которых ошибался", "tool": "repeat"}, {"text": "Лечь спать вовремя"}]}, {"date": "2026-11-19", "hours": 0, "items": [{"text": "Олимпиада. С утра — только шпаргалка", "go": "cheat"}]}]}, "yesno": [{"t": "Пассажиры вагона № 5 поезда «Москва – Казань» не могут обладать какими-либо признаками социальной группы.", "ok": false, "src": "Муниципальный этап, 9 класс, 2025/26"}, {"t": "Изменение в структуре потребностей человека, всё более заинтересованного в свободном времени и нематериальных благах, характерно только для постиндустриального общества.", "ok": false, "src": "Муниципальный этап, 9 класс, 2025/26"}, {"t": "Фьючерс – это производная ценная бумага, удостоверяющая право купить или продать в будущем определённые ценные бумаги по заранее определённой цене.", "ok": false, "src": "Муниципальный этап, 9 класс, 2025/26"}, {"t": "Любое правонарушение, независимо от реальных последствий его совершения, характеризуется определённой степенью общественной опасности.", "ok": true, "src": "Муниципальный этап, 9 класс, 2025/26"}, {"t": "Эмиссия облигаций осуществляется государством для снижения уровня инфляции в стране и привлечения инвестиций в экономику страны.", "ok": true, "src": "Муниципальный этап, 9 класс, 2025/26"}, {"t": "Цивилизационный подход к типологизации общества позволяет объяснить различия в менталитете, образе жизни.", "ok": true, "src": "Муниципальный этап, 10 класс, 2025/26"}, {"t": "Классовая структура общества в отличие от других стратификационных типологий подразумевает различный уровень политического доступа и несовпадающий набор социально-экономических прав и привилегий для представителей различных классов.", "ok": false, "src": "Муниципальный этап, 10 класс, 2025/26"}, {"t": "Проведение денежно-кредитной политики сторонники монетаризма рассматривают как основной инструмент регулирования экономики.", "ok": true, "src": "Муниципальный этап, 10 класс, 2025/26"}, {"t": "Политическое участие недоступно гражданам до достижения совершеннолетия.", "ok": false, "src": "Муниципальный этап, 10 класс, 2025/26"}, {"t": "В Российской Федерации право на личную и семейную тайну не подлежит ограничению даже в условиях введения чрезвычайного положения.", "ok": true, "src": "Муниципальный этап, 10 класс, 2025/26"}, {"t": "Внесение поправок в некоторые главы Конституции Российской Федерации может быть осуществлено посредством принятия федерального конституционного закона.", "ok": true, "src": "Муниципальный этап, 11 класс, 2025/26"}, {"t": "Одним из примеров ингруппового фаворитизма можно считать непотизм.", "ok": true, "src": "Муниципальный этап, 11 класс, 2025/26"}, {"t": "Показатель долговой нагрузки населения рассчитывается как отношение общего объёма заёмных средств физических лиц к ВВП страны.", "ok": false, "src": "Муниципальный этап, 11 класс, 2025/26"}, {"t": "Агрегирование интересов как функция политической системы подразумевает артикуляцию основных требований и запросов общества к политическим структурам.", "ok": false, "src": "Муниципальный этап, 11 класс, 2025/26"}, {"t": "Социальное развитие всегда характеризуется поступательностью, прогрессивностью, последовательным и однонаправленным развитием подсистем общества.", "ok": false, "src": "Муниципальный этап, 11 класс, 2025/26"}, {"t": "Обязательные работы являются видом и уголовного, и административного наказания.", "ok": true, "src": "Школьный этап, 9 класс, 2024/25"}, {"t": "В основе художественного познания окружающего мира – познание с помощью органов чувств.", "ok": true, "src": "Школьный этап, 9 класс, 2024/25"}, {"t": "Существование в обществе противоположных этнонационалистических, классовых, идеологических установок способствует интеграции общества.", "ok": false, "src": "Школьный этап, 9 класс, 2024/25"}, {"t": "Церковь является каналом социальной мобильности.", "ok": true, "src": "Школьный этап, 9 класс, 2024/25"}, {"t": "Научно-технические революции обязательно приводят к смене господствующего политического устройства.", "ok": false, "src": "Школьный этап, 9 класс, 2024/25"}, {"t": "Основной чертой неотомизма является принятие двух источников познания окружающего мира: науки и религии.", "ok": true, "src": "Школьный этап, 11 класс, 2024/25"}, {"t": "Благодаря производным авторским правам суд удовлетворит иск переводчика произведений Дж. Роулинг о Гарри Поттере к компании, использовавшей в своей продукции имена героев произведения.", "ok": false, "src": "Школьный этап, 11 класс, 2024/25"}, {"t": "Органы государственной власти Российской Федерации обладают законодательным правом объявлять религиозные праздники нерабочими днями по просьбе представителей религиозных организаций.", "ok": true, "src": "Школьный этап, 11 класс, 2024/25"}, {"t": "В процессе структурных сдвигов социальной структуры общества происходят изменения в распределении престижности профессий.", "ok": true, "src": "Школьный этап, 11 класс, 2024/25"}, {"t": "Диверсифицированный портфель предполагает исключительно наличие акций нескольких разных компаний.", "ok": false, "src": "Школьный этап, 11 класс, 2024/25"}, {"t": "Гарантированная Конституцией Российской Федерации свобода завещания ограничивается нормами гражданского права об обязательной доле в наследстве.", "ok": false, "src": "Муниципальный этап, 10 класс, 2024/25"}, {"t": "Многовариантность процесса общественного развития отражается в существовании различных типов цивилизаций.", "ok": true, "src": "Муниципальный этап, 10 класс, 2024/25"}, {"t": "Одним из последствий проведения политики меркантилизма является положительное торговое сальдо.", "ok": true, "src": "Муниципальный этап, 10 класс, 2024/25"}, {"t": "Социальный статус – интегральный показатель общественного положения личности или социальной группы, охватывающий профессию, должность, материальное положение, партийную принадлежность, национальность, религиозность, возраст, семейное положение, родственные связи.", "ok": true, "src": "Муниципальный этап, 10 класс, 2024/25"}, {"t": "Формирование политических взглядов и усвоение образцов политического поведения начинается после достижения совершеннолетия.", "ok": false, "src": "Муниципальный этап, 10 класс, 2024/25"}, {"t": "Социальный институт – это фактически культурно санкционированный способ выполнения определённого вида деятельности или совокупности определённого вида деятельностей.", "ok": true, "src": "Муниципальный этап, 11 класс, 2024/25"}, {"t": "Нормы российского гражданского права не могут противоречить Конституции Российской Федерации и ратифицированным Россией международным правовым актам.", "ok": true, "src": "Муниципальный этап, 11 класс, 2024/25"}, {"t": "Производные ценные бумаги позволяют инвестору использовать спекулятивную торговую стратегию.", "ok": true, "src": "Муниципальный этап, 11 класс, 2024/25"}, {"t": "Политическое лидерство Л. И. Брежнева относится к харизматическому типу.", "ok": false, "src": "Муниципальный этап, 11 класс, 2024/25"}, {"t": "У общества как системы отмечается невозможность появления свойств, не присущих составляющим её элементам.", "ok": false, "src": "Муниципальный этап, 11 класс, 2024/25"}, {"t": "Согласно закону спроса, при росте цены кривая спроса сдвигается влево.", "ok": false, "src": "Школьный этап, 9 класс, 2023/24"}, {"t": "По общему правилу судебное ограничение дееспособности человека распространяется и на деликтоспособность.", "ok": false, "src": "Школьный этап, 9 класс, 2023/24"}, {"t": "Для европейского феодального общества характерна пирамидальная стратификационная модель.", "ok": true, "src": "Школьный этап, 9 класс, 2023/24"}, {"t": "Создание национальных государств относится к периоду Средневековья.", "ok": false, "src": "Школьный этап, 9 класс, 2023/24"}, {"t": "Основной механизм режимной трансформации в человеческой истории – это демократическая революция.", "ok": false, "src": "Школьный этап, 9 класс, 2023/24"}, {"t": "На протяжении большей части экономической истории понятия «экономический рост» не существовало.", "ok": true, "src": "Школьный этап, 10 класс, 2023/24"}, {"t": "В Российской Федерации установление федеральных налоговых льгот зависит от гражданства налогоплательщика и места происхождения капитала.", "ok": false, "src": "Школьный этап, 10 класс, 2023/24"}, {"t": "Социологи относят людей, попавших в другую этническую среду, к категории этномаргиналов.", "ok": true, "src": "Школьный этап, 10 класс, 2023/24"}, {"t": "В отличие от федераций, в унитарных государствах существование автономных территориальных образований недопустимо.", "ok": false, "src": "Школьный этап, 10 класс, 2023/24"}, {"t": "Процесс десоциализации может носить как негативный, так и позитивный характер.", "ok": true, "src": "Школьный этап, 10 класс, 2023/24"}, {"t": "В условиях гиперинфляции затраты на производство партии товара не покрываются полученной выручкой и производители начинают переходить к бартеру.", "ok": true, "src": "Школьный этап, 11 класс, 2023/24"}, {"t": "Первые идеи общеевропейской интеграции появились в период создания Европейского экономического сообщества.", "ok": false, "src": "Школьный этап, 11 класс, 2023/24"}, {"t": "Колхоз является формой юридического лица, поименованной в Гражданском кодексе Российской Федерации.", "ok": false, "src": "Школьный этап, 11 класс, 2023/24"}, {"t": "Важное преимущество интервью как метода социологического анализа заключается в минимальных временны́х затратах в расчёте на одного респондента.", "ok": false, "src": "Школьный этап, 11 класс, 2023/24"}, {"t": "Деятельность движения суфражисток является примером проявления гражданского общества.", "ok": true, "src": "Школьный этап, 11 класс, 2023/24"}], "cases": [{"title": "Кошелёк в торговом центре", "text": "Семнадцатилетний Р. в торговом центре, убедившись, что за ним никто не наблюдает, вытащил из сумки гражданки Н. кошелёк с 7 000 рублей и потратил деньги на свои нужды. На учёте у психиатра Р. не состоит.", "steps": [{"q": "Объект правонарушения", "options": ["Кошелёк и деньги", "Отношения собственности", "Гражданка Н.", "Общественный порядок"], "ok": 1, "why": "Объект — охраняемые законом отношения, здесь отношения собственности. Кошелёк и деньги — предмет, гражданка Н. — потерпевшая."}, {"q": "Объективная сторона", "options": ["Тайное изъятие чужого имущества, причинившее ущерб", "Желание обогатиться", "Возраст 17 лет и вменяемость", "Открытое хищение с применением насилия"], "ok": 0, "why": "Объективная сторона — деяние, последствия и связь между ними; важен способ — тайно. Желание — это субъективная сторона, возраст — признак субъекта."}, {"q": "Субъект", "options": ["Р. не субъект: ему нет 18 лет", "Физическое лицо, вменяемое, 17 лет — ответственность за кражу с 14 лет", "Родители Р.", "Специальный субъект — должностное лицо"], "ok": 1, "why": "Общий возраст уголовной ответственности — 16 лет, за кражу — 14. Р. вменяем и достиг возраста."}, {"q": "Субъективная сторона", "options": ["Небрежность", "Легкомыслие", "Прямой умысел, корыстный мотив", "Косвенный умысел"], "ok": 2, "why": "«Убедившись, что никто не наблюдает» — осознавал и желал. Мотив корыстный, цель — обратить имущество в свою пользу."}, {"q": "Вид правонарушения и ответственности", "options": ["Грабёж, уголовная", "Кража, уголовная", "Мелкое хищение, административная", "Гражданский деликт, возмещение вреда"], "ok": 1, "why": "Тайное хищение — кража (статья 158 УК). Мелким хищением (административным) было бы хищение до 2 500 рублей."}]}, {"title": "Залитая квартира", "text": "Собственник квартиры К. уехал в отпуск, оставив включённой стиральную машину. Шланг лопнул, вода залила квартиру соседей снизу; ремонт обошёлся им в 120 000 рублей. К. говорит, что не хотел никому вредить.", "steps": [{"q": "Какая это отрасль права?", "options": ["Уголовное", "Административное", "Гражданское", "Жилищное — ответственность не наступает"], "ok": 2, "why": "Причинён имущественный вред частному лицу — это гражданско-правовой деликт (статья 1064 ГК)."}, {"q": "Объект", "options": ["Стиральная машина", "Право собственности соседей (их имущественные интересы)", "Общественная безопасность", "Сам К."], "ok": 1, "why": "Пострадало имущество соседей — отношения собственности."}, {"q": "Форма вины К.", "options": ["Прямой умысел", "Косвенный умысел", "Неосторожность (небрежность)", "Вины нет — это случай"], "ok": 2, "why": "Не предвидел последствий, хотя должен был и мог: оставил работающую технику без присмотра. В гражданском праве вина причинителя вреда предполагается."}, {"q": "Кто должен доказывать отсутствие вины?", "options": ["Соседи", "Сам К.", "Управляющая компания", "Никто — суд установит сам"], "ok": 1, "why": "Действует презумпция вины причинителя вреда: он освобождается от возмещения, если докажет, что вред причинён не по его вине."}, {"q": "Последствие для К.", "options": ["Штраф в доход государства", "Возмещение убытков соседям", "Обязательные работы", "Выговор"], "ok": 1, "why": "Гражданско-правовая ответственность — восстановить положение потерпевшего: возместить убытки, а если есть основания — и моральный вред."}]}, {"title": "Проезд на красный", "text": "Водитель такси М., 30 лет, торопясь к клиенту, проехал перекрёсток на красный сигнал светофора. Пострадавших нет.", "steps": [{"q": "Вид правонарушения", "options": ["Преступление", "Административное правонарушение", "Дисциплинарный проступок", "Правонарушения нет: никто не пострадал"], "ok": 1, "why": "Нарушение правил дорожного движения без тяжких последствий — административное правонарушение (КоАП). Состав формальный: последствия не нужны."}, {"q": "Объект", "options": ["Светофор", "Клиент такси", "Безопасность дорожного движения", "Автомобиль"], "ok": 2, "why": "Объект — общественные отношения в области дорожного движения."}, {"q": "Субъект", "options": ["Юридическое лицо — таксопарк", "Водитель транспортного средства (специальный субъект)", "Любой пешеход", "Клиент"], "ok": 1, "why": "Нарушить это правило может только водитель — специальный субъект. Возраст административной ответственности — 16 лет."}, {"q": "Субъективная сторона", "options": ["Умысел: видел сигнал и поехал", "Небрежность", "Невиновное причинение", "Легкомыслие"], "ok": 0, "why": "М. осознавал, что нарушает запрет, и хотел проехать. Мотив — спешка."}, {"q": "Почему отсутствие пострадавших не освобождает от ответственности?", "options": ["Потому что состав формальный — правонарушение окончено самим деянием", "Потому что М. — таксист", "Освобождает", "Потому что был мотив"], "ok": 0, "why": "В формальных составах наступление последствий не требуется."}]}, {"title": "Мяч в окно", "text": "Тринадцатилетний Саша, играя во дворе в футбол, сильно ударил по мячу в сторону жилого дома, хотя ребята предупреждали, что можно попасть в окно. Саша ответил: «Не попаду, я точно бью». Мяч разбил окно квартиры на первом этаже; замена стоила 9 000 рублей.", "steps": [{"q": "Форма вины Саши", "options": ["Прямой умысел", "Косвенный умысел", "Легкомыслие", "Небрежность"], "ok": 2, "why": "Предвидел возможность последствий, но самонадеянно рассчитывал их избежать — это легкомыслие. При небрежности человек последствий не предвидит вовсе."}, {"q": "Кто возместит вред?", "options": ["Саша из своих карманных денег", "Родители Саши", "Никто: Саше нет 14 лет", "Управляющая компания"], "ok": 1, "why": "За вред, причинённый малолетним (до 14 лет), отвечают родители, если не докажут, что вред возник не по их вине."}, {"q": "Может ли Саша быть привлечён к административной ответственности?", "options": ["Да, с 12 лет", "Да, с 14 лет", "Нет, она наступает с 16 лет", "Да, если ущерб больше 5 000 рублей"], "ok": 2, "why": "Административная ответственность — с 16 лет."}, {"q": "Объект правонарушения", "options": ["Мяч", "Окно", "Отношения собственности владельца квартиры", "Правила игры в футбол"], "ok": 2, "why": "Окно — предмет, объект — отношения собственности."}, {"q": "Изменился бы ответ о возмещении, будь Саше 15 лет?", "options": ["Нет, всё равно только родители", "Да: отвечал бы сам, а при нехватке средств — родители дополнительно", "Да: никто бы не отвечал", "Да: отвечала бы школа"], "ok": 1, "why": "С 14 до 18 лет подросток отвечает за вред сам; если у него нет дохода или имущества, недостающее возмещают родители (субсидиарно)."}]}, {"title": "Опоздания на работу", "text": "Шестнадцатилетний Игорь работает курьером по трудовому договору. За неделю он трижды опоздал на смену на час без уважительных причин. Директор объявил ему выговор и удержал из зарплаты «штраф» 2 000 рублей.", "steps": [{"q": "Вид проступка Игоря", "options": ["Административный", "Дисциплинарный", "Гражданско-правовой", "Уголовный"], "ok": 1, "why": "Нарушение трудовой дисциплины — дисциплинарный проступок, ответственность по Трудовому кодексу."}, {"q": "Законен ли выговор?", "options": ["Да: выговор — предусмотренное взыскание", "Нет: несовершеннолетних наказывать нельзя", "Нет: сначала нужно три замечания", "Да, но только с согласия родителей"], "ok": 0, "why": "Дисциплинарные взыскания — замечание, выговор, увольнение. Перед взысканием работодатель должен запросить письменное объяснение."}, {"q": "Законен ли «штраф»?", "options": ["Да, если он есть в приказе", "Да, но не больше 20 % зарплаты", "Нет: Трудовой кодекс такого взыскания не предусматривает", "Да, для курьеров"], "ok": 2, "why": "Штраф как дисциплинарное взыскание не предусмотрен; удерживать его из зарплаты работодатель не вправе."}, {"q": "Субъект проступка", "options": ["Работник, состоящий в трудовых отношениях", "Любой гражданин", "Работодатель", "Родители Игоря"], "ok": 0, "why": "Дисциплинарную ответственность несёт только работник — специальный субъект."}, {"q": "Что может сделать Игорь со «штрафом»?", "options": ["Ничего", "Обратиться в трудовую инспекцию или суд", "Только уволиться", "Пожаловаться в полицию как на кражу"], "ok": 1, "why": "Трудовые права защищают государственная инспекция труда, суд, профсоюз, комиссия по трудовым спорам."}]}], "tour2": [{"title": "Неравенство (образец из рекомендаций комиссии)", "text": ["Неравенство — наиболее фундаментальная и труднопреодолимая проблема всех развитых и большинства развивающихся стран. Экономисты используют интегральные показатели неравенства: децильное соотношение, показывающее, во сколько раз 10 % наиболее состоятельных людей богаче 10 % самых бедных, или коэффициент Джини, варьирующийся от нуля до единицы.", "Неудачи социальной политики во всём мире показывают, что существенные прямые экономические вливания часто не способны поправить положение маргинализованных групп. Проблемы, в основе которых лежит распределение благ, не решаются простым их перераспределением.", "Подлинная сила неравенства кроется в том, что оно вторгается в человеческую природу и искажает её, создаёт непроницаемые границы внутри обществ, затрудняющие не только социальную мобильность, но и солидарное понимание базовых истин морали и рациональности. Неравенство — проблема, приведённая к жизни экономическими силами, но в части своих глубинных оснований и наиболее важных эффектов имеющая неэкономическую природу.", "Люди живут дольше или короче в зависимости от страны, экономического положения, но особенно от уровня образования. Различие пролегает в самом способе ведения жизни и её восприятии. Количественные различия, о которых говорят экономисты, переходят в качественный разрыв между большими социальными группами."], "questions": [{"q": "В чём, по мнению автора, кроется подлинная сила неравенства?", "need": "Своими словами с опорой на текст: вторгается в природу человека, создаёт непреодолимые границы между группами, мешает мобильности и общему пониманию морали."}, {"q": "Почему автор считает, что неравенство имеет неэкономическую природу? Приведите не менее двух аргументов.", "need": "Два пронумерованных аргумента: перераспределение денег не решает проблему; различия в образе жизни, ценностях, достоинстве и признании; влияние на идентичность."}, {"q": "Сформулируйте не менее трёх положений против позиции автора и подкрепите их примерами.", "need": "Три контраргумента по разным основаниям, каждый с конкретным примером: экономический рост и выход из бедности, социальные лифты и мобильность, функционализм Дэвиса — Мура, роль образования и политики."}, {"q": "Приведите не менее двух аргументов в поддержку мысли о переходе количественных различий в качественный разрыв.", "need": "Два аргумента: разница в продолжительности жизни, доступ к образованию и медицине, воспроизводство бедности, замкнутые круги общения."}, {"q": "Дайте определение понятия «маргинализированные группы».", "need": "Род + отличия: социальные группы, вытесненные на периферию общества, утратившие прежний статус, ограниченные в доступе к ресурсам и участии."}]}, {"title": "Цифровой след подростка", "text": ["Школьник оставляет в сети гораздо больше сведений о себе, чем ему кажется. Фотографии, геометки, списки друзей, покупки, поисковые запросы складываются в «цифровой след» — совокупность данных, по которым человека можно узнать и предсказать его поведение.", "Компании используют эти данные, чтобы точнее показывать рекламу и удерживать внимание. Для пользователя сервис выглядит бесплатным, но платой становятся его данные и время. Экономисты называют это экономикой внимания: дефицитным ресурсом оказываются не товары, а минуты человека.", "Закон требует получать согласие на обработку персональных данных, но согласие часто даётся одним нажатием, без чтения условий. Утечки баз данных делают эти сведения доступными мошенникам, которые звонят от имени банка или родственников. Подростки рискуют особенно: у них меньше опыта и выше доверие к знакомым по переписке.", "Сторонники жёсткого регулирования предлагают ограничить сбор данных о несовершеннолетних и доступ детей к социальным сетям. Противники отвечают, что запреты легко обойти, а главное средство защиты — цифровая грамотность самого человека."], "questions": [{"q": "Что такое «цифровой след»? Дайте определение своими словами и приведите два примера.", "need": "Определение (род + отличия) и два конкретных примера: геометка на фото, история покупок, поисковые запросы."}, {"q": "Почему «бесплатный» сервис, по мысли автора, не бесплатен? Объясните с помощью понятий экономики.", "need": "Плата данными и временем; экономика внимания; альтернативная стоимость времени; двусторонний рынок (пользователи и рекламодатели)."}, {"q": "Какие права в отношении своих персональных данных есть у человека по российскому закону? Назовите не менее трёх.", "need": "Три права: давать и отзывать согласие, знать, кто и зачем обрабатывает, требовать уточнения, блокирования, удаления, обжаловать в Роскомнадзоре или суде."}, {"q": "Приведите по два аргумента за и против ограничения доступа подростков к социальным сетям.", "need": "По два пронумерованных аргумента на каждую сторону, с примерами: защита от мошенничества и зависимости — против: обход запретов, право на информацию и общение, роль в учёбе."}, {"q": "Предложите проект для своей школы, который снизит риски, описанные в тексте.", "need": "По схеме: проблема, цель, целевая группа, 3–4 меры, ресурсы, ожидаемый результат, риски."}]}]};</script>
+<script>
+// Инструменты подготовки поверх учебника: вкладка «Старт» (план на сегодня,
+// повторение, тренировки, карта знаний, отметки) и сами тренировки — блиц,
+// разбор дела, экономические задачи, второй тур. Всё состояние — в localStorage.
+(function () {
+  var D = window.OLYMP_DATA, esc = OB.esc, norm = OB.norm, shuffle = OB.shuffle;
+  function get(k, def) { try { return JSON.parse(localStorage.getItem(k) || "null") || def; } catch (e) { return def; } }
+  function set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function dayKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function plusDays(n) { var d = new Date(); d.setDate(d.getDate() + n); return dayKey(d); }
+  var TODAY = dayKey(new Date());
+  function ruDate(key) { var p = key.split("-"); return Number(p[2]) + " " + ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"][Number(p[1]) - 1]; }
+  function word(n, a, b, c) { var t = n % 100, l = n % 10; return t > 10 && t < 15 ? c : l === 1 ? a : l >= 2 && l <= 4 ? b : c; }
+  function num(x) { return String(Math.round(x * 100) / 100).replace(".", ","); }
 
+  // ---- окно инструмента ---------------------------------------------------
+  var tool = document.createElement("div");
+  tool.className = "quiz"; tool.id = "tool"; tool.hidden = true;
+  tool.setAttribute("role", "dialog"); tool.setAttribute("aria-modal", "true");
+  tool.innerHTML = '<div class="q-head"><b id="tool-title"></b><button type="button" id="tool-close">Закрыть</button></div><div class="q-body"><div class="q-in" id="tool-in"></div></div>';
+  document.body.appendChild(tool);
+  var tin = tool.querySelector("#tool-in"), onToolClose = null, timers = [];
+  function sheet(title) {
+    timers.forEach(clearInterval); timers = [];
+    tool.querySelector("#tool-title").textContent = title;
+    tool.hidden = false; document.body.style.overflow = "hidden"; tin.innerHTML = ""; tool.querySelector(".q-body").scrollTop = 0;
+    return tin;
+  }
+  function closeTool() { timers.forEach(clearInterval); timers = []; tool.hidden = true; tin.innerHTML = ""; document.body.style.overflow = ""; if (onToolClose) onToolClose(); onToolClose = null; renderHome(); }
+  tool.querySelector("#tool-close").addEventListener("click", closeTool);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !tool.hidden) closeTool(); });
+  var handlers = {};
+  tin.addEventListener("click", function (e) { var b = e.target.closest("[data-do]"); if (b && !b.disabled && handlers[b.getAttribute("data-do")]) handlers[b.getAttribute("data-do")](b); });
+
+  // ---- повторение по забыванию -------------------------------------------
+  // Ошибся в термине — он возвращается завтра, потом через 3 и 7 дней.
+  var GAPS = [1, 3, 7];
+  OB.onAnswer = function (it, ok) {
+    var srs = get("olymp-srs", {}), k = norm(it.t), c = srs[k];
+    if (!ok) srs[k] = { t: it.t, d: it.d, step: 0, due: plusDays(1) };
+    else if (c && c.due <= TODAY) { c.step += 1; if (c.step >= GAPS.length) delete srs[k]; else c.due = plusDays(GAPS[c.step]); }
+    else return;
+    set("olymp-srs", srs);
+  };
+  OB.onQuizEnd = function () { renderHome(); };
+  function dueCards() { var srs = get("olymp-srs", {}); return Object.keys(srs).map(function (k) { return srs[k]; }); }
+  function openRepeat() {
+    var due = dueCards().filter(function (c) { return c.due <= TODAY; });
+    if (!due.length) return;
+    OB.quizSets.repeat = { title: "Повторение", pairs: due.map(function (c) { return { t: c.t, d: c.d }; }), temp: true };
+    OB.openQuiz("repeat");
+  }
+
+  // ---- что прочитано -----------------------------------------------------
+  OB.onHead = function () {
+    var w = OB.where(); if (!w.head) return;
+    var seen = get("olymp-seen", {}); if (seen[w.head]) return;
+    seen[w.head] = 1; set("olymp-seen", seen);
+  };
+
+  // ---- отметки абзацев ---------------------------------------------------
+  var markBtn = document.getElementById("mark-mode"), marking = false, blocks = null;
+  function hashOf(t) { var h = 0; for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+  function keyOf(el) { return el.closest(".chapter").id + ":" + hashOf(norm(el.textContent).replace(/\s+/g, " ").trim().slice(0, 90)); }
+  function markable(el) { return el && !el.closest("#home") && !el.closest(".quiz-go, .toc, .nav, table, .find") && !(el.tagName === "LI" && el.querySelector("p, li")); }
+  function allBlocks() {
+    if (blocks) return blocks;
+    blocks = {};
+    [].forEach.call(document.querySelectorAll(".chapter p, .chapter li"), function (el) { if (markable(el)) blocks[keyOf(el)] = el; });
+    return blocks;
+  }
+  function paintMarks() {
+    var marks = get("olymp-marks", {}), all = allBlocks();
+    Object.keys(all).forEach(function (k) { all[k].classList.remove("mk-learn", "mk-ask"); if (marks[k]) all[k].classList.add(marks[k].kind === "ask" ? "mk-ask" : "mk-learn"); });
+  }
+  markBtn.addEventListener("click", function () {
+    marking = !marking;
+    markBtn.setAttribute("aria-pressed", marking ? "true" : "false");
+    markBtn.textContent = marking ? "Готово" : "Отметить";
+    document.body.classList.toggle("marking", marking);
+    if (marking && OB.where().section === "home") location.hash = "format";
+  });
+  document.querySelector("main").addEventListener("click", function (e) {
+    if (!marking || e.target.closest("a, button, input, summary, textarea")) return;
+    var el = e.target.closest("p, li");
+    if (!markable(el)) return;
+    var marks = get("olymp-marks", {}), k = keyOf(el), m = marks[k];
+    var head = null, n = el; while (n && !head) { n = n.previousElementSibling || n.parentElement; if (n && n.tagName === "H2") head = n; if (n && n.classList && n.classList.contains("chapter")) break; }
+    if (!m) marks[k] = { kind: "learn", note: "", text: el.textContent.replace(/\s+/g, " ").trim().slice(0, 160), ch: el.closest(".chapter").id, head: head ? head.textContent : "" };
+    else if (m.kind === "learn") m.kind = "ask";
+    else delete marks[k];
+    set("olymp-marks", marks); paintMarks();
+  });
+
+  // ---- «Старт» -----------------------------------------------------------
+  var home = document.getElementById("home-body");
+  function planDay() {
+    var days = D.plan.days, i;
+    for (i = 0; i < days.length; i++) if (days[i].date === TODAY) return days[i];
+    return TODAY < days[0].date ? days[0] : null;
+  }
+  function itemButton(it) {
+    if (it.go) return '<button type="button" class="h-go" data-go="' + it.go + '">Открыть</button>';
+    if (it.quiz) return '<button type="button" class="h-go" data-quiz-id="' + it.quiz + '">Тест</button>';
+    if (it.tool) return '<button type="button" class="h-go" data-tool="' + it.tool + '">Начать</button>';
+    return "";
+  }
+  function planItems(day, done) {
+    return day.items.map(function (it, i) {
+      var k = day.date + ":" + i, id = "plan-" + k.replace(/[^0-9]/g, "");
+      return '<li class="' + (done[k] ? "off" : "") + '"><input type="checkbox" id="' + id + '" data-plan="' + k + '"' + (done[k] ? " checked" : "") + '><label for="' + id + '">' + esc(it.text) + "</label>" + itemButton(it) + "</li>";
+    }).join("");
+  }
+  function renderHome() {
+    var done = get("olymp-plan-done", {}), day = planDay(), html = "";
+    var left = Math.round((new Date(D.plan.eventDate + "T00:00:00") - new Date(TODAY + "T00:00:00")) / 86400000);
+    html += "<!--HERO-->";
+
+    // План на сегодня и то, что не закрыто с прошлых дней.
+    if (day) {
+      var closed = day.items.filter(function (_, i) { return done[day.date + ":" + i]; }).length;
+      html += '<div class="h-card dark" id="plan-card"><div class="h-title"><span>' + (day.date === TODAY ? "Сегодня по плану" : "План на " + ruDate(day.date)) + '</span><span class="h-sub">' + closed + " из " + day.items.length + (day.hours ? " · около " + num(day.hours) + " ч" : "") + '</span></div><ul class="h-plan">' + planItems(day, done) + "</ul></div>";
+    }
+    var late = [];
+    D.plan.days.forEach(function (d) { if (d.date < TODAY) d.items.forEach(function (it, i) { if (!done[d.date + ":" + i]) late.push({ d: d, i: i, it: it }); }); });
+    if (late.length) {
+      html += '<div class="h-card"><div class="h-title"><span>Перенесено с прошлых дней</span><span class="h-sub">' + late.length + '</span></div><ul class="h-plan">' + late.map(function (x) {
+        var k = x.d.date + ":" + x.i, id = "plan-" + k.replace(/[^0-9]/g, "");
+        return '<li><input type="checkbox" id="' + id + '" data-plan="' + k + '"><label for="' + id + '">' + esc(x.it.text) + ' <span class="h-sub">· ' + ruDate(x.d.date) + "</span></label>" + itemButton(x.it) + "</li>";
+      }).join("") + "</ul></div>";
+    }
+
+    // Повторение.
+    var cards = dueCards(), due = cards.filter(function (c) { return c.due <= TODAY; }).length;
+    html += '<div class="h-card"><div class="h-title"><span>Повторение</span><span class="h-sub">в колоде ' + cards.length + "</span></div>" +
+      '<p class="h-sub" style="margin:6px 0 10px">' + (due ? "Сегодня пора повторить " + due + " " + word(due, "термин", "термина", "терминов") + ", в которых ты ошибался." : cards.length ? "На сегодня повторять нечего. Ошибки из тестов вернутся сюда завтра, потом через 3 и 7 дней." : "Сюда попадают термины, в которых ты ошибся в тестах: они возвращаются завтра, потом через 3 и 7 дней.") + "</p>" +
+      (due ? '<button type="button" class="q-btn" data-tool="repeat">Повторить сегодня</button>' : "") + "</div>";
+
+    // Тренировки.
+    var blitz = get("olymp-blitz", 0), cs = get("olymp-cases", {}), ec = get("olymp-econ", 0);
+    html += '<div class="h-tools">' +
+      '<button type="button" class="h-tool" data-tool="blitz"><b>Блиц «Верно — неверно»</b><span>60 секунд, суждения с подвохом из олимпиад' + (blitz ? " · рекорд " + blitz : "") + "</span></button>" +
+      '<button type="button" class="h-tool" data-tool="cases"><b>Разбор дела</b><span>объект, стороны, субъект, вина — по шагам · пройдено ' + Object.keys(cs).length + " из " + D.cases.length + "</span></button>" +
+      '<button type="button" class="h-tool" data-tool="econ"><b>Экономические задачи</b><span>каждый раз новые числа, решение по шагам' + (ec ? " · решено " + ec : "") + "</span></button>" +
+      '<button type="button" class="h-tool" data-tool="tour2"><b>Второй тур</b><span>текст и вопросы на 60 минут, затем самопроверка</span></button>' +
+      '<a class="h-tool" href="#cheat"><b>Шпаргалка на утро</b><span>формулы, числа, полномочия на одной странице</span></a>' +
+      '<div class="h-tool" style="cursor:default"><b>Пробный первый тур</b><span>40 минут с обратным отсчётом — в приложении: «Тренажёр» → ВсОШ</span></div>' +
+      "</div>";
+
+    // Дорога знаний: станция на раздел, точки — главы, в конце — олимпиада.
+    var seen = get("olymp-seen", {}), sc = OB.scores(), good = 0, total = 0, st = [], nowSet = false;
+    OB.chapters.forEach(function (ch) {
+      if (ch.id === "home" || ch.id === "plan" || ch.id === "cheat") return;
+      var g = 0, touched = 0, hs = ch.querySelectorAll("h2");
+      var dots = [].map.call(hs, function (h) {
+        var s = sc[h.id], best = s ? Math.max.apply(null, Object.keys(s).map(function (k) { return s[k]; })) : 0;
+        var cls = best >= 80 ? "good" : best > 0 ? "mid" : seen[h.id] ? "seen" : "";
+        total++; if (best >= 80) { good++; g++; } if (cls) touched++;
+        return '<a href="#' + h.id + '" class="' + cls + '" title="' + esc(h.textContent) + (best ? " — тест " + best + "%" : "") + '" aria-label="' + esc(h.textContent) + '"></a>';
+      }).join("");
+      var done = hs.length > 0 && g === hs.length, now = !done && !nowSet;
+      if (now) nowSet = true;
+      st.push({ id: ch.id, name: document.querySelector('.tabs a[data-tab="' + ch.id + '"]').textContent, dots: dots, g: g, n: hs.length, cls: done ? "done" : now ? "now" : touched ? "part" : "", done: done, now: now });
+    });
+    var ROW = 112, TOP = 46, H = TOP + st.length * ROW + 40, xs = st.map(function (_, i) { return i % 2 ? 84 : 16; }).concat([50]);
+    var segs = "", lanes = "";
+    xs.forEach(function (x, i) {
+      if (!i) return;
+      var y0 = TOP + (i - 1) * ROW, y1 = TOP + i * ROW, d = "M" + xs[i - 1] + " " + y0 + " C" + xs[i - 1] + " " + (y0 + ROW * 0.62) + " " + x + " " + (y1 - ROW * 0.62) + " " + x + " " + y1;
+      segs += '<path d="' + d + '" fill="none" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-width="16" stroke="' + (st[i - 1].done ? "var(--green)" : "var(--line)") + '"/>';
+      lanes += '<path d="' + d + '" fill="none" vector-effect="non-scaling-stroke" stroke-width="2" stroke-dasharray="7 9" stroke="var(--panel)"/>';
+    });
+    var road = '<svg viewBox="0 0 100 ' + H + '" preserveAspectRatio="none" aria-hidden="true">' + segs + lanes + "</svg>" + st.map(function (s, i) {
+      return '<div class="rd-st ' + (i % 2 ? "r " : "") + s.cls + '" style="top:' + (TOP + i * ROW) + 'px"><a class="rd-node" href="#' + s.id + '" aria-label="' + esc(s.name) + '">' + (s.now ? '<span class="rd-here">ты здесь</span>' : "") + (s.done ? "✓" : i + 1) + '</a><div class="rd-lab"><a href="#' + s.id + '">' + esc(s.name) + "</a><small>" + s.g + " из " + s.n + " " + word(s.n, "главы", "глав", "глав") + ' на зелёном</small><span class="rd-dots">' + s.dots + "</span></div></div>";
+    }).join("") + '<div class="rd-st fin" style="top:' + (TOP + st.length * ROW) + 'px"><div class="rd-fin">Олимпиада<small>' + ruDate(D.plan.eventDate) + "</small></div></div>";
+    var pct = total ? Math.round(good / total * 100) : 0;
+    html = html.replace("<!--HERO-->", '<div class="hero"><div class="hero-n">' + (left > 0 ? left : left === 0 ? "★" : "✓") + '</div><div class="hero-t"><b>' + (left > 0 ? word(left, "день", "дня", "дней") + " до олимпиады" : left === 0 ? "Олимпиада сегодня. Удачи!" : "Муниципальный этап позади") + "</b><span>" + (left >= 0 ? ruDate(D.plan.eventDate) + " · " : "учебник остаётся для повторения · ") + "пройдено " + pct + ' % дороги</span><div class="hero-bar"><i style="width:' + pct + '%"></i></div></div></div>');
+    html += '<div class="h-card"><div class="h-title"><span>Дорога знаний</span><span class="h-sub">' + good + " из " + total + ' глав на зелёном</span></div><p class="h-sub" style="margin:6px 0 0">Станция — раздел, точки — главы. Глава зеленеет, когда тест по ней сдан на 80 % и выше; станция — когда зелёные все её главы.</p><div class="map" style="height:' + H + 'px">' + road +
+      '</div><div class="legend"><span><i style="background:var(--line)"></i>не открывал</span><span><i style="background:var(--barMute)"></i>читал</span><span><i style="background:var(--accent)"></i>тест ниже 80 %</span><span><i style="background:var(--green)"></i>тест от 80 %</span></div></div>';
+
+    // Отметки.
+    var marks = get("olymp-marks", {}), keys = Object.keys(marks);
+    html += '<div class="h-card"><div class="h-title"><span>Мои отметки</span><span class="h-sub">' + keys.length + "</span></div>" +
+      (keys.length ? '<ul class="mk-list">' + keys.map(function (k) {
+        var m = marks[k], tab = document.querySelector('.tabs a[data-tab="' + m.ch + '"]');
+        return '<li class="' + (m.kind === "ask" ? "mk-ask" : "mk-learn") + '"><small>' + (m.kind === "ask" ? "Не понял" : "Выучить") + " · " + esc(tab ? tab.textContent : "") + (m.head ? " › " + esc(m.head) : "") + "</small>" + esc(m.text) +
+          '<div class="row"><input data-note="' + k + '" value="' + esc(m.note || "") + '" placeholder="Своя заметка" aria-label="Заметка к отметке"><button type="button" class="h-go" data-mark-go="' + k + '">Открыть</button><button type="button" class="h-go" data-mark-del="' + k + '">Убрать</button></div></li>';
+      }).join("") + "</ul>" : '<p class="h-sub" style="margin:6px 0 0">Нажми «Отметить» в шапке и касайся абзацев: первое касание — «выучить», второе — «не понял», третье снимает отметку. Всё отмеченное собирается здесь.</p>') + "</div>";
+    home.innerHTML = html;
+  }
+  home.addEventListener("change", function (e) {
+    var k = e.target.getAttribute("data-plan"), n = e.target.getAttribute("data-note");
+    if (k) { var done = get("olymp-plan-done", {}); if (e.target.checked) done[k] = 1; else delete done[k]; set("olymp-plan-done", done); renderHome(); }
+    if (n) { var marks = get("olymp-marks", {}); if (marks[n]) { marks[n].note = e.target.value; set("olymp-marks", marks); } }
+  });
+  var TOOLS = { repeat: openRepeat, blitz: openBlitz, cases: openCases, econ: openEcon, tour2: openTour2 };
+  home.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-go], [data-quiz-id], [data-tool], [data-mark-go], [data-mark-del]");
+    if (!b) return;
+    if (b.hasAttribute("data-go")) location.hash = b.getAttribute("data-go");
+    else if (b.hasAttribute("data-quiz-id")) { if (OB.quizSets[b.getAttribute("data-quiz-id")]) OB.openQuiz(b.getAttribute("data-quiz-id")); }
+    else if (b.hasAttribute("data-tool")) TOOLS[b.getAttribute("data-tool")]();
+    else if (b.hasAttribute("data-mark-del")) { var marks = get("olymp-marks", {}); delete marks[b.getAttribute("data-mark-del")]; set("olymp-marks", marks); paintMarks(); renderHome(); }
+    else {
+      var k = b.getAttribute("data-mark-go"), el = allBlocks()[k];
+      if (!el) return;
+      var ch = el.closest(".chapter");
+      if (ch.hidden) { OB.pendingEl = el; location.hash = ch.id; } else { el.scrollIntoView({ block: "center" }); OB.flash(el); }
+    }
+  });
+  OB.onShow = function (id) {
+    if (id === "home") renderHome();
+    if (OB.pendingEl) { var el = OB.pendingEl; OB.pendingEl = null; setTimeout(function () { el.scrollIntoView({ block: "center" }); OB.flash(el); }, 30); }
+  };
+
+  // ---- блиц ----------------------------------------------------------------
+  function openBlitz() {
+    var body = sheet("Блиц «Верно — неверно»"), best = get("olymp-blitz", 0), S;
+    function start() {
+      S = { items: shuffle(D.yesno), i: 0, right: 0, streak: 0, top: 0, miss: [], left: 60 };
+      timers.push(setInterval(function () { S.left -= 1; var t = document.getElementById("bz-left"); if (t) t.textContent = S.left; if (S.left <= 0) end(); }, 1000));
+      ask();
+    }
+    function ask() {
+      if (S.i >= S.items.length) return end();
+      body.innerHTML = '<div class="q-timer"><span>Осталось <b id="bz-left">' + S.left + "</b> с</span><span>верно " + S.right + " · серия " + S.streak + '</span></div><div class="q-big">' + esc(S.items[S.i].t) +
+        '</div><div class="q-row"><button type="button" class="q-btn ghost" data-do="bz" data-v="1">Верно</button><button type="button" class="q-btn ghost" data-do="bz" data-v="0">Неверно</button></div>';
+    }
+    function end() {
+      timers.forEach(clearInterval); timers = [];
+      if (S.right > best) { best = S.right; set("olymp-blitz", best); }
+      body.innerHTML = '<div class="q-end"><div class="n">' + S.right + '</div><div>верных ответов за минуту · лучшая серия ' + S.top + " · рекорд " + best + "</div>" +
+        (S.miss.length ? '<ul class="q-miss">' + S.miss.map(function (m) { return "<li>" + esc(m.t) + " — <b>" + (m.ok ? "верно" : "неверно") + '</b> <span class="h-sub">(' + esc(m.src) + ")</span></li>"; }).join("") + "</ul>" : "") +
+        '<div class="q-row" style="width:100%"><button type="button" class="q-btn" data-do="bz-start">Ещё раз</button><button type="button" class="q-btn ghost" data-do="close">К учебнику</button></div></div>';
+    }
+    handlers.bz = function (b) {
+      var it = S.items[S.i], ok = (b.getAttribute("data-v") === "1") === it.ok;
+      if (ok) { S.right++; S.streak++; S.top = Math.max(S.top, S.streak); } else { S.streak = 0; S.miss.push(it); }
+      S.i++; ask();
+    };
+    handlers["bz-start"] = start; handlers.close = closeTool;
+    body.innerHTML = '<div class="q-end"><div class="n">60 с</div><div>Суждения из школьных и муниципальных этапов ВсОШ. Отвечай быстро: верно или неверно. Ошибки покажу в конце.' + (best ? " Рекорд — " + best + "." : "") +
+      '</div><button type="button" class="q-btn" data-do="bz-start">Начать</button></div>';
+  }
+
+  // ---- разбор дела ---------------------------------------------------------
+  function openCases() {
+    var body = sheet("Разбор дела"), C, step, right;
+    function list() {
+      var cs = get("olymp-cases", {});
+      body.innerHTML = '<p class="h-sub" style="margin:0">Короткое дело — и по шагам: объект, объективная сторона, субъект, вина, вид ответственности. Теория — в разделе «Теория права», первая глава.</p><div class="q-opts">' +
+        D.cases.map(function (c, i) { return '<button type="button" class="q-opt" data-do="case" data-i="' + i + '"><b>' + esc(c.title) + "</b>" + (cs[i] !== undefined ? ' <span class="h-sub">· ' + cs[i] + " из " + c.steps.length + "</span>" : "") + "</button>"; }).join("") + "</div>";
+    }
+    function show() {
+      var s = C.steps[step];
+      body.innerHTML = '<div class="q-prog"><span>Шаг ' + (step + 1) + " из " + C.steps.length + "</span><span>верно: " + right + '</span></div><div class="q-ask"><small>Дело</small>' + esc(C.text) + '</div><div class="q-ask"><small>Вопрос</small><b>' + esc(s.q) + '</b></div><div class="q-opts">' +
+        s.options.map(function (o, i) { return '<button type="button" class="q-opt" data-do="case-pick" data-i="' + i + '">' + esc(o) + "</button>"; }).join("") + "</div>";
+    }
+    handlers.case = function (b) { C = D.cases[Number(b.getAttribute("data-i"))]; C.i = Number(b.getAttribute("data-i")); step = 0; right = 0; show(); };
+    handlers["case-pick"] = function (b) {
+      var s = C.steps[step], ok = Number(b.getAttribute("data-i")) === s.ok;
+      if (ok) right++;
+      [].forEach.call(body.querySelectorAll('[data-do="case-pick"]'), function (x, i) { x.disabled = true; if (i === s.ok) x.classList.add("ok"); });
+      if (!ok) b.classList.add("bad");
+      var box = document.createElement("div");
+      box.innerHTML = '<div class="q-note">' + esc(s.why) + '</div><button type="button" class="q-btn" data-do="case-next" style="width:100%;margin-top:10px">' + (step === C.steps.length - 1 ? "К итогу" : "Дальше") + "</button>";
+      body.appendChild(box); box.querySelector("button").focus();
+    };
+    handlers["case-next"] = function () {
+      step++;
+      if (step < C.steps.length) return show();
+      var cs = get("olymp-cases", {}); cs[C.i] = Math.max(cs[C.i] || 0, right); set("olymp-cases", cs);
+      body.innerHTML = '<div class="q-end"><div class="n">' + right + " из " + C.steps.length + '</div><div>«' + esc(C.title) + '» разобрано.</div><div class="q-row" style="width:100%"><button type="button" class="q-btn" data-do="case-list">Другое дело</button><button type="button" class="q-btn ghost" data-do="close">К учебнику</button></div></div>';
+    };
+    handlers["case-list"] = list; handlers.close = closeTool;
+    list();
+  }
+
+  // ---- экономические задачи с новыми числами -------------------------------
+  function ri(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+  function pick(a) { return a[ri(0, a.length - 1)]; }
+  function k(x) { return x === 1 ? "" : x; }
+  var ECON = [
+    { name: "Равновесная цена", make: function () {
+      var P = ri(4, 30), b = ri(1, 5), c = ri(1, 5), Q = ri(10, 80), a = Q + b * P, d = c * P - Q;
+      if (d <= 0) { c += Math.ceil((Q + 1) / P); d = c * P - Q; }
+      return { text: "Спрос на товар: Qd = " + a + " − " + k(b) + "P, предложение: Qs = " + k(c) + "P − " + d + ". Найдите равновесную цену.", answer: P,
+        steps: ["В равновесии Qd = Qs: " + a + " − " + k(b) + "P = " + k(c) + "P − " + d + ".", (a + d) + " = " + (b + c) + "P, откуда P = " + P + ".", "Проверка: Q = " + a + " − " + b + " × " + P + " = " + Q + "."] };
+    } },
+    { name: "Дефицит при потолке цены", make: function () {
+      var P = ri(10, 30), b = ri(1, 4), c = ri(2, 5), Q = ri(20, 80), a = Q + b * P, d = c * P - Q;
+      if (d <= 0) { c += Math.ceil((Q + 1) / P); d = c * P - Q; }
+      var p = P - ri(2, 6), qd = a - b * p, qs = c * p - d;
+      if (qs < 0) return this.make();
+      return { text: "Спрос: Qd = " + a + " − " + k(b) + "P, предложение: Qs = " + k(c) + "P − " + d + ". Государство установило максимальную цену " + p + ". Каков размер дефицита?", answer: qd - qs,
+        steps: ["При цене " + p + ": Qd = " + a + " − " + b + " × " + p + " = " + qd + ".", "Qs = " + c + " × " + p + " − " + d + " = " + qs + ".", "Дефицит = Qd − Qs = " + (qd - qs) + ". Цена ниже равновесной (" + P + "), поэтому товара не хватает."] };
+    } },
+    { name: "Налог на продавца", make: function () {
+      var b = ri(1, 4), c = ri(1, 4), t = (b + c) * ri(1, 3), P = ri(10, 30), Q = ri(30, 90), a = Q + b * P, d = c * P - Q;
+      if (d <= 0) { c += Math.ceil((Q + 1) / P); d = c * P - Q; t = (b + c) * ri(1, 3); }
+      var p2 = (a + d + c * t) / (b + c);
+      return { text: "Спрос: Qd = " + a + " − " + k(b) + "P, предложение: Qs = " + k(c) + "P − " + d + ". Введён налог " + t + " с каждой единицы, платят продавцы. Какую цену теперь платит покупатель?", answer: p2,
+        steps: ["Продавцу остаётся P − " + t + ", поэтому Qs = " + c + "(P − " + t + ") − " + d + " = " + c + "P − " + (c * t + d) + ".", a + " − " + k(b) + "P = " + c + "P − " + (c * t + d) + " → P = " + num(p2) + ".", "До налога цена была " + P + ": покупатель платит на " + num(p2 - P) + " больше, продавец получает на " + num(t - (p2 - P)) + " меньше."] };
+    } },
+    { name: "Уровень безработицы", make: function () {
+      var E = ri(40, 90) * 10, U = ri(3, 12) * 5, out = ri(10, 40) * 10, r = U / (E + U) * 100;
+      return { text: "В стране " + E + " тыс. занятых, " + U + " тыс. безработных и " + out + " тыс. человек вне рабочей силы (студенты-очники, пенсионеры). Найдите уровень безработицы в процентах. Ответ округлите до десятых.", answer: Math.round(r * 10) / 10, tol: 0.06, unit: "%",
+        steps: ["Рабочая сила = занятые + безработные = " + (E + U) + " тыс.", "Уровень безработицы = " + U + " : " + (E + U) + " × 100 % = " + num(Math.round(r * 10) / 10) + " %.", "Те, кто вне рабочей силы, в расчёт не входят."] };
+    } },
+    { name: "Дефицит бюджета в % ВВП", make: function () {
+      var inc = ri(60, 120) * 10, exp = inc + ri(4, 20) * 10, gdp = pick([2000, 2500, 4000, 5000, 8000]);
+      return { text: "Доходы бюджета — " + inc + " млрд, расходы — " + exp + " млрд, ВВП — " + gdp + " млрд. Сколько процентов ВВП составляет дефицит бюджета?", answer: (exp - inc) / gdp * 100, tol: 0.01, unit: "%",
+        steps: ["Дефицит = расходы − доходы = " + (exp - inc) + " млрд.", "В процентах ВВП: " + (exp - inc) + " : " + gdp + " × 100 % = " + num((exp - inc) / gdp * 100) + " %."] };
+    } },
+    { name: "Скорость обращения денег", make: function () {
+      var V = ri(3, 10), M = ri(2, 9) * 100, P = pick([2, 4, 5, 10]), Q = M * V / P;
+      return { text: "Денежная масса — " + M + ", уровень цен — " + P + ", реальный выпуск — " + Q + ". Найдите скорость обращения денег.", answer: V,
+        steps: ["Уравнение обмена: M × V = P × Q.", "V = P × Q : M = " + P + " × " + Q + " : " + M + " = " + V + "."] };
+    } },
+    { name: "Темп инфляции", make: function () {
+      var i0 = pick([100, 120, 125, 150, 200]), g = pick([5, 8, 10, 12, 20, 25]), i1 = i0 * (1 + g / 100);
+      return { text: "Индекс цен в прошлом году — " + i0 + ", в этом — " + num(i1) + ". Каков темп инфляции в процентах?", answer: g, unit: "%",
+        steps: ["Темп инфляции = (I₁ − I₀) : I₀ × 100 %.", "(" + num(i1) + " − " + i0 + ") : " + i0 + " × 100 % = " + g + " %."] };
+    } },
+    { name: "Реальный ВВП", make: function () {
+      var g = pick([10, 20, 25, 50]), real = ri(8, 40) * 100, nom = real * (1 + g / 100);
+      return { text: "Номинальный ВВП — " + num(nom) + ". Цены по сравнению с базовым годом выросли на " + g + " %. Найдите реальный ВВП.", answer: real,
+        steps: ["Индекс цен = 1 + " + g + " % = " + num(1 + g / 100) + ".", "Реальный ВВП = номинальный : индекс цен = " + num(nom) + " : " + num(1 + g / 100) + " = " + real + "."] };
+    } },
+    { name: "Сложные проценты", make: function () {
+      var P = ri(1, 9) * 100, r = pick([5, 10, 20]), n = pick([2, 3]), S = P * Math.pow(1 + r / 100, n);
+      return { text: "Вклад " + P + " тыс. рублей положили под " + r + " % годовых на " + n + " года с ежегодной капитализацией. Сколько тысяч рублей будет на вкладе в конце? Ответ округлите до сотых.", answer: Math.round(S * 100) / 100, tol: 0.006,
+        steps: ["Сложные проценты: S = P × (1 + r)ⁿ.", P + " × " + num(1 + r / 100) + "^" + n + " = " + num(S) + " тыс.", "При простых процентах было бы " + num(P * (1 + r / 100 * n)) + " тыс."] };
+    } },
+    { name: "Экономическая прибыль", make: function () {
+      var rev = ri(15, 40) * 100, exp = ri(5, 12) * 100, wage = ri(4, 9) * 100, cap = ri(5, 20) * 100, r = pick([5, 10, 20]), imp = wage + cap * r / 100;
+      return { text: "Предприниматель ушёл с работы с зарплатой " + wage + " тыс. в год и вложил в дело " + cap + " тыс. своих денег, которые могли бы лежать в банке под " + r + " %. Выручка за год — " + rev + " тыс., явные расходы — " + exp + " тыс. Найдите экономическую прибыль в тыс. рублей.", answer: rev - exp - imp,
+        steps: ["Бухгалтерская прибыль = " + rev + " − " + exp + " = " + (rev - exp) + " тыс.", "Неявные издержки: упущенная зарплата " + wage + " + упущенный процент " + cap + " × " + r + " % = " + num(cap * r / 100) + " → всего " + num(imp) + " тыс.", "Экономическая прибыль = " + (rev - exp) + " − " + num(imp) + " = " + num(rev - exp - imp) + " тыс."] };
+    } },
+    { name: "НДФЛ по прогрессивной шкале", make: function () {
+      var inc = pick([2600, 2800, 3000, 3400, 3600, 4000, 4400, 5000]), tax = 2400 * 0.13 + (inc - 2400) * 0.15;
+      return { text: "Годовой доход работника — " + inc + " тыс. рублей. Ставка НДФЛ: 13 % с дохода до 2 400 тыс. и 15 % с части от 2 400 до 5 000 тыс. Сколько тысяч рублей налога он заплатит?", answer: tax,
+        steps: ["С первых 2 400 тыс.: 2 400 × 13 % = 312 тыс.", "С превышения " + (inc - 2400) + " тыс.: × 15 % = " + num((inc - 2400) * 0.15) + " тыс.", "Всего " + num(tax) + " тыс. Повышенная ставка действует только на превышение."] };
+    } },
+    { name: "Точка безубыточности", make: function () {
+      var avc = ri(2, 12) * 10, m = ri(2, 10) * 10, P = avc + m, Q = ri(5, 40) * 10, FC = Q * m;
+      return { text: "Постоянные издержки фирмы — " + FC + ", цена единицы товара — " + P + ", средние переменные издержки — " + avc + ". Сколько единиц нужно продать, чтобы выйти в ноль?", answer: Q,
+        steps: ["Каждая единица приносит сверх своих затрат P − AVC = " + m + ".", "Q = FC : (P − AVC) = " + FC + " : " + m + " = " + Q + "."] };
+    } },
+    { name: "Прибыль монополиста", make: function () {
+      var mc = ri(1, 6) * 10, a = mc + ri(2, 8) * 20, Q = (a - mc) / 2, P = a - Q;
+      return { text: "Спрос на товар монополиста: P = " + a + " − Q. Предельные издержки постоянны и равны " + mc + ", постоянных издержек нет. Какую цену установит монополист?", answer: P,
+        steps: ["Предельная выручка для P = a − Q: MR = " + a + " − 2Q.", "MR = MC: " + a + " − 2Q = " + mc + " → Q = " + Q + ".", "Цена по спросу: P = " + a + " − " + Q + " = " + P + ". Прибыль = (" + P + " − " + mc + ") × " + Q + " = " + (P - mc) * Q + "."] };
+    } }
+  ];
+  function openEcon() {
+    var body = sheet("Экономические задачи"), T = null, kind = -1, cur = null;
+    function menu() {
+      body.innerHTML = '<p class="h-sub" style="margin:0">Числа каждый раз новые. Реши на черновике, впиши ответ — покажу решение по шагам.</p><div class="q-opts"><button type="button" class="q-opt" data-do="ec" data-i="-1"><b>Случайная задача</b></button>' +
+        ECON.map(function (g, i) { return '<button type="button" class="q-opt" data-do="ec" data-i="' + i + '">' + esc(g.name) + "</button>"; }).join("") + "</div>";
+    }
+    function ask() {
+      T = kind < 0 ? pick(ECON) : ECON[kind]; cur = T.make();
+      body.innerHTML = '<div class="q-prog"><span>' + esc(T.name) + '</span><button type="button" class="h-go" data-do="ec-menu">Все типы</button></div><div class="q-ask">' + esc(cur.text) + '</div><input class="q-input" id="ec-answer" inputmode="decimal" autocomplete="off" aria-label="Ответ"><div class="q-row"><button type="button" class="q-btn ghost" data-do="ec-show">Показать решение</button><button type="button" class="q-btn" data-do="ec-check">Проверить</button></div>';
+      var inp = document.getElementById("ec-answer"); inp.focus();
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") handlers["ec-check"](); });
+    }
+    function reveal(ok, typed) {
+      [].forEach.call(body.querySelectorAll('[data-do="ec-check"], [data-do="ec-show"]'), function (b) { b.disabled = true; });
+      if (ok) set("olymp-econ", get("olymp-econ", 0) + 1);
+      var box = document.createElement("div");
+      box.innerHTML = '<div class="q-note">' + (typed === null ? "Ответ: " : ok ? "Верно: " : "Неверно. Правильный ответ: ") + "<b>" + num(cur.answer) + (cur.unit ? " " + cur.unit : "") + '</b></div><ol class="q-steps" style="margin-top:10px">' + cur.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + '</ol><button type="button" class="q-btn" data-do="ec-next" style="width:100%;margin-top:10px">Ещё задача</button>';
+      body.appendChild(box); box.querySelector("button").focus();
+    }
+    handlers.ec = function (b) { kind = Number(b.getAttribute("data-i")); ask(); };
+    handlers["ec-menu"] = menu; handlers["ec-next"] = ask;
+    handlers["ec-show"] = function () { reveal(false, null); };
+    handlers["ec-check"] = function () {
+      var raw = document.getElementById("ec-answer").value.replace(/\s/g, "").replace(",", ".").replace("%", "");
+      if (raw === "" || isNaN(Number(raw))) return;
+      reveal(Math.abs(Number(raw) - cur.answer) <= (cur.tol || 0.005) + 1e-9, raw);
+    };
+    menu();
+  }
+
+  // ---- второй тур ----------------------------------------------------------
+  function openTour2() {
+    var body = sheet("Второй тур: тренировка"), all = get("olymp-tour2", {}), idx = 0;
+    function save() { set("olymp-tour2", all); }
+    function list() {
+      body.innerHTML = '<p class="h-sub" style="margin:0">Текст и вопросы, как во втором туре: 60 минут на развёрнутые ответы. После — самопроверка по тому, что должно быть в ответе. Ответы сохраняются на этом устройстве.</p><div class="q-opts">' +
+        D.tour2.map(function (t, i) { var st = all[i]; return '<button type="button" class="q-opt" data-do="t2" data-i="' + i + '"><b>' + esc(t.title) + "</b>" + (st ? ' <span class="h-sub">· ' + (st.done ? "завершён" : "начат") + "</span>" : "") + "</button>"; }).join("") + "</div>";
+    }
+    function left(st) { return Math.max(0, Math.round((st.until - Date.now()) / 1000)); }
+    function run() {
+      var t = D.tour2[idx], st = all[idx];
+      body.innerHTML = '<div class="q-timer"><span>Осталось <b id="t2-left"></b></span><button type="button" class="h-go" data-do="t2-end" style="color:inherit;border-color:currentColor">Завершить</button></div><div class="q-text">' +
+        t.text.map(function (p) { return "<p>" + esc(p) + "</p>"; }).join("") + "</div>" +
+        t.questions.map(function (q, i) { return '<div class="q-ask"><small>Вопрос ' + (i + 1) + "</small>" + esc(q.q) + '</div><textarea class="q-area" data-a="' + i + '" aria-label="Ответ на вопрос ' + (i + 1) + '">' + esc(st.answers[i] || "") + "</textarea>"; }).join("");
+      function tick() { var s = left(st), el = document.getElementById("t2-left"); if (el) el.textContent = Math.floor(s / 60) + ":" + pad(s % 60); if (s <= 0) finish(); }
+      tick(); timers.push(setInterval(tick, 1000));
+    }
+    function finish() {
+      timers.forEach(clearInterval); timers = [];
+      var t = D.tour2[idx], st = all[idx]; st.done = true; save();
+      body.innerHTML = '<div class="q-note">Тур завершён. Сравни каждый ответ с тем, что в нём должно быть, и отметь выполненное. Баллы на олимпиаде дают за каждый элемент ответа.</div>' +
+        t.questions.map(function (q, i) {
+          return '<div class="q-ask"><small>Вопрос ' + (i + 1) + "</small><b>" + esc(q.q) + '</b><p style="margin:8px 0;white-space:pre-wrap">' + (st.answers[i] ? esc(st.answers[i]) : '<span class="h-sub">ответа нет</span>') + '</p><div class="q-note"><b>Должно быть:</b> ' + esc(q.need) + "</div></div>";
+        }).join("") +
+        '<div class="h-card"><div class="h-title"><span>Самопроверка</span></div><ul class="h-plan">' +
+        ["Аргументы и примеры пронумерованы", "Каждый пример конкретный: страна, год, закон, явление", "В каждом ответе есть термины курса", "Определения даны по схеме «род + отличия»", "Нет пересказа текста вместо ответа", "Уложился во время и оставил минуты на проверку"].map(function (c, i) { return '<li><input type="checkbox" id="t2c' + i + '"><label for="t2c' + i + '">' + c + "</label></li>"; }).join("") +
+        '</ul></div><div class="q-row"><button type="button" class="q-btn" data-do="t2-again">Пройти заново</button><button type="button" class="q-btn ghost" data-do="t2-list">Другой текст</button></div>';
+    }
+    body.addEventListener("input", function (e) { var a = e.target.getAttribute && e.target.getAttribute("data-a"); if (a !== null && a !== undefined && all[idx]) { all[idx].answers[Number(a)] = e.target.value; save(); } });
+    handlers.t2 = function (b) {
+      idx = Number(b.getAttribute("data-i"));
+      var st = all[idx];
+      if (st && st.done) return finish();
+      if (st && left(st) > 0) return run();
+      body.innerHTML = '<div class="q-end"><div class="n">60 минут</div><div>«' + esc(D.tour2[idx].title) + "». Отсчёт начнётся сразу. Пиши так, как писал бы в чистовик: с номерами пунктов.</div><button type=\"button\" class=\"q-btn\" data-do=\"t2-start\">Начать</button></div>";
+    };
+    handlers["t2-start"] = function () { all[idx] = { until: Date.now() + 3600000, answers: [], done: false }; save(); run(); };
+    handlers["t2-again"] = function () { delete all[idx]; save(); handlers.t2({ getAttribute: function () { return String(idx); } }); };
+    handlers["t2-end"] = finish; handlers["t2-list"] = list;
+    list();
+  }
+
+  paintMarks();
+  renderHome();
+})();
+
+</script>
 </body>
 </html>
