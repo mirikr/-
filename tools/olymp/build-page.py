@@ -15,11 +15,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SRC = ROOT / "docs" / "olymp"
 SLUGS = {"00": "plan", "01": "format", "02": "society", "03": "sociology", "04": "economics", "04b": "econdeep",
          "05": "politics", "06": "law", "07": "constitution", "08": "theory", "09": "culture",
-         "10": "logic", "11": "persons", "12": "countries"}
+         "10": "logic", "11": "persons", "12": "countries", "13": "cheat"}
 SHORT = {"plan": "План", "format": "Формат", "society": "Общество", "sociology": "Социология",
          "economics": "Экономика", "econdeep": "Экономика+", "politics": "Политология", "law": "Право",
          "constitution": "Конституция", "theory": "Теория права", "culture": "Культура",
-         "logic": "Логика", "persons": "Мыслители", "countries": "Страны"}
+         "logic": "Логика", "persons": "Мыслители", "countries": "Страны", "cheat": "Шпаргалка"}
 
 def html_of(path):
     out = subprocess.run(["pandoc", "-f", "gfm", "-t", "html", str(path)], capture_output=True, text=True, check=True).stdout
@@ -42,8 +42,18 @@ for f in sorted(SRC.glob("[0-9][0-9]*-*.md")):
     sections.append('<article id="%s" class="chapter" hidden>%s</article>' % (slug, body))
     tabs.append('<a href="#%s" data-tab="%s">%s</a>' % (slug, slug, SHORT[slug]))
 
-page = (pathlib.Path(__file__).with_name("page.html").read_text(encoding="utf-8")
-        .replace("<!--TABS-->", "\n".join(tabs)).replace("<!--CHAPTERS-->", "\n".join(sections)))
+# «Старт» — первая вкладка: план на сегодня, повторение, тренировки, карта.
+# Содержимое рисует extras.js; здесь только место под него.
+sections.insert(0, '<article id="home" class="chapter" hidden><h1>Старт</h1><div id="home-body"></div></article>')
+tabs.insert(0, '<a href="#home" data-tab="home">Старт</a>')
+
+HERE = pathlib.Path(__file__).parent
+import json
+data = {name: json.loads((HERE / (name + ".json")).read_text(encoding="utf-8")) for name in ("plan", "yesno", "cases", "tour2")}
+extras = ("<script>window.OLYMP_DATA = " + json.dumps(data, ensure_ascii=False).replace("</", "<\\/") + ";</script>\n<script>\n"
+          + (HERE / "extras.js").read_text(encoding="utf-8") + "\n</script>")
+page = ((HERE / "page.html").read_text(encoding="utf-8")
+        .replace("<!--TABS-->", "\n".join(tabs)).replace("<!--CHAPTERS-->", "\n".join(sections)) + extras)
 if sys.argv[1] == "--app":
     # Целый документ: в приложении страницу не обёртывают, как при публикации.
     head, body = page.split('<div class="bar">', 1)

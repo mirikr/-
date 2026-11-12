@@ -1,5 +1,4 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { retryImport } from "./chunk-reload.js";
 import { BANK_SOURCE, BANK_URL } from "./fipi-index.js";
 import { TRAINER_SUBJECTS, inTrainer } from "./trainer-subjects.js";
@@ -15,16 +14,6 @@ import { VOSH_INDEX } from "./vosh-index.js";
 // его открыли: набор олимпиад с текстами весит как целый предмет банка.
 const VoshTrainer = lazy(retryImport(() => import("./vosh-trainer.jsx")));
 const VOSH_OPEN = "vosh";
-// Учебники и планы к олимпиадам. Каждый — страница в public/ (собирается
-// tools/olymp/build-page.py); новый учебник — ещё одна строка здесь.
-const OLYMP_BOOKS = [
-  {
-    id: "society-mun-2026",
-    title: "Обществознание · муниципальный этап",
-    note: "план до 19 ноября 2026, формат этапа и 13 разделов теории",
-    src: "olymp/index.html",
-  },
-];
 const VOSH_IDS = VOSH_INDEX.flatMap((o) => o.ids);
 
 // Тренажёр по открытому банку ФИПИ.
@@ -61,7 +50,7 @@ const dayKey = (d) =>
   d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const WEEK_DAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 
-export default function Trainer({ log, marks, state, onState, onAttempt, onMark, styles }) {
+export default function Trainer({ log, marks, state, onState, onAttempt, onMark, onOpenBook, styles }) {
   // Что открыто: имя предмета, «Все предметы» или пусто — тогда показан выбор.
   // Этот выбор хранится вместе с остальными записями, поэтому приложение
   // открывается там же, где его закрыли, — хоть на другом устройстве.
@@ -104,44 +93,7 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
   // ответ открыт. Живут, пока не вернулись к выбору: это «как идёт сейчас»,
   // а не журнал.
   const [session, setSession] = useState([]);
-  // Учебник к олимпиаде — отдельная страница (public/olymp), открывается поверх
-  // приложения. Лежит в офлайн-кэше, поэтому читается и без сети.
-  const [bookOpen, setBookOpen] = useState(false);
-  const [bookMenu, setBookMenu] = useState(false);
-  const [bookId, setBookId] = useState(() => {
-    try {
-      return localStorage.getItem("olymp-book") || OLYMP_BOOKS[0].id;
-    } catch (e) {
-      return OLYMP_BOOKS[0].id;
-    }
-  });
-  const book = OLYMP_BOOKS.find((b) => b.id === bookId) || OLYMP_BOOKS[0];
-  function pickBook(id) {
-    setBookId(id);
-    setBookMenu(false);
-    try {
-      localStorage.setItem("olymp-book", id);
-    } catch (e) {
-      /* приватный режим — выбор доживёт до закрытия */
-    }
-  }
-  useEffect(() => {
-    if (!bookOpen) return undefined;
-    const onKey = (e) => {
-      if (e.key !== "Escape") return;
-      setBookMenu((open) => {
-        if (!open) setBookOpen(false);
-        return false;
-      });
-    };
-    window.addEventListener("keydown", onKey);
-    const was = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = was;
-    };
-  }, [bookOpen]);
+
 
   // Набор грузится, когда предмет открыли, и остаётся в памяти: переключаться
   // между предметами после этого мгновенно.
@@ -681,58 +633,13 @@ export default function Trainer({ log, marks, state, onState, onAttempt, onMark,
           </div>
         </div>
 
-        <button type="button" onClick={() => setBookOpen(true)} className="ap-row" style={S.book} data-olymp-book>
+        <button type="button" onClick={onOpenBook} className="ap-row" style={S.book} data-olymp-book>
           <span style={S.bookText}>
             <span style={S.bookName}>Учебник к олимпиаде</span>
-            <span style={S.bookNote}>план до 19 ноября, формат этапа и 12 разделов теории — право, экономика, политология, социология</span>
+            <span style={S.bookNote}>план до 19 ноября, теория по разделам, тесты на запоминание и тренировки — в разделе «Учебники»</span>
           </span>
           <span aria-hidden="true" style={S.bookGo}>›</span>
         </button>
-
-        {/* Окно — в корне страницы: у карточки свой слой отрисовки, и внутри неё
-            «fixed» привязывался бы к карточке, а не к экрану. */}
-        {bookOpen && createPortal(
-          <div style={S.bookLayer} role="dialog" aria-modal="true" aria-label="Учебник к олимпиаде">
-            <div style={S.bookBar}>
-              <button type="button" onClick={() => { setBookOpen(false); setBookMenu(false); }} className="ap-row" style={S.bookClose}>‹ Закрыть</button>
-              <div style={S.bookPick}>
-                <button
-                  type="button"
-                  onClick={() => setBookMenu(!bookMenu)}
-                  aria-expanded={bookMenu}
-                  aria-haspopup="true"
-                  className="ap-row"
-                  style={S.bookPickBtn}
-                  data-book-menu
-                >
-                  <span style={S.bookPickLabel}>Учебники и планы</span>
-                  <span style={S.bookPickName}>{book.title} ▾</span>
-                </button>
-                {bookMenu && (
-                  <div role="menu" style={S.bookList}>
-                    {OLYMP_BOOKS.map((b) => (
-                      <button
-                        key={b.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={b.id === book.id}
-                        onClick={() => pickBook(b.id)}
-                        className="ap-row"
-                        style={{ ...S.bookItem, ...(b.id === book.id ? S.bookItemOn : null) }}
-                      >
-                        <span style={S.bookItemName}>{b.id === book.id ? "✓ " : ""}{b.title}</span>
-                        <span style={S.bookItemNote}>{b.note}</span>
-                      </button>
-                    ))}
-                    <div style={S.bookListNote}>Учебники к следующим этапам и другим предметам появятся в этом списке.</div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <iframe key={book.id} title="Учебник к олимпиаде" src={import.meta.env.BASE_URL + book.src} style={S.bookFrame} />
-          </div>,
-          document.body,
-        )}
 
         {TRAINER_SUBJECTS.map((s) => {
           const done = doneIn(s.ids);
@@ -1464,39 +1371,6 @@ const S = {
   bookName: { fontFamily: "var(--serif)", fontSize: 18 },
   bookNote: { fontSize: 12.5, color: "var(--ink3)", lineHeight: 1.4 },
   bookGo: { fontSize: 22, color: "var(--accent)" },
-  bookLayer: {
-    position: "fixed", inset: 0, zIndex: 60, display: "flex", flexDirection: "column", background: "var(--bg)",
-    paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)",
-  },
-  bookBar: {
-    display: "flex", alignItems: "center", gap: 12, padding: "8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px))",
-    borderBottom: "1px solid var(--line)", background: "var(--panel)",
-  },
-  bookClose: {
-    height: 38, padding: "0 14px", border: "1px solid var(--line)", borderRadius: 10, background: "var(--panel2)",
-    color: "var(--ink)", font: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
-  },
-  bookPick: { position: "relative", flex: 1, minWidth: 0 },
-  bookPickBtn: {
-    display: "flex", flexDirection: "column", alignItems: "flex-start", maxWidth: "100%", padding: "2px 6px",
-    border: "none", background: "none", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer",
-  },
-  bookPickLabel: { fontSize: 11.5, color: "var(--mute)" },
-  bookPickName: { fontSize: 14.5, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  bookList: {
-    position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 2, width: "min(360px, calc(100vw - 24px))",
-    display: "flex", flexDirection: "column", padding: 6, borderRadius: 14, border: "1px solid var(--line)",
-    background: "var(--panel2)", boxShadow: "var(--shadow)",
-  },
-  bookItem: {
-    display: "flex", flexDirection: "column", gap: 2, padding: "10px 12px", border: "none", borderRadius: 10,
-    background: "none", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer",
-  },
-  bookItemOn: { background: "var(--accentSoft)" },
-  bookItemName: { fontSize: 14.5, fontWeight: 600 },
-  bookItemNote: { fontSize: 12.5, color: "var(--ink3)" },
-  bookListNote: { padding: "8px 12px 6px", fontSize: 12, color: "var(--mute)", lineHeight: 1.4 },
-  bookFrame: { flex: 1, width: "100%", border: "none", background: "var(--bg)" },
   moreTitle: { fontSize: 13, fontWeight: 600, color: "var(--ink3)", marginBottom: 2 },
   moreRow: {
     display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: 48,

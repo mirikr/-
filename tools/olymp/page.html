@@ -24,6 +24,12 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .brand span{font-size:12.5px;color:var(--barMute)}
 .tabs{display:flex;gap:4px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
+.tabs-wrap{display:flex;align-items:center;gap:6px}
+.tabs-wrap .tabs{flex:1;min-width:0;scroll-behavior:smooth}
+.tabs-arrow{flex:0 0 auto;width:30px;height:30px;margin-bottom:2px;border-radius:50%;border:1px solid var(--barMute);background:none;color:var(--barInk);font:inherit;font-size:20px;line-height:1;padding:0 0 3px;cursor:pointer}
+.tabs-arrow:disabled{opacity:.25;cursor:default}
+.tabs-arrow:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.tabs-wrap .tabs{scroll-behavior:auto}}
 .tabs a{flex:0 0 auto;padding:6px 12px;border-radius:999px;color:var(--barMute);text-decoration:none;font-size:14px;white-space:nowrap}
 .tabs a:hover{color:var(--barInk)}
 .tabs a[aria-current="page"]{background:var(--barInk);color:var(--bar);font-weight:600}
@@ -121,6 +127,71 @@ td:first-child{font-weight:500}
 .q-miss{text-align:left;width:100%;font-size:14.5px}
 .q-miss li{margin:6px 0}
 
+/* «Старт»: план на сегодня, повторение, тренировки, карта знаний, отметки. */
+.h-days{font-size:14px;color:var(--mute);margin:-6px 0 14px}
+.h-card{border:1px solid var(--line2);border-radius:16px;background:var(--panel);padding:14px 16px;margin:0 0 12px}
+.h-card.dark{background:var(--bar);color:var(--barInk);border-color:var(--bar)}
+.h-card.dark .h-sub{color:var(--barMute)}
+.h-card.dark .h-go{border-color:var(--barMute);color:var(--barInk)}
+.h-title{font-family:var(--serif);font-size:20px;line-height:1.25;display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.h-sub{font-size:13px;color:var(--mute)}
+.h-plan{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.h-plan li{display:flex;gap:10px;align-items:flex-start;margin:0}
+.h-plan input{width:20px;height:20px;margin:2px 0 0;flex:0 0 auto;accent-color:var(--green)}
+.h-plan label{flex:1;min-width:0;font-size:15px;line-height:1.45}
+.h-plan .off label{text-decoration:line-through;opacity:.6}
+.h-go{flex:0 0 auto;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.h-tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px}
+.h-tool{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);font:inherit;text-align:left;cursor:pointer;text-decoration:none}
+.h-tool b{font-size:15px;font-weight:600}
+.h-tool span{font-size:12.5px;color:var(--mute);line-height:1.35}
+.h-tool:focus-visible,.h-go:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hero{border-radius:20px;background:var(--bar);color:var(--barInk);padding:18px 18px 16px;margin:0 0 12px;display:flex;gap:16px;align-items:center}
+.hero-n{font-family:var(--serif);font-size:56px;line-height:1;color:var(--accent);flex:0 0 auto;min-width:56px;text-align:center}
+.hero-t{flex:1;min-width:0}
+.hero-t b{display:block;font-family:var(--serif);font-weight:400;font-size:20px;line-height:1.2}
+.hero-t span{display:block;font-size:13px;color:var(--barMute);margin-top:3px}
+.hero-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.14);margin-top:10px;overflow:hidden}
+.hero-bar i{display:block;height:100%;border-radius:3px;background:var(--green)}
+.map{position:relative;margin-top:14px}
+.map svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.rd-st{position:absolute;left:0;right:0;transform:translateY(-50%);display:flex;align-items:center;gap:10px;padding:0 calc(16% - 23px)}
+.rd-st.r{flex-direction:row-reverse}
+.rd-node{position:relative;flex:0 0 auto;width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--panel);border:3px solid var(--line);color:var(--mute);font-weight:700;font-size:16px;text-decoration:none;box-shadow:0 0 0 4px var(--panel)}
+.rd-st.part .rd-node{border-color:var(--accent);color:var(--accent)}
+.rd-st.done .rd-node{background:var(--green);border-color:var(--green);color:var(--bar)}
+.rd-st.now .rd-node{background:var(--accent);border-color:var(--accent);color:var(--bar);box-shadow:0 0 0 4px var(--panel),0 0 0 8px var(--accentSoft)}
+.rd-here{position:absolute;top:-22px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--bar);background:var(--accent);padding:1px 7px;border-radius:999px}
+.rd-lab{min-width:0;max-width:64%;background:var(--bg);border:1px solid var(--line2);border-radius:12px;padding:7px 10px 8px}
+.rd-st.r .rd-lab{text-align:right}
+.rd-lab>a{display:block;color:var(--ink);text-decoration:none;font-weight:600;font-size:15px;line-height:1.2}
+.rd-lab small{display:block;font-size:12px;color:var(--mute);margin:1px 0 5px}
+.rd-dots{display:flex;gap:4px;flex-wrap:wrap}
+.rd-st.r .rd-dots{justify-content:flex-end}
+.rd-dots a{width:13px;height:13px;border-radius:50%;background:var(--line);display:block}
+.rd-dots a.seen{background:var(--barMute)}
+.rd-dots a.mid{background:var(--accent)}
+.rd-dots a.good{background:var(--green)}
+.rd-st.fin{justify-content:center;padding:0}
+.rd-fin{background:var(--bar);color:var(--barInk);border-radius:14px;padding:9px 16px;text-align:center;font-family:var(--serif);font-size:18px;line-height:1.2;box-shadow:0 0 0 4px var(--panel)}
+.rd-fin small{display:block;font-family:var(--sans);font-size:12px;color:var(--barMute)}
+.rd-node:focus-visible,.rd-lab a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin-top:10px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.mk-learn{box-shadow:inset 3px 0 0 var(--accent);padding-left:10px;background:var(--accentSoft);border-radius:4px}
+.mk-ask{box-shadow:inset 3px 0 0 var(--red);padding-left:10px;background:var(--redBg);border-radius:4px}
+body.marking .chapter p,body.marking .chapter li{cursor:pointer}
+.mk-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.mk-list li{margin:0;padding:10px 12px;border-radius:12px;border:1px solid var(--line2);font-size:14px;line-height:1.45}
+.mk-list small{display:block;color:var(--mute);font-size:12px;margin-bottom:2px}
+.mk-list .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.mk-list input{flex:1 1 160px;min-width:0;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.q-area{width:100%;box-sizing:border-box;min-height:110px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:inherit;font-size:15px;line-height:1.5;resize:vertical}
+.q-text p{font-size:15px;line-height:1.6;margin:0 0 10px}
+.q-timer{position:sticky;top:0;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;background:var(--bar);color:var(--barInk);font-size:14px}
+.q-big{font-family:var(--serif);font-size:22px;line-height:1.4;padding:20px;border:1px solid var(--line2);border-radius:16px;background:var(--panel);min-height:120px}
+.q-steps{margin:0;padding-left:20px;font-size:14.5px;line-height:1.55}
+
 /* Ползунок глав у правого края: деление — глава открытого раздела. */
 .rail{position:fixed;z-index:8;right:max(4px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;user-select:none;-webkit-user-select:none}
 .rail button{width:30px;height:30px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink2);font:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0}
@@ -137,14 +208,18 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
 </style>
 
 <div class="bar"><div class="bar-in">
-  <div class="brand"><span class="brand-name"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></span><button type="button" class="find-btn" id="find-open" aria-expanded="false" aria-controls="search">Поиск</button></div>
+  <div class="brand"><span class="brand-name"><b>Обществознание · ВсОШ</b><span>муниципальный этап, 19 ноября 2026</span></span><span style="display:flex;gap:6px;flex:0 0 auto"><button type="button" class="find-btn" id="mark-mode" aria-pressed="false" title="Отмечать абзацы: «выучить» и «не понял»">Отметить</button><button type="button" class="find-btn" id="find-open" aria-expanded="false" aria-controls="search">Поиск</button></span></div>
   <div class="search" id="search" hidden>
     <input id="find-q" type="search" placeholder="Слово или фраза: эластичность, импичмент, Вебер…" aria-label="Поиск по учебнику" autocomplete="off">
     <div class="hits" id="hits" role="listbox" aria-label="Найдено"></div>
   </div>
+  <div class="tabs-wrap">
+  <button type="button" class="tabs-arrow" id="tabs-prev" aria-label="Листать разделы назад">‹</button>
   <nav class="tabs" aria-label="Разделы учебника">
 <!--TABS-->
   </nav>
+  <button type="button" class="tabs-arrow" id="tabs-next" aria-label="Листать разделы вперёд">›</button>
+  </div>
 </div></div>
 
 <main>
@@ -164,6 +239,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
 </div>
 
 <script>
+var OB = {};
 (function () {
   var chapters = [].slice.call(document.querySelectorAll(".chapter"));
   var tabs = [].slice.call(document.querySelectorAll(".tabs a"));
@@ -237,6 +313,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
   }
   function paintRail(i) {
     cur = i;
+    if (OB.onHead) OB.onHead();
     ticks.forEach(function (t, n) { t.classList.toggle("on", n === i); });
     track.setAttribute("aria-valuenow", Math.max(1, i + 1));
     track.setAttribute("aria-valuetext", i >= 0 && heads[i] ? heads[i].textContent : "начало раздела");
@@ -300,7 +377,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
       var head = null;
       [].forEach.call(ch.querySelectorAll("h2, h3, p, li, td, th"), function (el) {
         if (el.tagName === "H2") head = el;
-        if (el.closest(".nav") || el.closest(".toc") || el.closest(".find") || el.closest(".quiz-go")) return;
+        if (ch.id === "home" || el.closest(".nav") || el.closest(".toc") || el.closest(".find") || el.closest(".quiz-go")) return;
         if (el.tagName === "LI" && el.querySelector("p, li")) return;
         var text = el.textContent.replace(/\s+/g, " ").trim();
         if (text.length < 2) return;
@@ -449,7 +526,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
     return box;
   }
   chapters.forEach(function (ch) {
-    if (ch.id === "plan") return;
+    if (ch.id === "plan" || ch.id === "home" || ch.id === "cheat") return;
     var hs = [].slice.call(ch.querySelectorAll("h2")), all = [], seenAll = {};
     hs.forEach(function (h) {
       var nodes = [], n = h.nextElementSibling;
@@ -501,7 +578,8 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
   }
   function finish() {
     var pct = Q.mode === "match" ? Math.max(0, Math.round((Q.total / (Q.total + Q.errors)) * 100)) : Math.round((Q.right / Q.total) * 100);
-    if (Q.mode !== "cards") saveScore(Q.id, Q.mode, pct);
+    if (Q.mode !== "cards" && !quizSets[Q.id].temp) saveScore(Q.id, Q.mode, pct);
+    if (OB.onQuizEnd) OB.onQuizEnd(Q.id);
     qIn.innerHTML = '<div class="q-end"><div class="n">' + (Q.mode === "cards" ? "Готово" : pct + "%") + "</div><div>" +
       (Q.mode === "cards" ? "Все карточки пройдены." : Q.mode === "match" ? "Все пары собраны, ошибок: " + Q.errors + "." : "Верно " + Q.right + " из " + Q.total + ".") + "</div>" +
       (Q.miss.length ? '<ul class="q-miss">' + Q.miss.map(function (p) { return "<li><b>" + esc(p.t) + "</b> — " + esc(p.d) + "</li>"; }).join("") + "</ul>" : "") +
@@ -533,6 +611,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
   }
   function answered(ok, it, note) {
     if (ok) Q.right++; else Q.miss.push(it);
+    if (OB.onAnswer) OB.onAnswer(it, ok);
     var box = document.createElement("div");
     box.innerHTML = (note ? '<div class="q-note">' + note + "</div>" : "") + '<button type="button" class="q-btn" data-act="next" style="width:100%;margin-top:10px">Дальше</button>';
     qIn.appendChild(box);
@@ -610,6 +689,7 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
       Q.errors++;
       var item = Q.part[Number((prev.getAttribute("data-side") === "t" ? prev : el).getAttribute("data-k"))];
       if (Q.miss.indexOf(item) < 0) Q.miss.push(item);
+      if (OB.onAnswer) OB.onAnswer(item, false);
       [prev, el].forEach(function (x) { x.classList.add("bad"); });
       setTimeout(function () { [prev, el].forEach(function (x) { x.classList.remove("bad"); }); }, 500);
       var pr = qIn.querySelector(".q-prog span:last-child"); if (pr) pr.textContent = "ошибок: " + Q.errors;
@@ -638,8 +718,20 @@ main{padding-right:max(46px,env(safe-area-inset-right,0px))}
     else if (target) target.scrollIntoView();
     else window.scrollTo(0, 0);
     paintRail(headOnScreen());
+    if (OB.onShow) OB.onShow(chapterId);
   }
+  // Что нужно инструментам подготовки (extras.js): общие функции и состояние.
+  OB.chapters = chapters; OB.ids = ids; OB.norm = norm; OB.esc = esc; OB.shuffle = shuffle; OB.flash = flash;
+  OB.scores = scores; OB.quizSets = quizSets; OB.openQuiz = openQuiz;
+  OB.where = function () { return { section: ids[section], head: cur >= 0 && heads[cur] ? heads[cur].id : "" }; };
+  // Стрелки по краям ленты разделов.
+  var strip = document.querySelector(".tabs"), tPrev = document.getElementById("tabs-prev"), tNext = document.getElementById("tabs-next");
+  function arrows() { tPrev.disabled = strip.scrollLeft <= 2; tNext.disabled = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 2; }
+  tPrev.addEventListener("click", function () { strip.scrollBy({ left: -strip.clientWidth * 0.7 }); });
+  tNext.addEventListener("click", function () { strip.scrollBy({ left: strip.clientWidth * 0.7 }); });
+  strip.addEventListener("scroll", arrows); window.addEventListener("resize", arrows);
   window.addEventListener("hashchange", show);
   show();
+  arrows(); setTimeout(arrows, 400);
 })();
 </script>
