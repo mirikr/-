@@ -213,6 +213,17 @@ body.marking .chapter p,body.marking .chapter li{cursor:pointer}
 .tick.aim i{width:16px;background:var(--mute)}
 .tip{position:absolute;right:38px;top:0;transform:translateY(-50%);white-space:nowrap;background:var(--bar);color:var(--barInk);padding:6px 12px;border-radius:10px;font-size:14px;font-weight:600;pointer-events:none}
 main{padding-right:max(46px,env(safe-area-inset-right,0px))}
+body.no-rail main{padding-right:max(16px,env(safe-area-inset-right,0px))}
+/* Внутри приложения отступ под вырез экрана уже сделан шапкой читалки. */
+.embedded body::before{display:none}
+.embedded .bar{top:0}
+.embedded .quiz{padding-top:0}
+@media (max-width:560px){
+  .hero{padding:14px 14px 13px;gap:12px}.hero-n{font-size:46px;min-width:46px}.hero-t b{font-size:18px}
+  .h-card{padding:12px 13px}.h-title{font-size:18px}
+  .h-tools{grid-template-columns:1fr 1fr}.h-tool{padding:10px 12px}.h-tool b{font-size:14px;line-height:1.25}.h-tool span{font-size:12px}
+  .rd-lab{max-width:72%}.rd-lab>a{font-size:14.5px}
+}
 @media (min-width:900px){main{padding-right:max(16px,env(safe-area-inset-right,0px))}.rail{right:max(18px,calc(50vw - 460px))}}
 </style>
 
@@ -9664,6 +9675,7 @@ e — <strong>обесценение рубля</strong>.</li>
   <button type="button" id="rail-next" aria-label="Следующая глава">▼</button>
 </div>
 
+<script>try{if(window.parent!==window&&window.parent.document.documentElement)document.documentElement.classList.add("embedded")}catch(e){}</script>
 <script>
 var OB = {};
 (function () {
@@ -9734,7 +9746,7 @@ var OB = {};
       t.className = "tick"; t.style.height = h + "px"; t.innerHTML = "<i></i>";
       track.appendChild(t); return t;
     });
-    rail.hidden = heads.length === 0;
+    rail.hidden = heads.length === 0; document.body.classList.toggle("no-rail", rail.hidden);
     track.setAttribute("aria-valuemin", 1); track.setAttribute("aria-valuemax", Math.max(1, heads.length));
   }
   function paintRail(i) {
