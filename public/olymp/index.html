@@ -9889,18 +9889,25 @@ var OB = {};
     if (t.length > max) t = t.slice(0, max - 1).replace(/[\s,;:]+\S*$/, "") + "…";
     return t.replace(/[\s.;,:]+$/, "");
   }
+  // У каждой пары — группа g (один список, одна таблица, один подраздел) и
+  // порядок o в тексте: неверные варианты в тестах берутся из той же группы,
+  // чтобы выбирать приходилось между похожими понятиями.
+  var groupSeq = 0, orderSeq = 0, byTerm = {}, everyPair = [];
+  function groupOf(el) { if (!el.__g) el.__g = ++groupSeq; return el.__g; }
   function pairsOf(nodes) {
-    var out = [], seen = {};
-    function add(term, def) {
+    var out = [], seen = {}, head = {};
+    function add(term, def, g) {
       term = term.replace(/\s+/g, " ").trim().replace(/[:.]$/, "");
       def = cut(def, 190);
       var k = norm(term);
       if (term.length < 2 || term.length > 64 || def.length < 6 || seen[k]) return;
       if (norm(def).indexOf(k) >= 0 && k.length > 5) def = def.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "…");
-      seen[k] = 1; out.push({ t: term, d: def });
+      seen[k] = 1; var pair = { t: term, d: def, g: g, o: ++orderSeq };
+      out.push(pair); everyPair.push(pair); if (!byTerm[k]) byTerm[k] = pair;
     }
     nodes.forEach(function (root) {
       if (root.nodeType !== 1) return;
+      if (/^H[3-6]$/.test(root.tagName)) { head = root; return; }
       var blocks = root.matches("p, li") ? [root] : [].slice.call(root.querySelectorAll("p, li"));
       blocks.forEach(function (el) {
         if (el.tagName === "LI" && el.querySelector("p, li")) return;
@@ -9917,7 +9924,7 @@ var OB = {};
             rest += k.textContent;
           }
           var m = rest.match(/^\s*(\([^)]{0,80}\))?\s*[—–]\s+([\s\S]+)/);
-          if (m) add(n.textContent, m[2]);
+          if (m) add(n.textContent, m[2], groupOf(el.tagName === "LI" ? el.closest("ul, ol") : head));
         });
       });
       [].forEach.call(root.matches("table") ? [root] : root.querySelectorAll("table"), function (table) {
@@ -9931,7 +9938,7 @@ var OB = {};
           if (c.length < 2 || !c[0] || !c[1]) return;
           var term = heads[0] === "Статья" ? "Статья " + c[0] : c[0];
           var def = c.length === 2 ? c[1] : c.slice(1).map(function (v, n) { return v ? (n ? heads[n + 1].toLowerCase() + ": " : "") + v : ""; }).filter(Boolean).join("; ");
-          add(term, def);
+          add(term, def, groupOf(table));
         });
       });
     });
@@ -10000,6 +10007,13 @@ var OB = {};
     qModes.innerHTML = MODES.map(function (m) { return '<button type="button" data-mode="' + m[0] + '" aria-pressed="' + (m[0] === mode) + '">' + m[1] + "</button>"; }).join("");
     qModes.querySelector('[aria-pressed="true"]').scrollIntoView({ block: "nearest", inline: "center" });
     var pool = shuffle(Q.set.pairs);
+    if (mode === "match") {
+      // Пятёрки набираются из соседних в тексте понятий: один список, одна таблица.
+      var row = Q.set.pairs.map(function (p) { return byTerm[norm(p.t)] || p; }).sort(function (a, b) { return (a.o || 0) - (b.o || 0); });
+      var cut0 = Math.floor(Math.random() * row.length);
+      while (cut0 > 0 && row[cut0].g === row[cut0 - 1].g) cut0--;
+      pool = row.slice(cut0).concat(row.slice(0, cut0));
+    }
     Q.items = mode === "cards" || mode === "match" ? pool : pool.slice(0, 20);
     Q.i = 0; Q.right = 0; Q.miss = []; Q.total = Q.items.length;
     if (mode === "match") { Q.round = 0; Q.errors = 0; }
@@ -10011,9 +10025,19 @@ var OB = {};
     return '<div class="q-prog"><span>' + Math.min(done + (Q.mode === "match" ? 0 : 1), Q.total) + " из " + Q.total + "</span><span>" + (Q.mode === "match" ? "ошибок: " + Q.errors : Q.mode === "cards" ? "" : "верно: " + Q.right) + '</span></div><div class="q-bar"><i style="width:' + Math.round((done / Q.total) * 100) + '%"></i></div>';
   }
   function others(item, n, key) {
-    var pool = shuffle(Q.set.pairs.filter(function (p) { return p !== item && norm(p[key]) !== norm(item[key]); }));
-    return pool.slice(0, n);
+    // Сначала понятия из той же группы, потом ближайшие по тексту.
+    var me = byTerm[norm(item.t)] || item, src = Q.set.temp ? everyPair : Q.set.pairs, used = {};
+    used[norm(item[key])] = 1;
+    var pool = shuffle(src).filter(function (p) { var k = norm(p[key]); if (p === item || p === me || used[k]) return false; used[k] = 1; return true; });
+    pool.sort(function (a, b) {
+      var ga = a.g === me.g ? 0 : 1, gb = b.g === me.g ? 0 : 1;
+      return ga - gb || Math.abs((a.o || 0) - (me.o || 0)) - Math.abs((b.o || 0) - (me.o || 0));
+    });
+    if (ga_same(pool, me) > n) pool = pool.filter(function (p) { return p.g === me.g; });
+    else pool = pool.slice(0, n);
+    return shuffle(pool).slice(0, n);
   }
+  function ga_same(pool, me) { return pool.filter(function (p) { return p.g === me.g; }).length; }
   function finish() {
     var pct = Q.mode === "match" ? Math.max(0, Math.round((Q.total / (Q.total + Q.errors)) * 100)) : Math.round((Q.right / Q.total) * 100);
     if (Q.mode !== "cards" && !quizSets[Q.id].temp) saveScore(Q.id, Q.mode, pct);
@@ -10098,7 +10122,7 @@ var OB = {};
   qIn.addEventListener("click", function (e) { var b = e.target.closest("[data-act]"); if (b && !b.disabled) act(b.getAttribute("data-act"), b); });
   // Сопоставление: по пять пар за раз, слева термины, справа определения.
   function renderMatch() {
-    var part = Q.items.slice(Q.round * 5, Q.round * 5 + 5), used = {};
+    var part = shuffle(Q.items.slice(Q.round * 5, Q.round * 5 + 5)), used = {};
     part = part.filter(function (p) { var k = norm(p.d); if (used[k]) return false; used[k] = 1; return true; });
     if (!part.length) return finish();
     Q.left = part.length; Q.sel = null;
